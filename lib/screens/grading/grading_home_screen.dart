@@ -1,12 +1,15 @@
 import 'dart:typed_data';
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
+import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
+import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
@@ -29,6 +32,8 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   Timer? _debounce;
   List<_StudentSuggestion> _studentHits = const [];
 
+  final ImagePicker _picker = ImagePicker();
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -36,27 +41,64 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _handlePickedFile(XFile? image) async {
+    if (image == null) return;
     try {
-      final res = await FilePicker.pickFiles(type: FileType.image, allowMultiple: false, withData: true);
-      if (res == null || res.files.isEmpty) return;
+      final Uint8List bytes = await image.readAsBytes();
+      context.read<AppState>().setImageBytes(bytes: bytes, fileName: image.name);
+      if (!mounted) return;
+      context.push(AppRoutes.gradingContext, extra: {'imageBytes': bytes, 'fileName': image.name});
+    } catch (e) {
+      debugPrint('Failed to read picked image bytes: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not read image.')));
+    }
+  }
 
-      final file = res.files.first;
-      final Uint8List? bytes = file.bytes;
-      if (bytes == null) {
-        debugPrint('FilePicker returned null bytes (withData likely unsupported in this environment).');
+  Future<void> _pickFromCamera() async {
+    try {
+      // Live auto-scan camera: holds the preview open and auto-captures
+      // each page once it's held steady, so the teacher can keep sliding
+      // assignments through without tapping a shutter button.
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => LiveScanScreen(
+            onCapture: (bytes, fileName) async {
+              if (!mounted) return false;
+              context.read<AppState>().setImageBytes(bytes: bytes, fileName: fileName);
+              context.push(AppRoutes.gradingContext, extra: {'imageBytes': bytes, 'fileName': fileName});
+              // Return true to keep the scanner open for the next page,
+              // or false to close the scanner after this one capture.
+              return true;
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Pick from camera failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera.')));
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      if (kIsWeb) {
+        final picked = await pickWebImage(captureEnvironmentCamera: false);
+        if (picked == null) return;
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not read image.')));
+        context.read<AppState>().setImageBytes(bytes: picked.bytes, fileName: picked.name);
+        context.push(AppRoutes.gradingContext, extra: {'imageBytes': picked.bytes, 'fileName': picked.name});
         return;
       }
 
-      context.read<AppState>().setImageBytes(bytes: bytes, fileName: file.name);
-      if (!mounted) return;
-      context.push(AppRoutes.gradingContext, extra: {'imageBytes': bytes, 'fileName': file.name});
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      await _handlePickedFile(image);
     } catch (e) {
-      debugPrint('Pick image failed: $e');
+      debugPrint('Pick from gallery failed: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open picker.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open gallery.')));
     }
   }
 
@@ -161,7 +203,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
             Text('${user?.name.isNotEmpty == true ? user!.name : 'Teacher'} 👋', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 14),
             GestureDetector(
-              onTap: _pickImage,
+              onTap: _pickFromCamera,
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -188,7 +230,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                         icon: Icons.photo_library_rounded,
                         background: Colors.white.withValues(alpha: 0.16),
                         foreground: Colors.white,
-                        onTap: _pickImage,
+                        onTap: _pickFromGallery,
                       ),
                     ),
                   ],
@@ -256,9 +298,6 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       ),
     );
   }
-}
-
-class _pickFromGallery {
 }
 
 class _StudentSearchResults extends StatelessWidget {

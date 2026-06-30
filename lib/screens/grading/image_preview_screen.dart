@@ -190,7 +190,17 @@ class _ImagePreviewScreenState extends State<ImagePreviewScreen> {
             ),
             const SizedBox(height: 14),
             FilledButton(
-              onPressed: _loading ? null : () => context.push(AppRoutes.gradingContext),
+              onPressed: _loading
+                  ? null
+                  : () {
+                      final draft = context.read<AppState>().draft;
+                      final bytes = draft.imageBytes;
+                      if (bytes != null) {
+                        context.push(AppRoutes.gradingContext, extra: {'imageBytes': bytes, 'fileName': draft.imageFileName});
+                      } else {
+                        context.push(AppRoutes.gradingContext);
+                      }
+                    },
               style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
               child: const Text('Continue to Grading Context'),
             ),

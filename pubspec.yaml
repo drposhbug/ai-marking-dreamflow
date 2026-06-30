@@ -6,11 +6,16 @@ version: 1.0.0+1
 
 environment:
   sdk: ^3.6.0
+
 dependencies:
   file_picker: '>=8.1.2'
-  supabase_flutter: '>=1.10.0'
+  # Pin to a 1.x release to avoid pulling in the Passkeys Web SDK dependency,
+  # which requires additional web bootstrap scripting and can crash on startup.
+  supabase_flutter: 1.10.25
   shared_preferences: ^2.0.0
   image_picker: '>=1.1.2'
+  camera: ^0.11.0+2
+  camera_web: ^0.3.4
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8

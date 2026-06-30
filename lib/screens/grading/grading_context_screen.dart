@@ -127,6 +127,21 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
           children: [
+            if (draft.imageBytes != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                child: AspectRatio(
+                  aspectRatio: 4 / 3,
+                  child: Image.memory(draft.imageBytes!, fit: BoxFit.cover),
+                ),
+              )
+            else
+              Container(
+                height: 220,
+                decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(AppRadius.lg), border: Border.all(color: cs.outline.withValues(alpha: 0.22))),
+                child: Center(child: Text('No image selected', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral))),
+              ),
+            const SizedBox(height: 12),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(14),

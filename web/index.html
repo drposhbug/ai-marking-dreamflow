@@ -31,6 +31,12 @@
 
   <title>marking_prokect_v2</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Passkeys Web SDK required by the `passkeys_web` Flutter plugin.
+       We ship a small local shim at `web/bundle.js` to prevent startup crashes
+       when passkeys are not used in-app. Replace it with the official bundle
+       if you enable passkeys features. -->
+  <script src="bundle.js"></script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
