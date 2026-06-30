@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
@@ -8,14 +11,45 @@ import 'package:provider/provider.dart';
 
 class ResultScreen extends StatefulWidget {
   final String? submissionId;
-  const ResultScreen({super.key, required this.submissionId});
+
+  // Pass these directly when navigating from the grading flow
+  // so the result is shown immediately without a DB round-trip.
+  final AiGradeResult? gradeResult;
+  final Uint8List? imageBytes;
+
+  const ResultScreen({
+    super.key,
+    required this.submissionId,
+    this.gradeResult,
+    this.imageBytes,
+  });
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
 }
 
-class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderStateMixin {
+class _ResultScreenState extends State<ResultScreen> {
   int _tab = 0;
+
+  // Teacher can toggle between levels and percentage after grading.
+  late String _displayFormat;
+  AiGradeResult? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _result = widget.gradeResult;
+    _displayFormat = _result?.gradingFormat ?? 'percentage';
+  }
+
+  void _toggleFormat() {
+    setState(() {
+      _displayFormat = _displayFormat == 'levels' ? 'percentage' : 'levels';
+      if (_result != null) {
+        _result = _result!.withFormat(_displayFormat);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,22 +57,36 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
     final submissions = context.watch<SubmissionsService>();
     final sub = widget.submissionId == null ? null : submissions.getById(widget.submissionId!);
     final student = sub == null ? null : context.read<StudentsService>().getById(sub.studentId);
+    final result = _result;
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(onPressed: () => context.pop(), icon: Icon(Icons.arrow_back_rounded, color: cs.primary)),
+        leading: IconButton(
+          onPressed: () => context.pop(),
+          icon: Icon(Icons.arrow_back_rounded, color: cs.primary),
+        ),
         title: const Text('Result'),
-        actions: [IconButton(onPressed: () {}, icon: Icon(Icons.ios_share_rounded, color: AiMarkerColors.neutral))],
+        actions: [
+          IconButton(
+            onPressed: () {},
+            icon: Icon(Icons.ios_share_rounded, color: AiMarkerColors.neutral),
+          ),
+        ],
       ),
       body: SafeArea(
-        child: sub == null
+        child: (sub == null && result == null)
             ? Center(child: Text('Result not found', style: Theme.of(context).textTheme.bodyMedium))
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
                 children: [
+                  // ── Tab switcher ──────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(999), border: Border.all(color: cs.outline.withValues(alpha: 0.22))),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: cs.outline.withValues(alpha: 0.22)),
+                    ),
                     child: Row(
                       children: [
                         _TabChip(label: 'Original', selected: _tab == 0, onTap: () => setState(() => _tab = 0)),
@@ -47,71 +95,130 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Container(
-                    height: 260,
-                    decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(AppRadius.lg), border: Border.all(color: cs.outline.withValues(alpha: 0.22))),
-                    child: Stack(
-                      children: [
-                        Center(child: Icon(_tab == 0 ? Icons.image_rounded : Icons.auto_fix_high_rounded, size: 54, color: cs.primary.withValues(alpha: 0.45))),
-                        if (_tab == 1) ...[
-                          Positioned(left: 26, top: 36, child: _HighlightBox(color: AiMarkerColors.secondary.withValues(alpha: 0.18), border: AiMarkerColors.secondary)),
-                          Positioned(right: 44, top: 90, child: _HighlightBox(color: AiMarkerColors.error.withValues(alpha: 0.16), border: AiMarkerColors.error)),
-                          Positioned(
-                            right: 14,
-                            bottom: 14,
-                            child: Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: _scoreColor(sub).withValues(alpha: 0.15), border: Border.all(color: _scoreColor(sub), width: 2)),
-                              child: Center(child: Text('${sub.score.round()}', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: _scoreColor(sub), fontWeight: FontWeight.w900))),
+
+                  // ── Image panel ───────────────────────────────────────
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 260, maxHeight: 420),
+                      decoration: BoxDecoration(
+                        color: cs.surface,
+                        border: Border.all(color: cs.outline.withValues(alpha: 0.22)),
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                      ),
+                      child: widget.imageBytes != null
+                          ? _tab == 0
+                              ? Image.memory(widget.imageBytes!, fit: BoxFit.contain)
+                              : _AnnotatedImage(
+                                  imageBytes: widget.imageBytes!,
+                                  annotations: result?.annotations ?? [],
+                                )
+                          : Center(
+                              child: Icon(
+                                _tab == 0 ? Icons.image_rounded : Icons.auto_fix_high_rounded,
+                                size: 54,
+                                color: cs.primary.withValues(alpha: 0.45),
+                              ),
                             ),
-                          ),
-                        ],
-                      ],
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text('${sub.score.round()}', style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w900)),
-                      const SizedBox(width: 6),
-                      Text('/${sub.maxScore.round()}', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AiMarkerColors.neutral)),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(999)),
-                        child: Text('${_pct(sub)}% · ${_band(sub)}', style: Theme.of(context).textTheme.labelMedium),
-                      ),
-                    ],
+
+                  // ── Score row ─────────────────────────────────────────
+                  _ScoreRow(
+                    result: result,
+                    sub: sub,
+                    displayFormat: _displayFormat,
+                    onToggleFormat: _toggleFormat,
                   ),
                   const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.star_rounded, color: Colors.amber.shade700, size: 18),
-                      const SizedBox(width: 6),
-                      Text('Max score auto-detected: ${sub.maxScore.round()}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                    ],
+
+                  // ── Provider / detected info ──────────────────────────
+                  if (result != null) ...[
+                    Row(
+                      children: [
+                        Icon(Icons.auto_awesome_rounded, size: 14, color: AiMarkerColors.neutral),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Graded by ${_providerLabel(result.provider)} · ${result.detectedSubject} · ${result.detectedGrade != null ? 'Grade ${result.detectedGrade}' : 'Grade unknown'}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
+                  // ── Triage badge ──────────────────────────────────────
+                  _TriageBadge(
+                    triageStatus: sub?.triageStatus ?? (result != null ? result.triageStatus : TriageStatus.graded),
+                    confidence: sub?.confidence ?? result?.confidence ?? 85,
+                    triageFlags: sub?.triageFlags ?? result?.flags ?? [],
                   ),
-                  const SizedBox(height: 14),
-                  _TriageBadge(submission: sub),
                   const SizedBox(height: 12),
+
+                  // ── Tags ──────────────────────────────────────────────
                   Wrap(spacing: 8, runSpacing: 8, children: [
-                    _Tag(text: 'Scheme: ${sub.presetId.substring(0, 4)}', color: cs.primary.withValues(alpha: 0.10), textColor: cs.primary),
-                    if (sub.overrideUsed) _Tag(text: 'One-time override', color: Colors.orange.withValues(alpha: 0.14), textColor: Colors.orange),
-                    _Tag(text: 'Student: ${student?.name ?? ''}', color: cs.surfaceContainerHighest, textColor: AiMarkerColors.neutral),
+                    if (result != null)
+                      _Tag(text: result.detectedSubject, color: cs.primary.withValues(alpha: 0.10), textColor: cs.primary),
+                    if (student != null)
+                      _Tag(text: 'Student: ${student.name}', color: cs.surfaceContainerHighest, textColor: AiMarkerColors.neutral),
+                    if (sub?.overrideUsed == true)
+                      _Tag(text: 'One-time override', color: Colors.orange.withValues(alpha: 0.14), textColor: Colors.orange),
                   ]),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 18),
+
+                  // ── AI Feedback ───────────────────────────────────────
                   Text('AI Feedback', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 10),
-                  _FeedbackCard(title: 'What was done well', color: AiMarkerColors.secondary, body: 'Clear method + consistent units where shown. Good structure and neat presentation.'),
-                  const SizedBox(height: 10),
-                  _FeedbackCard(title: 'What was wrong', color: AiMarkerColors.error, body: 'Missing working on one multi-step question. Some labels/units need to be explicitly written.'),
-                  if (sub.triageFlags.isNotEmpty) ...[
+
+                  if (result != null) ...[
+                    // Summary
+                    if (result.summary.isNotEmpty)
+                      _FeedbackCard(title: 'Summary', color: cs.primary, body: result.summary),
+                    const SizedBox(height: 10),
+
+                    // Strengths
+                    if (result.strengths.isNotEmpty)
+                      _FeedbackCard(
+                        title: 'What was done well',
+                        color: AiMarkerColors.secondary,
+                        body: result.strengths.map((s) => '• $s').join('\n'),
+                      ),
+                    const SizedBox(height: 10),
+
+                    // Improvements
+                    if (result.improvements.isNotEmpty)
+                      _FeedbackCard(
+                        title: 'What to improve',
+                        color: AiMarkerColors.error,
+                        body: result.improvements.map((s) => '• $s').join('\n'),
+                      ),
+                    const SizedBox(height: 14),
+
+                    // Criteria breakdown
+                    if (result.criteriaBreakdown.isNotEmpty) ...[
+                      Text('Criteria Breakdown', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 10),
+                      ...result.criteriaBreakdown.map((c) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _CriterionCard(criterion: c, displayFormat: _displayFormat),
+                          )),
+                    ],
+                  ] else ...[
+                    // Fallback to stored feedback when no live result
+                    _FeedbackCard(title: 'What was done well', color: AiMarkerColors.secondary, body: 'Clear method + consistent units where shown.'),
+                    const SizedBox(height: 10),
+                    _FeedbackCard(title: 'What to improve', color: AiMarkerColors.error, body: 'Show working more explicitly on multi-step questions.'),
+                  ],
+
+                  if (sub != null && sub.triageFlags.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _FeedbackCard(title: 'Triage flags', color: Colors.orange, body: sub.triageFlags.join('\n• '), prefixBullet: true),
                   ],
-                  const SizedBox(height: 14),
+
+                  const SizedBox(height: 18),
+
+                  // ── Actions ───────────────────────────────────────────
                   Row(
                     children: [
                       Expanded(
@@ -137,23 +244,204 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
     );
   }
 
-  int _pct(Submission s) => s.maxScore == 0 ? 0 : ((s.score / s.maxScore) * 100).round();
-  String _band(Submission s) {
-    final p = _pct(s);
-    if (p >= 85) return 'A';
-    if (p >= 70) return 'B';
-    if (p >= 55) return 'C';
-    if (p >= 40) return 'D';
-    return 'E';
-  }
-
-  Color _scoreColor(Submission s) {
-    final p = _pct(s);
-    if (p >= 75) return AiMarkerColors.secondary;
-    if (p >= 50) return Colors.orange;
-    return AiMarkerColors.error;
+  String _providerLabel(String provider) {
+    switch (provider) {
+      case 'claude': return 'Claude';
+      case 'gemini': return 'Gemini';
+      case 'openai': return 'GPT-4o';
+      default: return provider;
+    }
   }
 }
+
+// ── Annotated image with drawn marks ────────────────────────────────────────
+
+class _AnnotatedImage extends StatelessWidget {
+  final Uint8List imageBytes;
+  final List<QuestionAnnotation> annotations;
+
+  const _AnnotatedImage({required this.imageBytes, required this.annotations});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      return Stack(
+        fit: StackFit.passthrough,
+        children: [
+          Image.memory(imageBytes, fit: BoxFit.contain, width: constraints.maxWidth),
+          ...annotations.map((a) => Positioned(
+                left: a.positionLeft * constraints.maxWidth - 18,
+                top: a.positionTop * constraints.maxHeight - 12,
+                child: _AnnotationMark(annotation: a),
+              )),
+        ],
+      );
+    });
+  }
+}
+
+class _AnnotationMark extends StatelessWidget {
+  final QuestionAnnotation annotation;
+  const _AnnotationMark({required this.annotation});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = annotation.correct ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.90),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 3)],
+      ),
+      child: Text(
+        annotation.earnedMark,
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13),
+      ),
+    );
+  }
+}
+
+// ── Score row with format toggle ─────────────────────────────────────────────
+
+class _ScoreRow extends StatelessWidget {
+  final AiGradeResult? result;
+  final Submission? sub;
+  final String displayFormat;
+  final VoidCallback onToggleFormat;
+
+  const _ScoreRow({required this.result, required this.sub, required this.displayFormat, required this.onToggleFormat});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    // Primary display value
+    final String primary;
+    final String secondary;
+
+    if (result != null) {
+      if (displayFormat == 'levels' && result!.levelDisplay != null) {
+        primary = result!.levelDisplay!;
+        secondary = result!.percentageDisplay;
+      } else {
+        primary = result!.percentageDisplay;
+        secondary = result!.levelDisplay ?? '';
+      }
+    } else if (sub != null) {
+      final pct = sub!.maxScore == 0 ? 0 : ((sub!.score / sub!.maxScore) * 100).round();
+      primary = '$pct%';
+      secondary = '';
+    } else {
+      primary = '—';
+      secondary = '';
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(primary, style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w900)),
+              if (secondary.isNotEmpty)
+                Text(secondary, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+            ],
+          ),
+        ),
+        // Format toggle button — only show when we have both formats available
+        if (result != null && result!.level != null)
+          GestureDetector(
+            onTap: onToggleFormat,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: cs.outline.withValues(alpha: 0.30)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.swap_horiz_rounded, size: 16, color: cs.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    displayFormat == 'levels' ? 'Show %' : 'Show Level',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ── Criterion card ───────────────────────────────────────────────────────────
+
+class _CriterionCard extends StatelessWidget {
+  final CriterionResult criterion;
+  final String displayFormat;
+
+  const _CriterionCard({required this.criterion, required this.displayFormat});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final scoreText = displayFormat == 'levels' && criterion.level != null
+        ? 'Level ${criterion.level}'
+        : '${criterion.score.round()}/${criterion.maxScore.round()}';
+    final color = _levelColor(criterion.level);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: cs.outline.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(scoreText, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color, fontWeight: FontWeight.w900)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(criterion.name, style: Theme.of(context).textTheme.titleSmall),
+                if (criterion.feedback.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(criterion.feedback, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _levelColor(int? level) {
+    switch (level) {
+      case 4: return const Color(0xFF2E7D32);
+      case 3: return const Color(0xFF1565C0);
+      case 2: return Colors.orange;
+      case 1: return const Color(0xFFC62828);
+      default: return AiMarkerColors.neutral;
+    }
+  }
+}
+
+// ── Shared widgets ───────────────────────────────────────────────────────────
 
 class _TabChip extends StatelessWidget {
   final String label;
@@ -171,7 +459,11 @@ class _TabChip extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(color: selected ? cs.surface : Colors.transparent, borderRadius: BorderRadius.circular(999), border: Border.all(color: selected ? cs.outline.withValues(alpha: 0.20) : Colors.transparent)),
+          decoration: BoxDecoration(
+            color: selected ? cs.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: selected ? cs.outline.withValues(alpha: 0.20) : Colors.transparent),
+          ),
           child: Text(label, textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: selected ? null : AiMarkerColors.neutral)),
         ),
       ),
@@ -179,51 +471,41 @@ class _TabChip extends StatelessWidget {
   }
 }
 
-class _HighlightBox extends StatelessWidget {
-  final Color color;
-  final Color border;
-  const _HighlightBox({required this.color, required this.border});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(width: 110, height: 46, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10), border: Border.all(color: border.withValues(alpha: 0.8), width: 2)));
-  }
-}
-
 class _TriageBadge extends StatelessWidget {
-  final Submission submission;
-  const _TriageBadge({required this.submission});
+  final TriageStatus triageStatus;
+  final int confidence;
+  final List<String> triageFlags;
+
+  const _TriageBadge({required this.triageStatus, required this.confidence, required this.triageFlags});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    Color bg;
-    Color fg;
+    Color bg, fg;
     String title;
     String? subtitle;
     IconData icon;
 
-    switch (submission.triageStatus) {
+    switch (triageStatus) {
       case TriageStatus.graded:
         bg = AiMarkerColors.secondary.withValues(alpha: 0.12);
         fg = AiMarkerColors.secondary;
         title = '✓ Graded';
-        subtitle = 'AI confidence ${submission.confidence}%';
+        subtitle = 'AI confidence $confidence%';
         icon = Icons.check_circle_rounded;
         break;
       case TriageStatus.needsReview:
         bg = Colors.orange.withValues(alpha: 0.14);
         fg = Colors.orange;
         title = '⚠ Needs Review';
-        subtitle = submission.triageFlags.isEmpty ? 'Confidence ${submission.confidence}% — please verify' : submission.triageFlags.first;
+        subtitle = triageFlags.isEmpty ? 'Confidence $confidence% — please verify' : triageFlags.first;
         icon = Icons.warning_rounded;
         break;
       case TriageStatus.unableToGrade:
         bg = AiMarkerColors.error.withValues(alpha: 0.10);
         fg = AiMarkerColors.error;
         title = '✗ Unable to Grade';
-        subtitle = submission.triageFlags.isEmpty ? 'Image quality too low — retake photo' : submission.triageFlags.first;
+        subtitle = triageFlags.isEmpty ? 'Image quality too low — retake photo' : triageFlags.first;
         icon = Icons.cancel_rounded;
         break;
     }
@@ -248,7 +530,7 @@ class _TriageBadge extends StatelessWidget {
               ],
             ),
           ),
-          if (submission.triageStatus == TriageStatus.unableToGrade)
+          if (triageStatus == TriageStatus.unableToGrade)
             TextButton(
               style: TextButton.styleFrom(foregroundColor: fg, splashFactory: NoSplash.splashFactory),
               onPressed: () {},
@@ -289,7 +571,11 @@ class _FeedbackCard extends StatelessWidget {
     final text = prefixBullet ? '• $body' : body;
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(AppRadius.lg), border: Border.all(color: color.withValues(alpha: 0.22))),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

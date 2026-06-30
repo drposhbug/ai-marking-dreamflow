@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 /// A live "CamScanner-style" auto-capture screen.
@@ -36,6 +37,7 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
   DateTime? _stillSince;
   double? _lastSampleLuma;
   int _captureCount = 0;
+  bool _webFallback = false;
 
   // Tune these to taste.
   static const double _motionThreshold = 6.0; // luma delta to count as "moving"
@@ -66,7 +68,14 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
       setState(() {
         _controller = controller;
         _ready = true;
+        _webFallback = kIsWeb;
       });
+
+      // camera_web does not support startImageStream() in any browser —
+      // supportsImageStreaming() is always false on the web platform.
+      // Auto stillness-detection only works on a real native build.
+      if (kIsWeb) return;
+
       await controller.startImageStream(_onFrame);
     } catch (e) {
       setState(() => _error = 'Could not start camera: $e');
@@ -148,7 +157,9 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
     setState(() => _state = _ScanState.capturing);
 
     try {
-      await controller.stopImageStream();
+      if (!_webFallback) {
+        await controller.stopImageStream();
+      }
       final file = await controller.takePicture();
       final bytes = await file.readAsBytes();
       _captureCount++;
@@ -162,18 +173,25 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
         return;
       }
 
-      await controller.startImageStream(_onFrame);
+      if (!_webFallback) {
+        await controller.startImageStream(_onFrame);
+      }
       setState(() {
         _state = _ScanState.cooldown;
         _stillSince = null;
       });
       await Future<void>.delayed(_cooldownDuration);
+      if (mounted && _webFallback) {
+        setState(() => _state = _ScanState.idle);
+      }
     } catch (e) {
       debugPrint('Auto-capture failed: $e');
       if (mounted) setState(() => _state = _ScanState.idle);
-      try {
-        await controller.startImageStream(_onFrame);
-      } catch (_) {}
+      if (!_webFallback) {
+        try {
+          await controller.startImageStream(_onFrame);
+        } catch (_) {}
+      }
     }
   }
 
@@ -213,6 +231,53 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
                   fit: StackFit.expand,
                   children: [
                     CameraPreview(_controller!),
+                    if (_webFallback)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 110,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
+                            margin: const EdgeInsets.symmetric(horizontal: 24),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'Live auto-capture needs the native app — tap below to capture on web.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_webFallback)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 40,
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: _state == _ScanState.capturing ? null : _capture,
+                            child: Container(
+                              width: 70,
+                              height: 70,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white,
+                                border: Border.all(color: Colors.black26, width: 4),
+                              ),
+                              child: _state == _ScanState.capturing
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(20),
+                                      child: CircularProgressIndicator(strokeWidth: 3),
+                                    )
+                                  : const Icon(Icons.camera_alt_rounded, color: Colors.black87, size: 30),
+                            ),
+                          ),
+                        ),
+                      ),
                     Positioned(
                       left: 24,
                       right: 24,

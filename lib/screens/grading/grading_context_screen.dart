@@ -74,13 +74,21 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
   Future<void> _grade() async {
     final auth = context.read<AuthService>().currentUser;
     final draft = context.read<AppState>().draft;
+
     if (auth == null || draft.studentId == null || draft.classId == null || draft.presetId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select student, class, and marking scheme first.')));
       return;
     }
 
+    if (draft.imageBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No image to grade — go back and scan an assignment.')));
+      return;
+    }
+
     setState(() => _grading = true);
     try {
+      final student = context.read<StudentsService>().getById(draft.studentId!);
+
       final req = AiGradeRequest(
         teacherId: auth.id,
         studentId: draft.studentId!,
@@ -92,6 +100,11 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
         harshness: _harshness.round(),
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
         overrideUsed: draft.oneTimeOverride,
+        imageBytes: draft.imageBytes!,
+        studentName: student?.name,
+        // Pass student grade from DB if available so the edge function
+        // doesn't need to detect it from the image.
+        studentGrade: null, // TODO: wire up from student model if you store grade level
       );
 
       final ai = AiGradingService();
@@ -100,11 +113,20 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       await context.read<SubmissionsService>().create(submission);
 
       if (!mounted) return;
-      context.push('${AppRoutes.result}?submissionId=${submission.id}');
+
+      // Pass the live result and image directly to ResultScreen so it can
+      // show the annotated image and real feedback immediately.
+      context.push(
+        '${AppRoutes.result}?submissionId=${submission.id}',
+        extra: {
+          'gradeResult': res,
+          'imageBytes': draft.imageBytes,
+        },
+      );
     } catch (e) {
       debugPrint('Grading failed: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Grading failed.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Grading failed: $e')));
     } finally {
       if (mounted) setState(() => _grading = false);
     }
