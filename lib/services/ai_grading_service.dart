@@ -258,7 +258,7 @@ class AiGradingService {
     try {
       final client = Supabase.instance.client;
       final res = await client.functions.invoke(
-        'grade-submission',
+      'MARKING-PROCESS',
         body: {
           'imageBase64': base64Encode(req.imageBytes),
           'mediaType': 'image/jpeg',
