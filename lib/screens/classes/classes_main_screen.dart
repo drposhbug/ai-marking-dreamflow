@@ -16,6 +16,29 @@ class ClassesMainScreen extends StatefulWidget {
 }
 
 class _ClassesMainScreenState extends State<ClassesMainScreen> {
+  bool _editing = false;
+
+  Future<void> _confirmDeleteClass(dynamic c) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete ${c.name}?'),
+        content: Text('${c.name} (${c.period}) will be removed. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AiMarkerColors.error, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      await context.read<ClassesService>().delete(c.id as String);
+    }
+  }
+
   Future<void> _openCreateSheet() async {
     final created = await showModalBottomSheet<_CreateClassResult>(
       context: context,
@@ -51,7 +74,11 @@ class _ClassesMainScreenState extends State<ClassesMainScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
           children: [
-            TeacherTopbar(title: 'Classes', trailingIcon: Icons.add_rounded, onBell: _openCreateSheet),
+            TeacherTopbar(
+              title: 'Classes',
+              trailingIcon: _editing ? Icons.check_rounded : Icons.edit_rounded,
+              onBell: () => setState(() => _editing = !_editing),
+            ),
             const SizedBox(height: 14),
             for (final entry in bySubject.entries) ...[
               Text(entry.key.toUpperCase(), style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
@@ -93,13 +120,46 @@ class _ClassesMainScreenState extends State<ClassesMainScreen> {
                                 ],
                               ),
                             ),
-                            Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                            if (_editing)
+                              IconButton(
+                                onPressed: () => _confirmDeleteClass(c),
+                                icon: Icon(Icons.delete_rounded, color: AiMarkerColors.error),
+                                tooltip: 'Delete class',
+                              )
+                            else
+                              Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
                           ],
                         ),
                       ),
                     ),
                   ),
                 ),
+            ],
+            if (_editing) ...[
+              const SizedBox(height: 4),
+              InkWell(
+                splashFactory: NoSplash.splashFactory,
+                onTap: _openCreateSheet,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4)),
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_rounded, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Add Class',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ],
         ),

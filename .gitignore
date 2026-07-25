@@ -47,4 +47,4 @@ app.*.map.json
 .prompt_attachments
 *.hologram.dart
 node_modules/
-functions/lib/
+functions/lib/supabase/.temp/

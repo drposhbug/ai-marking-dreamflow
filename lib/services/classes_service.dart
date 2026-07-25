@@ -46,6 +46,12 @@ class ClassesService extends ChangeNotifier {
 
   TeacherClass? getById(String id) => _classes.cast<TeacherClass?>().firstWhere((c) => c?.id == id, orElse: () => null);
 
+  Future<void> delete(String id) async {
+    _classes = _classes.where((c) => c.id != id).toList(growable: false);
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> _persist() async => _store.setString(_kKey, TeacherClass.encodeList(_classes));
 
   List<TeacherClass> _seed(String teacherId) {

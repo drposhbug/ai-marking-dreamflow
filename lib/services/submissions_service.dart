@@ -49,5 +49,11 @@ class SubmissionsService extends ChangeNotifier {
     return submission;
   }
 
+  Future<void> update(Submission submission) async {
+    _submissions = _submissions.map((s) => s.id == submission.id ? submission : s).toList(growable: false);
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> _persist() async => _store.setString(_kKey, Submission.encodeList(_submissions));
 }

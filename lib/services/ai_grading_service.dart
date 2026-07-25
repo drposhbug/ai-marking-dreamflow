@@ -21,8 +21,12 @@ class AiGradeRequest {
   final String? notes;
   final bool overrideUsed;
 
-  // The raw image bytes captured from the camera/gallery.
+  // The raw image bytes captured from the camera/gallery (first page).
   final Uint8List imageBytes;
+
+  // All pages of the submission, in order. When set, every page is sent
+  // to the grader; otherwise only [imageBytes] is sent.
+  final List<Uint8List>? pageImages;
 
   // If stored in your DB, pass the student's grade level (1–12).
   // If null, the edge function will try to detect it from the image.
@@ -35,6 +39,10 @@ class AiGradeRequest {
   // Student name to show on the result (reference only, not graded on).
   final String? studentName;
 
+  // Cloud-saved answer key to mark against (extracted once, reused —
+  // grading only pays for the key's compact text, not re-analysis).
+  final String? answerKeyId;
+
   const AiGradeRequest({
     required this.teacherId,
     required this.studentId,
@@ -46,11 +54,24 @@ class AiGradeRequest {
     required this.harshness,
     required this.overrideUsed,
     required this.imageBytes,
+    this.pageImages,
     this.notes,
     this.studentGrade,
     this.formatOverride,
     this.studentName,
+    this.answerKeyId,
   });
+}
+
+// ---------- Answer key summary (cloud-saved) ----------
+
+class AnswerKeySummary {
+  final String id;
+  final String name;
+  final String? subject;
+  final double? totalMarks;
+
+  const AnswerKeySummary({required this.id, required this.name, this.subject, this.totalMarks});
 }
 
 // ---------- Annotation (one mark drawn on the image) ----------
@@ -61,6 +82,7 @@ class QuestionAnnotation {
   final String outOfMark;    // e.g. "/4"
   final bool correct;
   final String feedback;     // short inline note
+  final int pageIndex;       // which scanned page this mark belongs to (0-based)
   final double positionTop;  // 0.0–1.0 fraction of image height
   final double positionLeft; // 0.0–1.0 fraction of image width
 
@@ -72,6 +94,7 @@ class QuestionAnnotation {
     required this.feedback,
     required this.positionTop,
     required this.positionLeft,
+    this.pageIndex = 0,
   });
 
   factory QuestionAnnotation.fromJson(Map<String, dynamic> j) {
@@ -81,6 +104,7 @@ class QuestionAnnotation {
       outOfMark: (j['outOfMark'] ?? '').toString(),
       correct: j['correct'] == true,
       feedback: (j['feedback'] ?? '').toString(),
+      pageIndex: (j['pageIndex'] as num?)?.toInt() ?? 0,
       positionTop: (j['positionTop'] as num?)?.toDouble() ?? 0.0,
       positionLeft: (j['positionLeft'] as num?)?.toDouble() ?? 0.0,
     );
@@ -123,6 +147,9 @@ class AiGradeResult {
   final int? detectedGrade;
   final String provider; // "claude" | "gemini" | "openai"
 
+  // The student's name as read off the paper (null when none visible).
+  final String? studentNameOnPaper;
+
   // Grading format decided by the function
   final String gradingFormat; // "levels" | "percentage"
 
@@ -156,6 +183,7 @@ class AiGradeResult {
     required this.detectedSubject,
     required this.detectedGrade,
     required this.provider,
+    this.studentNameOnPaper,
     required this.gradingFormat,
     required this.percentage,
     required this.percentageDisplay,
@@ -181,23 +209,37 @@ class AiGradeResult {
   double get score => rawScore;
 
   // Returns a copy with the format flipped (for the teacher toggle).
-  AiGradeResult withFormat(String newFormat) {
+  AiGradeResult withFormat(String newFormat) => copyWith(gradingFormat: newFormat);
+
+  /// Copy with selected fields replaced — used for teacher overrides.
+  AiGradeResult copyWith({
+    String? gradingFormat,
+    double? percentage,
+    String? percentageDisplay,
+    int? level,
+    bool clearLevel = false,
+    String? levelDisplay,
+    double? rawScore,
+    double? maxScore,
+    List<QuestionAnnotation>? annotations,
+  }) {
     return AiGradeResult(
       detectedSubject: detectedSubject,
       detectedGrade: detectedGrade,
       provider: provider,
-      gradingFormat: newFormat,
-      percentage: percentage,
-      percentageDisplay: percentageDisplay,
-      level: level,
-      levelDisplay: levelDisplay,
-      rawScore: rawScore,
-      maxScore: maxScore,
+      studentNameOnPaper: studentNameOnPaper,
+      gradingFormat: gradingFormat ?? this.gradingFormat,
+      percentage: percentage ?? this.percentage,
+      percentageDisplay: percentageDisplay ?? this.percentageDisplay,
+      level: clearLevel ? null : (level ?? this.level),
+      levelDisplay: levelDisplay ?? this.levelDisplay,
+      rawScore: rawScore ?? this.rawScore,
+      maxScore: maxScore ?? this.maxScore,
       summary: summary,
       strengths: strengths,
       improvements: improvements,
       criteriaBreakdown: criteriaBreakdown,
-      annotations: annotations,
+      annotations: annotations ?? this.annotations,
       rawText: rawText,
       confidence: confidence,
       flags: flags,
@@ -248,6 +290,55 @@ class AiGradingService {
     return fallback?.id;
   }
 
+  /// Scans of a teacher's answer key → structured key stored in the cloud.
+  /// Costs AI tokens once; every later grade reuses the stored key text.
+  Future<AnswerKeySummary> extractAnswerKey({required String teacherId, required List<Uint8List> pages}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {
+        'action': 'extract_key',
+        'teacherId': teacherId,
+        'imagesBase64': pages.map(base64Encode).toList(growable: false),
+        'mediaType': 'image/jpeg',
+      },
+    );
+    final data = res.data;
+    if (data is Map && data['id'] != null) {
+      final map = data.cast<String, dynamic>();
+      return AnswerKeySummary(
+        id: map['id'].toString(),
+        name: (map['name'] ?? 'Answer key').toString(),
+        subject: map['subject']?.toString(),
+        totalMarks: (map['totalMarks'] as num?)?.toDouble(),
+      );
+    }
+    throw Exception('Answer key extraction failed: $data');
+  }
+
+  /// Lists the teacher's cloud-saved answer keys, newest first.
+  Future<List<AnswerKeySummary>> listAnswerKeys({required String teacherId}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'list_keys', 'teacherId': teacherId},
+    );
+    final data = res.data;
+    if (data is Map && data['keys'] is List) {
+      return (data['keys'] as List)
+          .whereType<Map>()
+          .map((k) => AnswerKeySummary(
+                id: (k['id'] ?? '').toString(),
+                name: (k['name'] ?? 'Answer key').toString(),
+                subject: k['subject']?.toString(),
+                totalMarks: (k['total_marks'] as num?)?.toDouble(),
+              ))
+          .where((k) => k.id.isNotEmpty)
+          .toList(growable: false);
+    }
+    return const [];
+  }
+
   /// Grade a submission by sending the image to the grade-submission edge function.
   Future<AiGradeResult> grade(AiGradeRequest req) async {
     final enabledCriteria = req.criteria.entries
@@ -255,12 +346,16 @@ class AiGradingService {
         .map((e) => {'name': e.key})
         .toList(growable: false);
 
+    final pages = (req.pageImages == null || req.pageImages!.isEmpty)
+        ? <Uint8List>[req.imageBytes]
+        : req.pageImages!;
+
     try {
       final client = Supabase.instance.client;
       final res = await client.functions.invoke(
       'MARKING-PROCESS',
         body: {
-          'imageBase64': base64Encode(req.imageBytes),
+          'imagesBase64': pages.map(base64Encode).toList(growable: false),
           'mediaType': 'image/jpeg',
           'mode': req.mode.name,
           'maxScore': _maxScoreForMode(req.mode),
@@ -269,6 +364,7 @@ class AiGradingService {
           'studentName': req.studentName,
           'studentGrade': req.studentGrade,
           if (req.formatOverride != null) 'formatOverride': req.formatOverride,
+          if (req.answerKeyId != null) 'answerKeyId': req.answerKeyId,
         },
       );
 
@@ -304,10 +400,13 @@ class AiGradingService {
         .map((c) => CriterionResult.fromJson(c.cast<String, dynamic>()))
         .toList();
 
+    final paperName = map['studentNameOnPaper']?.toString().trim();
+
     return AiGradeResult(
       detectedSubject: (map['detectedSubject'] ?? map['subject'] ?? '').toString(),
       detectedGrade: (map['detectedGrade'] as num?)?.toInt(),
       provider: (map['provider'] ?? 'unknown').toString(),
+      studentNameOnPaper: (paperName == null || paperName.isEmpty) ? null : paperName,
       gradingFormat: gradingFormat,
       percentage: percentage,
       percentageDisplay: (map['percentageDisplay'] ?? '${percentage.round()}%').toString(),
