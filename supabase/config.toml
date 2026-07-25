@@ -1,0 +1,4 @@
+project_id = "ai-marking-dreamflow"
+
+[functions.MARKING-PROCESS]
+verify_jwt = true

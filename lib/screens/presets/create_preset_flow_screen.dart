@@ -18,6 +18,7 @@ class _CreatePresetFlowScreenState extends State<CreatePresetFlowScreen> {
   int _step = 0;
   final _name = TextEditingController();
   GradingMode _mode = GradingMode.homework;
+  bool _custom = false;
   late Map<String, bool> _criteria;
   double _harshness = 5;
   final _notes = TextEditingController();
@@ -140,10 +141,18 @@ class _CreatePresetFlowScreenState extends State<CreatePresetFlowScreen> {
       0 => _StepName(controller: _name),
       1 => _StepMode(
           mode: _mode,
+          custom: _custom,
           onSelect: (m) {
             setState(() {
+              _custom = false;
               _mode = m;
               _criteria = {for (final c in PresetsService.criteriaLabels(m)) c: true};
+            });
+          },
+          onSelectCustom: () {
+            setState(() {
+              _custom = true;
+              _criteria = {};
             });
           },
         ),
@@ -205,25 +214,28 @@ class _StepName extends StatelessWidget {
 
 class _StepMode extends StatelessWidget {
   final GradingMode mode;
+  final bool custom;
   final ValueChanged<GradingMode> onSelect;
-  const _StepMode({required this.mode, required this.onSelect});
+  final VoidCallback onSelectCustom;
+  const _StepMode({required this.mode, required this.custom, required this.onSelect, required this.onSelectCustom});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ListView(
       children: [
         Text('Select grading mode', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 6),
-        Text('Pick how you want AI to interpret the work.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
+        Text('Pick a starting point, or go fully custom.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
         const SizedBox(height: 16),
-        _ModeBigCard(title: 'Homework', subtitle: 'Completion %', icon: Icons.menu_book_rounded, color: AiMarkerColors.primary, selected: mode == GradingMode.homework, onTap: () => onSelect(GradingMode.homework)),
+        _ModeBigCard(title: 'Fully Custom', subtitle: 'Blank scheme — add your own criteria', icon: Icons.tune_rounded, color: Colors.deepPurple, selected: custom, onTap: onSelectCustom),
         const SizedBox(height: 12),
-        _ModeBigCard(title: 'Test / Quiz', subtitle: 'x / total', icon: Icons.quiz_rounded, color: AiMarkerColors.error, selected: mode == GradingMode.testQuiz, onTap: () => onSelect(GradingMode.testQuiz)),
+        _ModeBigCard(title: 'Homework', subtitle: 'Completion %', icon: Icons.menu_book_rounded, color: AiMarkerColors.primary, selected: !custom && mode == GradingMode.homework, onTap: () => onSelect(GradingMode.homework)),
         const SizedBox(height: 12),
-        _ModeBigCard(title: 'Lab Report', subtitle: 'Rubric score', icon: Icons.science_rounded, color: AiMarkerColors.secondary, selected: mode == GradingMode.labReport, onTap: () => onSelect(GradingMode.labReport)),
+        _ModeBigCard(title: 'Test / Quiz', subtitle: 'x / total', icon: Icons.quiz_rounded, color: AiMarkerColors.error, selected: !custom && mode == GradingMode.testQuiz, onTap: () => onSelect(GradingMode.testQuiz)),
         const SizedBox(height: 12),
-        _ModeBigCard(title: 'English / Essay', subtitle: 'Grade band', icon: Icons.auto_stories_rounded, color: AiMarkerColors.tertiary, selected: mode == GradingMode.englishEssay, onTap: () => onSelect(GradingMode.englishEssay)),
+        _ModeBigCard(title: 'Lab Report', subtitle: 'Rubric score', icon: Icons.science_rounded, color: AiMarkerColors.secondary, selected: !custom && mode == GradingMode.labReport, onTap: () => onSelect(GradingMode.labReport)),
+        const SizedBox(height: 12),
+        _ModeBigCard(title: 'English / Essay', subtitle: 'Grade band', icon: Icons.auto_stories_rounded, color: AiMarkerColors.tertiary, selected: !custom && mode == GradingMode.englishEssay, onTap: () => onSelect(GradingMode.englishEssay)),
       ],
     );
   }
@@ -263,35 +275,95 @@ class _ModeBigCard extends StatelessWidget {
   }
 }
 
-class _StepCriteria extends StatelessWidget {
+class _StepCriteria extends StatefulWidget {
   final Map<String, bool> criteria;
   final ValueChanged<Map<String, bool>> onChange;
   const _StepCriteria({required this.criteria, required this.onChange});
 
   @override
+  State<_StepCriteria> createState() => _StepCriteriaState();
+}
+
+class _StepCriteriaState extends State<_StepCriteria> {
+  final _newCriterion = TextEditingController();
+
+  @override
+  void dispose() {
+    _newCriterion.dispose();
+    super.dispose();
+  }
+
+  void _add() {
+    final name = _newCriterion.text.trim();
+    if (name.isEmpty || widget.criteria.containsKey(name)) return;
+    widget.onChange({...widget.criteria, name: true});
+    _newCriterion.clear();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('What should AI check?', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 6),
-        Text('All items are enabled by default — turn off anything you don’t want.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
+        Text('Add your own criteria, toggle them on or off, or delete any you don’t want.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
         const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _newCriterion,
+                textCapitalization: TextCapitalization.sentences,
+                onSubmitted: (_) => _add(),
+                decoration: const InputDecoration(hintText: 'e.g. Shows full working, Cites sources…'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            IconButton.filled(
+              onPressed: _add,
+              icon: const Icon(Icons.add_rounded),
+              style: IconButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
+              tooltip: 'Add criterion',
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         Expanded(
           child: Card(
-            child: ListView(
-              padding: const EdgeInsets.all(10),
-              children: [
-                for (final e in criteria.entries)
-                  CheckboxListTile(
-                    value: e.value == true,
-                    onChanged: (v) => onChange({...criteria, e.key: v ?? false}),
-                    title: Text(e.key),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            child: widget.criteria.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        'No criteria yet — type your first one above and tap +.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral),
+                      ),
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.all(10),
+                    children: [
+                      for (final e in widget.criteria.entries)
+                        CheckboxListTile(
+                          value: e.value == true,
+                          onChanged: (v) => widget.onChange({...widget.criteria, e.key: v ?? false}),
+                          title: Text(e.key),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          secondary: IconButton(
+                            onPressed: () {
+                              final next = {...widget.criteria}..remove(e.key);
+                              widget.onChange(next);
+                            },
+                            icon: Icon(Icons.delete_outline_rounded, color: AiMarkerColors.error.withValues(alpha: 0.8)),
+                            tooltip: 'Remove',
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
           ),
         ),
       ],

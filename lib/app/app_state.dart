@@ -5,9 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
 
+/// One captured page of a multi-page scan.
+class ScannedPage {
+  final Uint8List bytes;
+  final String fileName;
+  const ScannedPage({required this.bytes, required this.fileName});
+}
+
 class GradingDraft {
   final Uint8List? imageBytes;
   final String? imageFileName;
+
+  /// All scanned pages, in order. [imageBytes] mirrors the first page so
+  /// existing single-image consumers (AI grading) keep working.
+  final List<ScannedPage> pages;
   final String? detectedSubject;
   final String? detectedStudentName;
   final double? detectedMaxScore;
@@ -26,6 +37,10 @@ class GradingDraft {
   /// the scan step (based on the scanned image).
   final bool autoDetectScheme;
 
+  /// Cloud-saved answer key selected for the next grade ('' = none).
+  final String answerKeyId;
+  final String answerKeyName;
+
   const GradingDraft({
     required this.mode,
     required this.criteria,
@@ -33,6 +48,9 @@ class GradingDraft {
     required this.notes,
     required this.oneTimeOverride,
     required this.autoDetectScheme,
+    this.answerKeyId = '',
+    this.answerKeyName = '',
+    this.pages = const [],
     this.imageBytes,
     this.imageFileName,
     this.detectedSubject,
@@ -44,6 +62,7 @@ class GradingDraft {
   });
 
   GradingDraft copyWith({
+    List<ScannedPage>? pages,
     Uint8List? imageBytes,
     String? imageFileName,
     String? detectedSubject,
@@ -58,7 +77,12 @@ class GradingDraft {
     String? notes,
     bool? oneTimeOverride,
     bool? autoDetectScheme,
+    String? answerKeyId,
+    String? answerKeyName,
   }) => GradingDraft(
+    answerKeyId: answerKeyId ?? this.answerKeyId,
+    answerKeyName: answerKeyName ?? this.answerKeyName,
+    pages: pages ?? this.pages,
     imageBytes: imageBytes ?? this.imageBytes,
     imageFileName: imageFileName ?? this.imageFileName,
     detectedSubject: detectedSubject ?? this.detectedSubject,
@@ -173,12 +197,58 @@ class AppState extends ChangeNotifier {
   }
 
   void setImageBytes({required Uint8List bytes, String? fileName}) {
-    _draft = _draft.copyWith(imageBytes: bytes, imageFileName: fileName);
+    _draft = _draft.copyWith(
+      imageBytes: bytes,
+      imageFileName: fileName,
+      pages: [ScannedPage(bytes: bytes, fileName: fileName ?? 'scan.jpg')],
+    );
     notifyListeners();
   }
 
+  void setPages(List<ScannedPage> pages) {
+    if (pages.isEmpty) return;
+    _draft = _draft.copyWith(
+      pages: List.unmodifiable(pages),
+      imageBytes: pages.first.bytes,
+      imageFileName: pages.first.fileName,
+    );
+    notifyListeners();
+  }
+
+  void replacePage(int index, ScannedPage page) {
+    if (index < 0 || index >= _draft.pages.length) return;
+    final pages = [..._draft.pages];
+    pages[index] = page;
+    setPages(pages);
+  }
+
+  void removePage(int index) {
+    if (index < 0 || index >= _draft.pages.length) return;
+    final pages = [..._draft.pages]..removeAt(index);
+    if (pages.isEmpty) {
+      clearImage();
+    } else {
+      setPages(pages);
+    }
+  }
+
   void clearImage() {
-    _draft = _draft.copyWith(imageBytes: null, imageFileName: null);
+    // copyWith(imageBytes: null) would keep the old bytes, so rebuild the
+    // draft explicitly with the image fields dropped.
+    _draft = GradingDraft(
+      mode: _draft.mode,
+      criteria: _draft.criteria,
+      harshness: _draft.harshness,
+      notes: _draft.notes,
+      oneTimeOverride: _draft.oneTimeOverride,
+      autoDetectScheme: _draft.autoDetectScheme,
+      detectedSubject: _draft.detectedSubject,
+      detectedStudentName: _draft.detectedStudentName,
+      detectedMaxScore: _draft.detectedMaxScore,
+      studentId: _draft.studentId,
+      classId: _draft.classId,
+      presetId: _draft.presetId,
+    );
     notifyListeners();
   }
 
@@ -214,6 +284,11 @@ class AppState extends ChangeNotifier {
 
   void setAutoDetectScheme(bool value) {
     _draft = _draft.copyWith(autoDetectScheme: value);
+    notifyListeners();
+  }
+
+  void setAnswerKey({String? id, String? name}) {
+    _draft = _draft.copyWith(answerKeyId: id ?? '', answerKeyName: name ?? '');
     notifyListeners();
   }
 }

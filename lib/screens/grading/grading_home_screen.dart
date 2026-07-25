@@ -10,6 +10,7 @@ import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
@@ -59,26 +60,63 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     try {
       // Live auto-scan camera: holds the preview open and auto-captures
       // each page once it's held steady, so the teacher can keep sliding
-      // assignments through without tapping a shutter button.
+      // assignments through. Returns every captured page when the teacher
+      // taps Done; an empty list means the scan was cancelled.
       if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => LiveScanScreen(
-            onCapture: (bytes, fileName) async {
-              if (!mounted) return false;
-              context.read<AppState>().setImageBytes(bytes: bytes, fileName: fileName);
-              context.push(AppRoutes.gradingContext, extra: {'imageBytes': bytes, 'fileName': fileName});
-              // Return true to keep the scanner open for the next page,
-              // or false to close the scanner after this one capture.
-              return true;
-            },
-          ),
-        ),
+      final pages = await Navigator.of(context).push<List<ScannedPage>>(
+        MaterialPageRoute(builder: (_) => const LiveScanScreen()),
       );
+      if (pages == null || pages.isEmpty) return;
+      if (!mounted) return;
+      context.read<AppState>().setPages(pages);
+      context.push(AppRoutes.gradingContext);
     } catch (e) {
       debugPrint('Pick from camera failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera.')));
+    }
+  }
+
+  Future<void> _scanAnswerKey() async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in first.')));
+      return;
+    }
+
+    final pages = await Navigator.of(context).push<List<ScannedPage>>(
+      MaterialPageRoute(builder: (_) => const LiveScanScreen()),
+    );
+    if (pages == null || pages.isEmpty || !mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 18),
+            Expanded(child: Text('Reading the answer key…\nThis happens only once — it will be saved for reuse.')),
+          ],
+        ),
+      ),
+    );
+    try {
+      final key = await AiGradingService().extractAnswerKey(
+        teacherId: auth.id,
+        pages: pages.map((p) => p.bytes).toList(growable: false),
+      );
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      context.read<AppState>().setAnswerKey(id: key.id, name: key.name);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Answer key saved: ${key.name} — it will be used for the next grade.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not read the answer key: $e')));
     }
   }
 
@@ -223,15 +261,25 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                     const SizedBox(height: 4),
                     Text('Take a photo to start grading', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.9))),
                     const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.center,
-                      child: PillButton(
-                        label: 'From Gallery',
-                        icon: Icons.photo_library_rounded,
-                        background: Colors.white.withValues(alpha: 0.16),
-                        foreground: Colors.white,
-                        onTap: _pickFromGallery,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        PillButton(
+                          label: 'From Gallery',
+                          icon: Icons.photo_library_rounded,
+                          background: Colors.white.withValues(alpha: 0.16),
+                          foreground: Colors.white,
+                          onTap: _pickFromGallery,
+                        ),
+                        const SizedBox(width: 10),
+                        PillButton(
+                          label: state.draft.answerKeyId.isEmpty ? 'Scan Answer Key' : 'Key: ${state.draft.answerKeyName}',
+                          icon: Icons.key_rounded,
+                          background: Colors.white.withValues(alpha: 0.16),
+                          foreground: Colors.white,
+                          onTap: _scanAnswerKey,
+                        ),
+                      ],
                     ),
                   ],
                 ),

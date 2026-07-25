@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/screens/classes/classes_main_screen.dart';
 import 'package:marking_prokect_v2/screens/dashboard/dashboard_screen.dart';
@@ -40,7 +43,28 @@ class AppRouter {
       GoRoute(path: AppRoutes.gradingContext, name: 'gradingContext', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: GradingContextScreen())),
       GoRoute(path: AppRoutes.result, name: 'result', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final submissionId = state.uri.queryParameters['submissionId'];
-        return MaterialPage(child: ResultScreen(submissionId: submissionId));
+        // The grading flow passes the live result and scanned pages via
+        // extra so the result shows immediately without a DB round-trip.
+        AiGradeResult? gradeResult;
+        Uint8List? imageBytes;
+        List<Uint8List>? pageImages;
+        final extra = state.extra;
+        if (extra is Map) {
+          final gr = extra['gradeResult'];
+          if (gr is AiGradeResult) gradeResult = gr;
+          final ib = extra['imageBytes'];
+          if (ib is Uint8List) imageBytes = ib;
+          final pages = extra['pageImages'];
+          if (pages is List) pageImages = pages.whereType<Uint8List>().toList(growable: false);
+        }
+        return MaterialPage(
+          child: ResultScreen(
+            submissionId: submissionId,
+            gradeResult: gradeResult,
+            imageBytes: imageBytes,
+            pageImages: pageImages,
+          ),
+        );
       }),
       GoRoute(path: AppRoutes.classHub, name: 'classHub', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final classId = state.uri.queryParameters['classId'] ?? '';

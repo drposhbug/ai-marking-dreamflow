@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
+import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
@@ -26,6 +27,34 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  Future<void> _openAddStudentSheet() async {
+    final result = await showModalBottomSheet<_NewStudentResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const _AddStudentSheet(),
+    );
+    if (result == null || !mounted) return;
+
+    final teacherId = context.read<AuthService>().currentUser?.id;
+    if (teacherId == null) return;
+
+    // Auto-generate a student code from initials when none was given.
+    final code = result.code.isNotEmpty
+        ? result.code
+        : '${result.name.trim().split(RegExp(r'\s+')).map((w) => w[0].toUpperCase()).join()}${DateTime.now().millisecondsSinceEpoch % 1000}';
+
+    await context.read<StudentsService>().create(
+      teacherId: teacherId,
+      classId: widget.classId,
+      name: result.name,
+      studentId: code,
+      notes: result.notes,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${result.name} added to the class.')));
   }
 
   @override
@@ -152,7 +181,7 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
           ? SizedBox(
               width: MediaQuery.of(context).size.width - 32,
               child: FilledButton.icon(
-                onPressed: () {},
+                onPressed: _openAddStudentSheet,
                 style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xl))),
                 icon: const Icon(Icons.person_add_alt_rounded, color: Colors.white),
                 label: const Text('Add Student'),
@@ -325,6 +354,85 @@ class _PresetListCard extends StatelessWidget {
   };
 
   String _harshnessWord(int h) => h <= 3 ? 'Lenient' : (h <= 6 ? 'Balanced' : 'Strict');
+}
+
+class _NewStudentResult {
+  final String name;
+  final String code;
+  final String? notes;
+  const _NewStudentResult({required this.name, required this.code, this.notes});
+}
+
+class _AddStudentSheet extends StatefulWidget {
+  const _AddStudentSheet();
+
+  @override
+  State<_AddStudentSheet> createState() => _AddStudentSheetState();
+}
+
+class _AddStudentSheetState extends State<_AddStudentSheet> {
+  final _name = TextEditingController();
+  final _code = TextEditingController();
+  final _notes = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _code.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(color: cs.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('Add student', style: Theme.of(context).textTheme.titleLarge)),
+                IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _name,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Student name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(controller: _code, decoration: const InputDecoration(labelText: 'Student ID (optional)')),
+            const SizedBox(height: 12),
+            TextField(controller: _notes, decoration: const InputDecoration(labelText: 'Notes (optional)')),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _name.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(
+                        context,
+                        _NewStudentResult(
+                          name: _name.text.trim(),
+                          code: _code.text.trim(),
+                          notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+                        ),
+                      ),
+              style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
+              child: const Text('Add Student'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _Badge extends StatelessWidget {

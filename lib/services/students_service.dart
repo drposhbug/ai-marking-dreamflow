@@ -23,22 +23,22 @@ class StudentsService extends ChangeNotifier {
 
   bool get _supabaseReady => _client != null;
 
+  // Codes of the demo students that older builds seeded automatically —
+  // used to purge them from devices that still have them stored.
+  static const _legacySeedCodes = {'LC102', 'SR221', 'MT077', 'AK510', 'JP019'};
+
   Future<void> init({required String teacherId, required List<String> classIds}) async {
     try {
       final raw = await _store.getString(_kKey);
-      if (raw == null || raw.isEmpty) {
-        _students = _seed(teacherId, classIds);
-        await _persist();
-      } else {
-        _students = Student.decodeList(raw);
-        if (_students.isEmpty) {
-          _students = _seed(teacherId, classIds);
-          await _persist();
-        }
-      }
+      _students = (raw == null || raw.isEmpty) ? const [] : Student.decodeList(raw);
+
+      // One-time cleanup: drop the demo/template students seeded by old builds.
+      final before = _students.length;
+      _students = _students.where((s) => !_legacySeedCodes.contains(s.studentId)).toList();
+      if (_students.length != before) await _persist();
     } catch (e) {
       debugPrint('StudentsService.init failed: $e');
-      _students = _seed(teacherId, classIds);
+      _students = const [];
     } finally {
       notifyListeners();
     }
@@ -95,17 +95,4 @@ class StudentsService extends ChangeNotifier {
   }
 
   Future<void> _persist() async => _store.setString(_kKey, Student.encodeList(_students));
-
-  List<Student> _seed(String teacherId, List<String> classIds) {
-    if (classIds.isEmpty) return const [];
-    final now = DateTime.now();
-    String pick(int i) => classIds[i % classIds.length];
-    return [
-      Student(id: 's_${IdFactory.newId()}', teacherId: teacherId, classId: pick(0), name: 'Liam Chen', studentId: 'LC102', notes: 'Struggles with units but strong diagrams.', createdAt: now, updatedAt: now),
-      Student(id: 's_${IdFactory.newId()}', teacherId: teacherId, classId: pick(0), name: 'Sofia Rodriguez', studentId: 'SR221', notes: null, createdAt: now, updatedAt: now),
-      Student(id: 's_${IdFactory.newId()}', teacherId: teacherId, classId: pick(1), name: 'Marcus Thompson', studentId: 'MT077', notes: 'Needs clearer working.', createdAt: now, updatedAt: now),
-      Student(id: 's_${IdFactory.newId()}', teacherId: teacherId, classId: pick(2), name: 'Aisha Kamara', studentId: 'AK510', notes: null, createdAt: now, updatedAt: now),
-      Student(id: 's_${IdFactory.newId()}', teacherId: teacherId, classId: pick(3), name: 'Jamie Park', studentId: 'JP019', notes: null, createdAt: now, updatedAt: now),
-    ];
-  }
 }

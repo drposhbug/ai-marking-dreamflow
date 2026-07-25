@@ -98,7 +98,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     },
                     style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
                     icon: const Icon(Icons.add_rounded, color: Colors.white),
-                    label: const Text('+ New Scheme'),
+                    label: const Text('New Scheme'),
                   ),
                 ],
               ),

@@ -16,12 +16,14 @@ class ResultScreen extends StatefulWidget {
   // so the result is shown immediately without a DB round-trip.
   final AiGradeResult? gradeResult;
   final Uint8List? imageBytes;
+  final List<Uint8List>? pageImages;
 
   const ResultScreen({
     super.key,
     required this.submissionId,
     this.gradeResult,
     this.imageBytes,
+    this.pageImages,
   });
 
   @override
@@ -30,10 +32,18 @@ class ResultScreen extends StatefulWidget {
 
 class _ResultScreenState extends State<ResultScreen> {
   int _tab = 0;
+  int _page = 0;
 
   // Teacher can toggle between levels and percentage after grading.
   late String _displayFormat;
   AiGradeResult? _result;
+
+  List<Uint8List> get _pages {
+    final p = widget.pageImages;
+    if (p != null && p.isNotEmpty) return p;
+    final single = widget.imageBytes;
+    return single == null ? const [] : [single];
+  }
 
   @override
   void initState() {
@@ -49,6 +59,150 @@ class _ResultScreenState extends State<ResultScreen> {
         _result = _result!.withFormat(_displayFormat);
       }
     });
+  }
+
+  // ── Teacher overrides ───────────────────────────────────────────────
+
+  static (int?, String) _levelFor(double pct) {
+    if (pct >= 80) return (4, 'Level 4 (80–100%)');
+    if (pct >= 70) return (3, 'Level 3 (70–79%)');
+    if (pct >= 60) return (2, 'Level 2 (60–69%)');
+    if (pct >= 50) return (1, 'Level 1 (50–59%)');
+    return (null, 'Below Level 1 (<50%)');
+  }
+
+  double? _num(String s) => double.tryParse(s.replaceAll(RegExp(r'[^0-9.]'), ''));
+
+  /// Applies an updated result, recomputing displays, and saves the new
+  /// score onto the stored submission.
+  void _applyOverride(AiGradeResult updated) {
+    final pct = updated.maxScore <= 0 ? 0.0 : (updated.rawScore / updated.maxScore * 100).clamp(0.0, 100.0);
+    final (level, levelDisplay) = _levelFor(pct);
+    final finalResult = updated.copyWith(
+      percentage: pct,
+      percentageDisplay: '${pct.round()}%',
+      level: level,
+      clearLevel: level == null,
+      levelDisplay: levelDisplay,
+    );
+    setState(() => _result = finalResult);
+
+    final sub = widget.submissionId == null ? null : context.read<SubmissionsService>().getById(widget.submissionId!);
+    if (sub != null) {
+      context.read<SubmissionsService>().update(
+            sub.copyWith(score: finalResult.rawScore, maxScore: finalResult.maxScore, updatedAt: DateTime.now()),
+          );
+    }
+  }
+
+  Future<void> _editAnnotation(QuestionAnnotation a) async {
+    final result = _result;
+    if (result == null) return;
+    final idx = result.annotations.indexOf(a);
+    if (idx < 0) return;
+
+    final earned = TextEditingController(text: _num(a.earnedMark)?.toString() ?? a.earnedMark);
+    final outOf = TextEditingController(text: _num(a.outOfMark)?.toString() ?? '');
+    final feedback = TextEditingController(text: a.feedback);
+    var correct = a.correct;
+
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Edit ${a.questionLabel.isEmpty ? 'mark' : a.questionLabel}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: earned, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Marks earned'))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: outOf, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Out of'))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(controller: feedback, decoration: const InputDecoration(labelText: 'Feedback')),
+              SwitchListTile(
+                value: correct,
+                onChanged: (v) => setDialogState(() => correct = v),
+                title: const Text('Fully correct'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    if (save != true || !mounted) return;
+
+    final newAnn = QuestionAnnotation(
+      questionLabel: a.questionLabel,
+      earnedMark: _num(earned.text)?.toString().replaceAll(RegExp(r'\.0$'), '') ?? earned.text.trim(),
+      outOfMark: _num(outOf.text) == null ? a.outOfMark : '/${_num(outOf.text)!.toString().replaceAll(RegExp(r'\.0$'), '')}',
+      correct: correct,
+      feedback: feedback.text.trim(),
+      pageIndex: a.pageIndex,
+      positionTop: a.positionTop,
+      positionLeft: a.positionLeft,
+    );
+    final anns = [...result.annotations];
+    anns[idx] = newAnn;
+
+    // Recompute the total from the per-question marks when they all parse.
+    double earnedSum = 0, outOfSum = 0;
+    var parseable = anns.isNotEmpty;
+    for (final x in anns) {
+      final e = _num(x.earnedMark);
+      final o = _num(x.outOfMark);
+      if (e == null || o == null || o <= 0) {
+        parseable = false;
+        break;
+      }
+      earnedSum += e;
+      outOfSum += o;
+    }
+
+    _applyOverride(result.copyWith(
+      annotations: anns,
+      rawScore: parseable ? earnedSum : null,
+      maxScore: parseable ? outOfSum : null,
+    ));
+  }
+
+  Future<void> _editScore() async {
+    final result = _result;
+    if (result == null) return;
+    final raw = TextEditingController(text: result.rawScore.toString().replaceAll(RegExp(r'\.0$'), ''));
+    final max = TextEditingController(text: result.maxScore.toString().replaceAll(RegExp(r'\.0$'), ''));
+
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Override score'),
+        content: Row(
+          children: [
+            Expanded(child: TextField(controller: raw, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Score'))),
+            const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('/')),
+            Expanded(child: TextField(controller: max, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Out of'))),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (save != true || !mounted) return;
+
+    final newRaw = _num(raw.text);
+    final newMax = _num(max.text);
+    if (newRaw == null || newMax == null || newMax <= 0) return;
+    _applyOverride(result.copyWith(rawScore: newRaw, maxScore: newMax));
   }
 
   @override
@@ -96,7 +250,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // ── Image panel ───────────────────────────────────────
+                  // ── Image panel (swipe across pages) ──────────────────
                   ClipRRect(
                     borderRadius: BorderRadius.circular(AppRadius.lg),
                     child: Container(
@@ -106,13 +260,23 @@ class _ResultScreenState extends State<ResultScreen> {
                         border: Border.all(color: cs.outline.withValues(alpha: 0.22)),
                         borderRadius: BorderRadius.circular(AppRadius.lg),
                       ),
-                      child: widget.imageBytes != null
-                          ? _tab == 0
-                              ? Image.memory(widget.imageBytes!, fit: BoxFit.contain)
-                              : _AnnotatedImage(
-                                  imageBytes: widget.imageBytes!,
-                                  annotations: result?.annotations ?? [],
-                                )
+                      child: _pages.isNotEmpty
+                          ? SizedBox(
+                              height: 420,
+                              child: PageView.builder(
+                                onPageChanged: (i) => setState(() => _page = i),
+                                itemCount: _pages.length,
+                                itemBuilder: (context, i) => _tab == 0
+                                    ? Image.memory(_pages[i], fit: BoxFit.contain)
+                                    : _AnnotatedImage(
+                                        imageBytes: _pages[i],
+                                        annotations: (result?.annotations ?? [])
+                                            .where((a) => a.pageIndex == i)
+                                            .toList(growable: false),
+                                        onTapAnnotation: _editAnnotation,
+                                      ),
+                              ),
+                            )
                           : Center(
                               child: Icon(
                                 _tab == 0 ? Icons.image_rounded : Icons.auto_fix_high_rounded,
@@ -122,7 +286,40 @@ class _ResultScreenState extends State<ResultScreen> {
                             ),
                     ),
                   ),
+                  if (_pages.length > 1) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (int i = 0; i < _pages.length; i++)
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: i == _page ? 18 : 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: i == _page ? cs.primary : cs.outline.withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Page ${_page + 1} of ${_pages.length}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 14),
+
+                  if (_tab == 1 && result != null && result.annotations.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Tap any mark on the page to change it',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                      ),
+                    ),
 
                   // ── Score row ─────────────────────────────────────────
                   _ScoreRow(
@@ -130,6 +327,7 @@ class _ResultScreenState extends State<ResultScreen> {
                     sub: sub,
                     displayFormat: _displayFormat,
                     onToggleFormat: _toggleFormat,
+                    onEditScore: result == null ? null : _editScore,
                   ),
                   const SizedBox(height: 6),
 
@@ -259,8 +457,9 @@ class _ResultScreenState extends State<ResultScreen> {
 class _AnnotatedImage extends StatelessWidget {
   final Uint8List imageBytes;
   final List<QuestionAnnotation> annotations;
+  final void Function(QuestionAnnotation)? onTapAnnotation;
 
-  const _AnnotatedImage({required this.imageBytes, required this.annotations});
+  const _AnnotatedImage({required this.imageBytes, required this.annotations, this.onTapAnnotation});
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +471,10 @@ class _AnnotatedImage extends StatelessWidget {
           ...annotations.map((a) => Positioned(
                 left: a.positionLeft * constraints.maxWidth - 18,
                 top: a.positionTop * constraints.maxHeight - 12,
-                child: _AnnotationMark(annotation: a),
+                child: GestureDetector(
+                  onTap: onTapAnnotation == null ? null : () => onTapAnnotation!(a),
+                  child: _AnnotationMark(annotation: a),
+                ),
               )),
         ],
       );
@@ -309,8 +511,9 @@ class _ScoreRow extends StatelessWidget {
   final Submission? sub;
   final String displayFormat;
   final VoidCallback onToggleFormat;
+  final VoidCallback? onEditScore;
 
-  const _ScoreRow({required this.result, required this.sub, required this.displayFormat, required this.onToggleFormat});
+  const _ScoreRow({required this.result, required this.sub, required this.displayFormat, required this.onToggleFormat, this.onEditScore});
 
   @override
   Widget build(BuildContext context) {
@@ -344,8 +547,22 @@ class _ScoreRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(primary, style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w900)),
-              if (secondary.isNotEmpty)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(primary, style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w900)),
+                  if (onEditScore != null)
+                    IconButton(
+                      onPressed: onEditScore,
+                      icon: Icon(Icons.edit_rounded, size: 20, color: AiMarkerColors.neutral),
+                      tooltip: 'Override score',
+                    ),
+                ],
+              ),
+              if (result != null)
+                Text('${_trim(result!.rawScore)}/${_trim(result!.maxScore)}${secondary.isNotEmpty ? ' · $secondary' : ''}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral))
+              else if (secondary.isNotEmpty)
                 Text(secondary, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
             ],
           ),
@@ -377,6 +594,8 @@ class _ScoreRow extends StatelessWidget {
       ],
     );
   }
+
+  static String _trim(double v) => v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1);
 }
 
 // ── Criterion card ───────────────────────────────────────────────────────────
