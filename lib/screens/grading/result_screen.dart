@@ -2,8 +2,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
@@ -59,6 +61,48 @@ class _ResultScreenState extends State<ResultScreen> {
         _result = _result!.withFormat(_displayFormat);
       }
     });
+  }
+
+  /// "Teach the AI" — the teacher tells the AI what to do differently
+  /// (e.g. "don't deduct for spelling in science"). Saved as a standing
+  /// instruction that is sent with every future grade.
+  Future<void> _teachTheAi() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Teach MarkMate'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tell your assistant what it should do differently. It will follow this on every future grade.',
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 3,
+              decoration: const InputDecoration(hintText: "e.g. Don't deduct marks for spelling in science answers"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (text == null || text.trim().isEmpty || !mounted) return;
+    final user = context.read<AuthService>().currentUser;
+    if (user == null) return;
+    await context.read<AppState>().addMarkingFeedback(teacherId: user.id, feedback: text);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Got it — this will be followed from the next grade. Manage it in Settings → Marking Feedback.')),
+    );
   }
 
   // ── Teacher overrides ───────────────────────────────────────────────
@@ -366,7 +410,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   const SizedBox(height: 18),
 
                   // ── AI Feedback ───────────────────────────────────────
-                  Text('AI Feedback', style: Theme.of(context).textTheme.titleMedium),
+                  Text('Feedback', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 10),
 
                   if (result != null) ...[
@@ -402,6 +446,12 @@ class _ResultScreenState extends State<ResultScreen> {
                             child: _CriterionCard(criterion: c, displayFormat: _displayFormat),
                           )),
                     ],
+                    const SizedBox(height: 6),
+                    OutlinedButton.icon(
+                      onPressed: _teachTheAi,
+                      icon: const Icon(Icons.school_rounded, size: 18),
+                      label: const Text('Teach MarkMate — correct how it marks'),
+                    ),
                   ] else ...[
                     // Fallback to stored feedback when no live result
                     _FeedbackCard(title: 'What was done well', color: AiMarkerColors.secondary, body: 'Clear method + consistent units where shown.'),
@@ -710,7 +760,7 @@ class _TriageBadge extends StatelessWidget {
         bg = AiMarkerColors.secondary.withValues(alpha: 0.12);
         fg = AiMarkerColors.secondary;
         title = '✓ Graded';
-        subtitle = 'AI confidence $confidence%';
+        subtitle = 'Marking confidence $confidence%';
         icon = Icons.check_circle_rounded;
         break;
       case TriageStatus.needsReview:

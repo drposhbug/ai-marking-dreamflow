@@ -32,6 +32,18 @@ class AiGradeRequest {
   // If null, the edge function will try to detect it from the image.
   final int? studentGrade;
 
+  // Grade level (1–12) whose curriculum expectations the AI marks against —
+  // set by the teacher with the grade slider on the grading context screen.
+  final int? gradeLevel;
+
+  // Curriculum region id (e.g. 'ca-on', 'us-fl') — anchors marking to the
+  // teacher's provincial/state curriculum. See lib/data/curriculum_regions.dart.
+  final String? region;
+
+  // Standing corrections the teacher has given about how the AI should mark
+  // ("teach the AI") — the AI applies them on every grade.
+  final List<String>? teacherFeedback;
+
   // Teacher override for grading format after the result is shown.
   // Pass 'levels' or 'percentage' to re-call with a forced format.
   final String? formatOverride;
@@ -42,6 +54,11 @@ class AiGradeRequest {
   // Cloud-saved answer key to mark against (extracted once, reused —
   // grading only pays for the key's compact text, not re-analysis).
   final String? answerKeyId;
+
+  // When true, the AI also transcribes the pages into rawText. Off by
+  // default — transcription is the largest output-token cost and nothing
+  // in the app currently displays it.
+  final bool includeTranscription;
 
   const AiGradeRequest({
     required this.teacherId,
@@ -57,10 +74,33 @@ class AiGradeRequest {
     this.pageImages,
     this.notes,
     this.studentGrade,
+    this.gradeLevel,
+    this.region,
+    this.teacherFeedback,
     this.formatOverride,
     this.studentName,
     this.answerKeyId,
+    this.includeTranscription = false,
   });
+}
+
+// ---------- Roster entry (read off a photographed attendance sheet) ----------
+
+class RosterEntry {
+  final String name;
+  final String? studentId;
+
+  const RosterEntry({required this.name, this.studentId});
+}
+
+// ---------- Region candidate (inferred from the school name) ----------
+
+class RegionCandidate {
+  final String regionId;
+  final String label; // curriculum label, e.g. "Ontario, Canada"
+  final String place; // human place, e.g. "Toronto, Ontario"
+
+  const RegionCandidate({required this.regionId, required this.label, required this.place});
 }
 
 // ---------- Answer key summary (cloud-saved) ----------
@@ -290,6 +330,59 @@ class AiGradingService {
     return fallback?.id;
   }
 
+  /// Infers the curriculum region from the school's name. One candidate when
+  /// the AI is confident; several when the name exists in multiple regions
+  /// (the UI then shows the place in brackets for the teacher to pick).
+  Future<List<RegionCandidate>> inferRegion({required String school}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'infer_region', 'school': school},
+    );
+    final data = res.data;
+    if (data is Map && data['candidates'] is List) {
+      return (data['candidates'] as List)
+          .whereType<Map>()
+          .map((c) => RegionCandidate(
+                regionId: (c['regionId'] ?? '').toString(),
+                label: (c['label'] ?? '').toString(),
+                place: (c['place'] ?? '').toString(),
+              ))
+          .where((c) => c.regionId.isNotEmpty)
+          .toList(growable: false);
+    }
+    throw Exception('Region inference failed: $data');
+  }
+
+  /// Reads student names (and IDs when shown) off photos of an attendance
+  /// sheet or class roster — used by onboarding to auto-populate a class.
+  Future<List<RosterEntry>> extractRoster({required List<Uint8List> pages}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {
+        'action': 'extract_roster',
+        'imagesBase64': pages.map(base64Encode).toList(growable: false),
+        'mediaType': 'image/jpeg',
+      },
+    );
+    final data = res.data;
+    if (data is Map && data['students'] is List) {
+      return (data['students'] as List)
+          .whereType<Map>()
+          .map((m) {
+            final id = (m['studentId'] ?? '').toString().trim();
+            return RosterEntry(
+              name: (m['name'] ?? '').toString().trim(),
+              studentId: id.isEmpty ? null : id,
+            );
+          })
+          .where((e) => e.name.isNotEmpty)
+          .toList(growable: false);
+    }
+    throw Exception('Roster extraction failed: $data');
+  }
+
   /// Scans of a teacher's answer key → structured key stored in the cloud.
   /// Costs AI tokens once; every later grade reuses the stored key text.
   Future<AnswerKeySummary> extractAnswerKey({required String teacherId, required List<Uint8List> pages}) async {
@@ -363,8 +456,12 @@ class AiGradingService {
           'harshness': req.harshness.clamp(1, 10),
           'studentName': req.studentName,
           'studentGrade': req.studentGrade,
+          if (req.gradeLevel != null) 'expectationGrade': req.gradeLevel,
+          if (req.region != null && req.region!.isNotEmpty) 'region': req.region,
+          if (req.teacherFeedback != null && req.teacherFeedback!.isNotEmpty) 'teacherFeedback': req.teacherFeedback,
           if (req.formatOverride != null) 'formatOverride': req.formatOverride,
           if (req.answerKeyId != null) 'answerKeyId': req.answerKeyId,
+          if (req.includeTranscription) 'includeTranscription': true,
         },
       );
 

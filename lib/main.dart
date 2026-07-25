@@ -4,6 +4,7 @@ import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/nav.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
+import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:marking_prokect_v2/services/student_class_links_service.dart';
@@ -38,6 +39,9 @@ void main() async {
   runApp(const MyApp());
 }
 
+/// Root messenger so background marking can pop notifications from anywhere.
+final rootMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -53,12 +57,14 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PresetsService()),
         ChangeNotifierProvider(create: (_) => SubmissionsService()),
         ChangeNotifierProvider(create: (_) => SupabaseHook()),
+        ChangeNotifierProvider(create: (_) => GradingQueueService(messengerKey: rootMessengerKey)),
       ],
       child: AppBootstrap(
         child: Consumer<AppState>(
           builder: (context, appState, _) => MaterialApp.router(
-            title: 'AI Marker',
+            title: 'MarkMate',
             debugShowCheckedModeBanner: false,
+            scaffoldMessengerKey: rootMessengerKey,
             theme: lightTheme,
             darkTheme: darkTheme,
             themeMode: appState.themeMode,

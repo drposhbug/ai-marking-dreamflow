@@ -1,0 +1,53 @@
+# Builds the iOS app in the cloud on GitHub's macOS runners.
+#
+# Why: iOS apps can only be compiled by Xcode on macOS — never on Windows.
+# This workflow is the no-Mac path: every push to main (or a manual run from
+# the Actions tab) produces an UNSIGNED .ipa artifact proving the iOS build
+# works and giving you a file you can sideload.
+#
+# Installing on an iPhone:
+#   - Fastest (free): download the artifact, then use Sideloadly (Windows app)
+#     with any free Apple ID to install it — resigns for 7 days at a time.
+#   - Proper: an Apple Developer account ($99/yr) + a signing setup
+#     (e.g. Codemagic or Xcode on any Mac) + TestFlight.
+name: iOS build (unsigned)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'ios/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/ios-build.yml'
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned .ipa
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -qr ai-marker-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ai-marker-ios-unsigned
+          path: ai-marker-unsigned.ipa
+          retention-days: 14

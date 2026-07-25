@@ -7,18 +7,23 @@ class TeacherClass {
   final String subject;
   final String period;
   final String? room;
+
+  /// Grade level (1–12) of the class — the AI marks at this grade's
+  /// expectations automatically when the class is selected before scanning.
+  final int? gradeLevel;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const TeacherClass({required this.id, required this.teacherId, required this.name, required this.subject, required this.period, required this.createdAt, required this.updatedAt, this.room});
+  const TeacherClass({required this.id, required this.teacherId, required this.name, required this.subject, required this.period, required this.createdAt, required this.updatedAt, this.room, this.gradeLevel});
 
-  TeacherClass copyWith({String? id, String? teacherId, String? name, String? subject, String? period, String? room, DateTime? createdAt, DateTime? updatedAt}) => TeacherClass(
+  TeacherClass copyWith({String? id, String? teacherId, String? name, String? subject, String? period, String? room, int? gradeLevel, DateTime? createdAt, DateTime? updatedAt}) => TeacherClass(
     id: id ?? this.id,
     teacherId: teacherId ?? this.teacherId,
     name: name ?? this.name,
     subject: subject ?? this.subject,
     period: period ?? this.period,
     room: room ?? this.room,
+    gradeLevel: gradeLevel ?? this.gradeLevel,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -30,6 +35,7 @@ class TeacherClass {
     'subject': subject,
     'period': period,
     'room': room,
+    'grade_level': gradeLevel,
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
   };
@@ -41,6 +47,7 @@ class TeacherClass {
     subject: (json['subject'] as String?) ?? '',
     period: (json['period'] as String?) ?? '',
     room: json['room'] as String?,
+    gradeLevel: (json['grade_level'] as num?)?.toInt(),
     createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()) ?? DateTime.now(),
     updatedAt: DateTime.tryParse((json['updated_at'] ?? '').toString()) ?? DateTime.now(),
   );

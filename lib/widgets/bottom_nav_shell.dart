@@ -21,7 +21,7 @@ class BottomNavShell extends StatelessWidget {
             NavigationDestination(icon: Icon(Icons.edit_document, color: AiMarkerColors.neutral), selectedIcon: Icon(Icons.edit_document), label: 'Grading'),
             NavigationDestination(icon: Icon(Icons.grid_view_rounded, color: AiMarkerColors.neutral), selectedIcon: Icon(Icons.grid_view_rounded), label: 'Dashboard'),
             NavigationDestination(icon: Icon(Icons.groups_2_rounded, color: AiMarkerColors.neutral), selectedIcon: Icon(Icons.groups_2_rounded), label: 'Classes'),
-            NavigationDestination(icon: Icon(Icons.library_books_rounded, color: AiMarkerColors.neutral), selectedIcon: Icon(Icons.library_books_rounded), label: 'Schemes'),
+            NavigationDestination(icon: Icon(Icons.fact_check_rounded, color: AiMarkerColors.neutral), selectedIcon: Icon(Icons.fact_check_rounded), label: 'Answers'),
             NavigationDestination(icon: Icon(Icons.settings_rounded, color: AiMarkerColors.neutral), selectedIcon: Icon(Icons.settings_rounded), label: 'Settings'),
           ],
         ),

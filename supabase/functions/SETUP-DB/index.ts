@@ -19,6 +19,27 @@ Deno.serve(async (req) => {
       )`;
     await sql`alter table public.answer_keys enable row level security`;
     await sql`create index if not exists answer_keys_teacher_idx on public.answer_keys (teacher_id, created_at desc)`;
+    await sql`
+      create table if not exists public.grade_cache (
+        content_hash text primary key,
+        provider text not null,
+        raw jsonb not null,
+        image_hashes jsonb,
+        created_at timestamptz not null default now()
+      )`;
+    await sql`alter table public.grade_cache add column if not exists image_hashes jsonb`;
+    await sql`alter table public.grade_cache enable row level security`;
+    await sql`create index if not exists grade_cache_created_idx on public.grade_cache (created_at)`;
+    await sql`
+      create table if not exists public.feedback_code_usage (
+        id bigint generated always as identity primary key,
+        bank text not null,
+        code text not null,
+        kind text not null,
+        created_at timestamptz not null default now()
+      )`;
+    await sql`alter table public.feedback_code_usage enable row level security`;
+    await sql`create index if not exists feedback_code_usage_bank_code_idx on public.feedback_code_usage (bank, code)`;
     await sql.end();
     return Response.json({ ok: true });
   } catch (e) {

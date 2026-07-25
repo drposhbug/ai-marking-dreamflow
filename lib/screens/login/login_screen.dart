@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
+import 'package:marking_prokect_v2/screens/onboarding/onboarding_screen.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:provider/provider.dart';
 
@@ -28,9 +30,14 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _signIn() async {
     setState(() => _loading = true);
     try {
-      await context.read<AuthService>().signInWithEmail(email: _email.text.trim(), password: _password.text);
+      final auth = context.read<AuthService>();
+      await auth.signInWithEmail(email: _email.text.trim(), password: _password.text);
       if (!mounted) return;
-      context.go(AppRoutes.grading);
+      // First sign-in on this device → walk through onboarding (skippable).
+      final user = auth.currentUser;
+      final done = user == null ? '1' : await const LocalStore().getString(OnboardingScreen.doneKey(user.id));
+      if (!mounted) return;
+      context.go(done == '1' ? AppRoutes.grading : AppRoutes.onboarding);
     } catch (e) {
       debugPrint('Login failed: $e');
       if (!mounted) return;
@@ -68,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  Text('AI Marker', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: cs.primary)),
+                  Text('MarkMate', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: cs.primary)),
                   const SizedBox(height: 6),
                   Text('Smart grading for brilliant teachers ✨', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
                   const SizedBox(height: 22),
@@ -120,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     alignment: WrapAlignment.center,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text('New to AI Marker? ', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                      Text('New to MarkMate? ', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                       TextButton(
                         style: TextButton.styleFrom(foregroundColor: cs.primary, splashFactory: NoSplash.splashFactory),
                         onPressed: () {},

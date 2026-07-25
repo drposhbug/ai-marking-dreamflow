@@ -35,9 +35,9 @@ class ClassesService extends ChangeNotifier {
 
   List<TeacherClass> bySubject(String subject, {required String teacherId}) => _classes.where((c) => c.teacherId == teacherId && c.subject.toLowerCase() == subject.toLowerCase()).toList();
 
-  Future<TeacherClass> create({required String teacherId, required String name, required String subject, required String period, String? room}) async {
+  Future<TeacherClass> create({required String teacherId, required String name, required String subject, required String period, String? room, int? gradeLevel}) async {
     final now = DateTime.now();
-    final created = TeacherClass(id: 'c_${IdFactory.newId()}', teacherId: teacherId, name: name, subject: subject, period: period, room: room, createdAt: now, updatedAt: now);
+    final created = TeacherClass(id: 'c_${IdFactory.newId()}', teacherId: teacherId, name: name, subject: subject, period: period, room: room, gradeLevel: gradeLevel, createdAt: now, updatedAt: now);
     _classes = [created, ..._classes];
     await _persist();
     notifyListeners();
