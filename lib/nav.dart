@@ -12,6 +12,7 @@ import 'package:marking_prokect_v2/screens/grading/image_preview_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/result_screen.dart';
 import 'package:marking_prokect_v2/screens/library/library_screen.dart';
 import 'package:marking_prokect_v2/screens/login/login_screen.dart';
+import 'package:marking_prokect_v2/screens/onboarding/onboarding_screen.dart';
 import 'package:marking_prokect_v2/screens/settings/settings_screen.dart';
 import 'package:marking_prokect_v2/screens/students/student_profile_screen.dart';
 import 'package:marking_prokect_v2/screens/classes/class_hub_screen.dart';
@@ -29,6 +30,7 @@ class AppRouter {
     initialLocation: AppRoutes.login,
     routes: [
       GoRoute(path: AppRoutes.login, name: 'login', pageBuilder: (context, state) => const NoTransitionPage(child: LoginScreen())),
+      GoRoute(path: AppRoutes.onboarding, name: 'onboarding', pageBuilder: (context, state) => const NoTransitionPage(child: OnboardingScreen())),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => BottomNavShell(shell: shell),
         branches: [

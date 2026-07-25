@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:provider/provider.dart';
@@ -22,10 +24,14 @@ class TeacherTopbar extends StatelessWidget {
         if (leadingIcon != null)
           IconButton(onPressed: onLeading, icon: Icon(leadingIcon, color: cs.primary))
         else
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: cs.primary.withValues(alpha: 0.12),
-            child: Text((user?.name ?? 'T').substring(0, 1), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800)),
+          InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => context.go(AppRoutes.settings),
+            child: CircleAvatar(
+              radius: 18,
+              backgroundColor: cs.primary.withValues(alpha: 0.12),
+              child: Text((user?.name ?? 'T').substring(0, 1), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800)),
+            ),
           ),
         const SizedBox(width: 10),
         Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: cs.primary))),

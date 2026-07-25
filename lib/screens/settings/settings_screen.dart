@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
+import 'package:marking_prokect_v2/data/curriculum_regions.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/widgets/region_picker.dart';
 import 'package:provider/provider.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -30,6 +32,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   };
 
   String _harshnessLabel(int v) => v <= 3 ? 'Lenient' : (v <= 6 ? 'Balanced' : 'Strict');
+
+  String _regionLabel(String id) => id.isEmpty ? 'Not set' : (regionById(id)?.label ?? 'Not set');
+
+  Future<void> _pickRegion() async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    final appState = context.read<AppState>();
+    final picked = await showRegionPicker(context, selectedId: appState.region);
+    if (picked == null || !mounted) return;
+    await appState.setRegion(teacherId: auth.id, regionId: picked.id);
+  }
+
+  Future<void> _manageMarkingFeedback() async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (ctx) => _MarkingFeedbackSheet(teacherId: auth.id),
+    );
+  }
 
   Future<void> _pickDefaultMode() async {
     final auth = context.read<AuthService>().currentUser;
@@ -104,7 +128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Text('Default Harshness', style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 6),
-                    Text('Controls how strict the AI is by default.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                    Text('Controls how strict marking is by default.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                     const SizedBox(height: 12),
                     Card(
                       child: Padding(
@@ -349,6 +373,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   _RowItem(icon: Icons.tune_rounded, title: 'Default Mode', trailing: _modeLabel(appState.defaultMode), onTap: _pickDefaultMode),
                   _RowItem(icon: Icons.speed_rounded, title: 'Default Harshness', trailing: _harshnessLabel(appState.defaultHarshness), onTap: _pickDefaultHarshness),
+                  _RowItem(icon: Icons.place_rounded, title: 'Curriculum Region', trailing: _regionLabel(appState.region), onTap: _pickRegion),
+                  _RowItem(icon: Icons.school_rounded, title: 'Marking Feedback', trailing: appState.markingFeedback.isEmpty ? 'None yet' : '${appState.markingFeedback.length} saved', onTap: _manageMarkingFeedback),
                 ],
               ),
             ),
@@ -548,6 +574,96 @@ class _ThemePill extends StatelessWidget {
             Icon(icon, size: 18, color: fg),
             const SizedBox(width: 8),
             Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: fg, fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkingFeedbackSheet extends StatefulWidget {
+  final String teacherId;
+  const _MarkingFeedbackSheet({required this.teacherId});
+
+  @override
+  State<_MarkingFeedbackSheet> createState() => _MarkingFeedbackSheetState();
+}
+
+class _MarkingFeedbackSheetState extends State<_MarkingFeedbackSheet> {
+  final _input = TextEditingController();
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  Future<void> _add() async {
+    final text = _input.text.trim();
+    if (text.isEmpty) return;
+    await context.read<AppState>().addMarkingFeedback(teacherId: widget.teacherId, feedback: text);
+    _input.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final feedback = context.watch<AppState>().markingFeedback;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(14, 8, 14, 16 + MediaQuery.of(context).viewInsets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('Marking Feedback', style: Theme.of(context).textTheme.titleLarge)),
+                IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral)),
+              ],
+            ),
+            Text(
+              'Standing corrections your assistant follows on every grade. Add one whenever it keeps doing something you disagree with.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _input,
+                    onSubmitted: (_) => _add(),
+                    decoration: const InputDecoration(hintText: "e.g. Don't deduct for spelling in science"),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton.filled(onPressed: _add, icon: const Icon(Icons.add_rounded), tooltip: 'Add'),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (feedback.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text('Nothing saved yet. You can also add feedback from any result screen with "Teach MarkMate".', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+              )
+            else
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (var i = 0; i < feedback.length; i++)
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.rule_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
+                        title: Text(feedback[i], style: Theme.of(context).textTheme.bodyMedium),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete_outline_rounded, color: AiMarkerColors.error, size: 20),
+                          onPressed: () => context.read<AppState>().removeMarkingFeedbackAt(teacherId: widget.teacherId, index: i),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

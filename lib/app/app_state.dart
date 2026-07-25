@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -30,6 +31,9 @@ class GradingDraft {
   final GradingMode mode;
   final Map<String, bool> criteria;
   final int harshness;
+
+  /// Grade level (1–12) whose expectations the AI marks against.
+  final int gradeLevel;
   final String notes;
   final bool oneTimeOverride;
 
@@ -45,6 +49,7 @@ class GradingDraft {
     required this.mode,
     required this.criteria,
     required this.harshness,
+    this.gradeLevel = 6,
     required this.notes,
     required this.oneTimeOverride,
     required this.autoDetectScheme,
@@ -74,6 +79,7 @@ class GradingDraft {
     GradingMode? mode,
     Map<String, bool>? criteria,
     int? harshness,
+    int? gradeLevel,
     String? notes,
     bool? oneTimeOverride,
     bool? autoDetectScheme,
@@ -94,6 +100,7 @@ class GradingDraft {
     mode: mode ?? this.mode,
     criteria: criteria ?? this.criteria,
     harshness: harshness ?? this.harshness,
+    gradeLevel: gradeLevel ?? this.gradeLevel,
     notes: notes ?? this.notes,
     oneTimeOverride: oneTimeOverride ?? this.oneTimeOverride,
     autoDetectScheme: autoDetectScheme ?? this.autoDetectScheme,
@@ -126,10 +133,26 @@ class AppState extends ChangeNotifier {
   int _defaultHarshness = 5;
   int get defaultHarshness => _defaultHarshness;
 
+  /// Curriculum region id (see lib/data/curriculum_regions.dart); '' = unset.
+  String _region = '';
+  String get region => _region;
+
+  /// The school the teacher teaches at (asked during onboarding).
+  String _school = '';
+  String get school => _school;
+
+  /// Standing corrections the teacher has given about how the AI should mark
+  /// ("teach the AI"). Sent with every grade so the AI follows them.
+  List<String> _markingFeedback = const [];
+  List<String> get markingFeedback => _markingFeedback;
+
   AppState({LocalStore? store}) : _store = store ?? const LocalStore();
 
   String _defaultModeKey(String teacherId) => 'ai_marker.default_mode.v1.$teacherId';
   String _defaultHarshnessKey(String teacherId) => 'ai_marker.default_harshness.v1.$teacherId';
+  String _regionKey(String teacherId) => 'ai_marker.region.v1.$teacherId';
+  String _schoolKey(String teacherId) => 'ai_marker.school.v1.$teacherId';
+  String _markingFeedbackKey(String teacherId) => 'ai_marker.marking_feedback.v1.$teacherId';
 
   Future<void> initForUser({required String teacherId}) async {
     try {
@@ -143,6 +166,17 @@ class AppState extends ChangeNotifier {
       final rawHarshness = await _store.getString(_defaultHarshnessKey(teacherId));
       final harshness = int.tryParse((rawHarshness ?? '').trim());
       if (harshness != null) _defaultHarshness = harshness.clamp(1, 10);
+
+      final rawRegion = await _store.getString(_regionKey(teacherId));
+      if (rawRegion != null && rawRegion.isNotEmpty) _region = rawRegion;
+
+      final rawSchool = await _store.getString(_schoolKey(teacherId));
+      if (rawSchool != null && rawSchool.isNotEmpty) _school = rawSchool;
+
+      final rawFeedback = await _store.getString(_markingFeedbackKey(teacherId));
+      if (rawFeedback != null && rawFeedback.isNotEmpty) {
+        _markingFeedback = (jsonDecode(rawFeedback) as List).whereType<String>().toList(growable: false);
+      }
 
       _draft = _draft.copyWith(mode: _defaultMode, harshness: _defaultHarshness);
       notifyListeners();
@@ -239,6 +273,7 @@ class AppState extends ChangeNotifier {
       mode: _draft.mode,
       criteria: _draft.criteria,
       harshness: _draft.harshness,
+      gradeLevel: _draft.gradeLevel,
       notes: _draft.notes,
       oneTimeOverride: _draft.oneTimeOverride,
       autoDetectScheme: _draft.autoDetectScheme,
@@ -270,6 +305,39 @@ class AppState extends ChangeNotifier {
   void setHarshness(int harshness) {
     _draft = _draft.copyWith(harshness: harshness);
     notifyListeners();
+  }
+
+  void setGradeLevel(int gradeLevel) {
+    _draft = _draft.copyWith(gradeLevel: gradeLevel.clamp(1, 12));
+    notifyListeners();
+  }
+
+  Future<void> setRegion({required String teacherId, required String regionId}) async {
+    _region = regionId;
+    notifyListeners();
+    await _store.setString(_regionKey(teacherId), regionId);
+  }
+
+  Future<void> setSchool({required String teacherId, required String school}) async {
+    _school = school.trim();
+    notifyListeners();
+    await _store.setString(_schoolKey(teacherId), _school);
+  }
+
+  Future<void> addMarkingFeedback({required String teacherId, required String feedback}) async {
+    final text = feedback.trim();
+    if (text.isEmpty) return;
+    _markingFeedback = List.unmodifiable([..._markingFeedback, text]);
+    notifyListeners();
+    await _store.setString(_markingFeedbackKey(teacherId), jsonEncode(_markingFeedback));
+  }
+
+  Future<void> removeMarkingFeedbackAt({required String teacherId, required int index}) async {
+    if (index < 0 || index >= _markingFeedback.length) return;
+    final next = [..._markingFeedback]..removeAt(index);
+    _markingFeedback = List.unmodifiable(next);
+    notifyListeners();
+    await _store.setString(_markingFeedbackKey(teacherId), jsonEncode(_markingFeedback));
   }
 
   void setNotes(String notes) {

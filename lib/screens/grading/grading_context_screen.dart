@@ -6,11 +6,10 @@ import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
-import 'package:marking_prokect_v2/models/student.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
-import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
@@ -28,6 +27,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
   bool _grading = false;
   late Map<String, bool> _criteria;
   double _harshness = 5;
+  double _gradeLevel = 6;
   final _notes = TextEditingController();
   final _pageController = PageController(viewportFraction: 0.92);
   int _currentPage = 0;
@@ -50,9 +50,14 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
     final baseCriteria = preset?.criteria ?? {for (final l in labels) l: true};
     _criteria = {for (final l in labels) l: (baseCriteria[l] == true)};
     _harshness = (preset?.harshness ?? draft.harshness).clamp(1, 10).toDouble();
+    _gradeLevel = draft.gradeLevel.clamp(1, 12).toDouble();
+    // A selected class carries its own grade level — use it automatically.
+    final klass = (draft.classId == null || draft.classId!.isEmpty) ? null : context.read<ClassesService>().getById(draft.classId!);
+    if (klass?.gradeLevel != null) _gradeLevel = klass!.gradeLevel!.clamp(1, 12).toDouble();
     _notes.text = (preset?.notes ?? draft.notes);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppState>().setMode(mode, criteria: _criteria, harshness: _harshness.round());
+      context.read<AppState>().setGradeLevel(_gradeLevel.round());
       context.read<AppState>().setNotes(_notes.text);
     });
   }
@@ -229,97 +234,12 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
     }
   }
 
-  static const _kAskLinkKey = 'ai_marker.ask_link_student.v1';
-
   static String _builtInIdForMode(GradingMode mode) => switch (mode) {
     GradingMode.homework => GradingPreset.builtInHomeworkId,
     GradingMode.testQuiz => GradingPreset.builtInTestId,
     GradingMode.labReport => GradingPreset.builtInLabId,
     GradingMode.englishEssay => GradingPreset.builtInEnglishId,
   };
-
-  /// Offer to link the freshly graded result to a student, unless the
-  /// teacher previously checked "Don't ask again".
-  Future<Student?> _maybeAskLinkStudent() async {
-    const store = LocalStore();
-    final pref = await store.getString(_kAskLinkKey);
-    if (pref == 'never' || !mounted) return null;
-
-    var dontAsk = false;
-    final wantsLink = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Link to a student?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('The work has been graded. Do you want to save this result to a student profile?'),
-              const SizedBox(height: 8),
-              CheckboxListTile(
-                value: dontAsk,
-                onChanged: (v) => setDialogState(() => dontAsk = v ?? false),
-                title: const Text("Don't ask again"),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Choose student')),
-          ],
-        ),
-      ),
-    );
-    if (dontAsk) await store.setString(_kAskLinkKey, 'never');
-    if (wantsLink != true || !mounted) return null;
-
-    final students = context.read<StudentsService>().students;
-    final classes = context.read<ClassesService>();
-    return showModalBottomSheet<Student>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 8, 0),
-              child: Row(
-                children: [
-                  Expanded(child: Text('Choose student', style: Theme.of(ctx).textTheme.titleLarge)),
-                  IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close_rounded)),
-                ],
-              ),
-            ),
-            Flexible(
-              child: students.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text('No students yet — add students from the Classes tab.'),
-                    )
-                  : ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final s in students)
-                          ListTile(
-                            leading: CircleAvatar(child: Text(s.name.isEmpty ? '?' : s.name.substring(0, 1))),
-                            title: Text(s.name),
-                            subtitle: Text(classes.getById(s.classId)?.name ?? s.studentId),
-                            onTap: () => Navigator.pop(ctx, s),
-                          ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _grade() async {
     final auth = context.read<AuthService>().currentUser;
@@ -335,14 +255,14 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       return;
     }
 
-    // No answer key selected → warn that marks will be pure AI judgment.
+    // No answer key selected → warn that marks are judgment-based.
     if (_answerKeyId == null) {
       final choice = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('No answer key'),
           content: const Text(
-              'Without an answer key, the marks are entirely the AI\'s own judgment — it works out the answers itself and can make mistakes.\n\nFor accurate, consistent marking, scan or pick your answer key first.'),
+              'Without an answer key, your assistant works out the answers itself and can make mistakes.\n\nFor accurate, consistent marking, scan or pick your answer key first.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, 'grade'), child: const Text('Grade anyway')),
             FilledButton(onPressed: () => Navigator.pop(ctx, 'key'), child: const Text('Add answer key')),
@@ -359,10 +279,13 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
 
     setState(() => _grading = true);
     try {
-      // Student, class, and scheme are all optional now — grading works on
-      // the scan alone, and the result can be linked to a student afterwards.
+      // Student, class, and scheme are all optional — marking works on the
+      // scan alone, and the student is auto-linked from the name on the paper.
       final presetId = draft.presetId ?? _builtInIdForMode(draft.mode);
       final preStudent = draft.studentId == null ? null : context.read<StudentsService>().getById(draft.studentId!);
+      final regionId = context.read<AppState>().region;
+      final teacherFeedback = context.read<AppState>().markingFeedback;
+      final pages = draft.pages.map((p) => p.bytes).toList(growable: false);
 
       final req = AiGradeRequest(
         teacherId: auth.id,
@@ -376,84 +299,31 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
         overrideUsed: draft.oneTimeOverride,
         imageBytes: draft.imageBytes!,
-        pageImages: draft.pages.map((p) => p.bytes).toList(growable: false),
+        pageImages: pages,
         studentName: preStudent?.name,
-        // Pass student grade from DB if available so the edge function
-        // doesn't need to detect it from the image.
-        studentGrade: null, // TODO: wire up from student model if you store grade level
+        studentGrade: null,
+        gradeLevel: _gradeLevel.round(),
+        region: regionId,
+        teacherFeedback: teacherFeedback,
         answerKeyId: _answerKeyId,
       );
 
-      final ai = AiGradingService();
-      final res = await ai.grade(req);
-      if (!mounted) return;
+      // Marking runs in the background so the teacher can keep scanning —
+      // the queue auto-links the student, saves the submission, and notifies
+      // when the result is ready in the home-screen tray.
+      context.read<GradingQueueService>().enqueue(
+            req: req,
+            pages: pages,
+            students: context.read<StudentsService>(),
+            submissions: context.read<SubmissionsService>(),
+            label: preStudent?.name,
+          );
 
-      // No student selected before grading? Try the name the AI read off
-      // the paper first; only ask when there's no clean roster match.
-      var studentId = draft.studentId ?? '';
-      var classId = draft.classId ?? '';
-      if (studentId.isEmpty) {
-        final paperName = res.studentNameOnPaper?.trim().toLowerCase() ?? '';
-        if (paperName.isNotEmpty) {
-          final matches = context
-              .read<StudentsService>()
-              .students
-              .where((s) => s.name.trim().toLowerCase() == paperName)
-              .toList();
-          if (matches.length == 1) {
-            studentId = matches.first.id;
-            if (classId.isEmpty && matches.first.classId.trim().isNotEmpty) {
-              classId = matches.first.classId;
-            }
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Linked to ${matches.first.name} — name read from the paper.')),
-            );
-          }
-        }
-      }
-      if (studentId.isEmpty) {
-        final linked = await _maybeAskLinkStudent();
-        if (linked != null) {
-          studentId = linked.id;
-          if (classId.isEmpty && linked.classId.trim().isNotEmpty) classId = linked.classId;
-        }
-      }
-      if (!mounted) return;
-
-      final saveReq = AiGradeRequest(
-        teacherId: auth.id,
-        studentId: studentId,
-        classId: classId,
-        presetId: presetId,
-        subject: draft.detectedSubject ?? 'Subject',
-        mode: draft.mode,
-        criteria: _criteria,
-        harshness: _harshness.round(),
-        notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-        overrideUsed: draft.oneTimeOverride,
-        imageBytes: draft.imageBytes!,
-        studentName: preStudent?.name,
-        studentGrade: null,
+      context.read<AppState>().resetDraft();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Marking in the background — keep scanning. You\'ll be notified when it\'s ready.')),
       );
-      final submission = ai.toSubmission(req: saveReq, res: res);
-      await context.read<SubmissionsService>().create(submission);
-
-      if (!mounted) return;
-
-      // Pass the live result and page images directly to ResultScreen so it
-      // can show the annotated pages and real feedback immediately.
-      context.push(
-        '${AppRoutes.result}?submissionId=${submission.id}',
-        extra: {
-          'gradeResult': res,
-          'imageBytes': draft.imageBytes,
-          'pageImages': draft.pages.map((p) => p.bytes).toList(growable: false),
-        },
-      );
-    } catch (e) {
-      debugPrint('Grading failed: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Grading failed: $e')));
+      context.go(AppRoutes.grading);
     } finally {
       if (mounted) setState(() => _grading = false);
     }
@@ -465,7 +335,6 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
     final draft = context.watch<AppState>().draft;
     final student = draft.studentId == null ? null : context.watch<StudentsService>().getById(draft.studentId!);
     final klass = draft.classId == null ? null : context.watch<ClassesService>().getById(draft.classId!);
-    final preset = draft.presetId == null ? null : context.watch<PresetsService>().getById(draft.presetId!);
 
     return Scaffold(
       appBar: AppBar(
@@ -584,7 +453,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                         children: [
                           Text(student?.name ?? 'Student', style: Theme.of(context).textTheme.titleMedium),
                           const SizedBox(height: 2),
-                          Text(klass == null ? 'Select class' : '${klass.name} · ${klass.period}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                          Text(klass == null ? 'Select class' : '${klass.name} · ${klass.period}${klass.gradeLevel != null ? ' · Grade ${klass.gradeLevel}' : ''}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                         ],
                       ),
                     ),
@@ -594,19 +463,6 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                         decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999), border: Border.all(color: cs.primary.withValues(alpha: 0.18))),
                         child: Text(draft.detectedSubject!, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800)),
                       ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    Icon(Icons.verified_rounded, color: cs.secondary),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(preset == null ? 'Marking scheme not loaded' : 'Marking scheme loaded: ${preset.name}', style: Theme.of(context).textTheme.titleSmall)),
                   ],
                 ),
               ),
@@ -671,7 +527,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Text('Harshness', style: Theme.of(context).textTheme.titleMedium),
+            Text('Grade level expectations', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Card(
               child: Padding(
@@ -679,19 +535,19 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(children: [Text('Lenient', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)), const Spacer(), Text('Strict', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral))]),
+                    Row(children: [Text('Grade 1', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)), const Spacer(), Text('Grade 12', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral))]),
                     Slider(
-                      value: _harshness,
+                      value: _gradeLevel,
                       min: 1,
-                      max: 10,
-                      divisions: 9,
-                      label: _harshnessLabel(_harshness.round()),
+                      max: 12,
+                      divisions: 11,
+                      label: 'Grade ${_gradeLevel.round()}',
                       onChanged: (v) {
-                        setState(() => _harshness = v);
-                        context.read<AppState>().setHarshness(v.round());
+                        setState(() => _gradeLevel = v);
+                        context.read<AppState>().setGradeLevel(v.round());
                       },
                     ),
-                    Text(_harshnessLabel(_harshness.round()), style: Theme.of(context).textTheme.labelLarge?.copyWith(color: _harshness.round() >= 7 ? AiMarkerColors.error : (_harshness.round() <= 3 ? AiMarkerColors.secondary : Colors.orange), fontWeight: FontWeight.w800)),
+                    Text('Marking at Grade ${_gradeLevel.round()} expectations', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w800)),
                   ],
                 ),
               ),
@@ -734,7 +590,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
               onPressed: _grading ? null : _grade,
               style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
               icon: const Icon(Icons.auto_awesome_rounded, color: Colors.white),
-              label: _grading ? const Text('Grading...') : const Text('Grade with AI →'),
+              label: _grading ? const Text('Sending...') : const Text('Mark it →'),
             ),
           ],
         ),
@@ -758,7 +614,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                             child: CircularProgressIndicator(strokeWidth: 5, color: cs.primary),
                           ),
                           const SizedBox(height: 20),
-                          Text('Marking with AI…', style: Theme.of(context).textTheme.titleMedium),
+                          Text('Sending for marking…', style: Theme.of(context).textTheme.titleMedium),
                           const SizedBox(height: 6),
                           Text(
                             'Reading the work and grading every question.\nThis usually takes 10–30 seconds.',
@@ -777,5 +633,4 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
     );
   }
 
-  String _harshnessLabel(int v) => v <= 3 ? 'Lenient ($v/10)' : (v <= 6 ? 'Balanced ($v/10)' : 'Strict ($v/10)');
 }

@@ -206,7 +206,7 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            TextField(controller: _notes, maxLines: 4, decoration: const InputDecoration(labelText: 'Notes', hintText: 'Custom instructions for AI...')),
+            TextField(controller: _notes, maxLines: 4, decoration: const InputDecoration(labelText: 'Notes', hintText: 'Custom marking instructions...')),
             const SizedBox(height: 18),
             FilledButton(
               onPressed: _save,

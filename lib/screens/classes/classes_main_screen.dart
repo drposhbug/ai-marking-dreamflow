@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
@@ -40,23 +43,17 @@ class _ClassesMainScreenState extends State<ClassesMainScreen> {
   }
 
   Future<void> _openCreateSheet() async {
-    final created = await showModalBottomSheet<_CreateClassResult>(
+    // The sheet creates the class (and its students) itself and returns the
+    // class name on success.
+    final createdName = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const _CreateClassSheet(),
     );
-
-    final teacherId = context.read<AuthService>().currentUser?.id;
-    if (created == null || teacherId == null) return;
-
-    await context.read<ClassesService>().create(
-      teacherId: teacherId,
-      name: created.name,
-      subject: created.subject,
-      period: created.period,
-      room: created.room,
-    );
+    if (createdName != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$createdName created.')));
+    }
   }
 
   @override
@@ -135,7 +132,7 @@ class _ClassesMainScreenState extends State<ClassesMainScreen> {
                   ),
                 ),
             ],
-            if (_editing) ...[
+            ...[
               const SizedBox(height: 4),
               InkWell(
                 splashFactory: NoSplash.splashFactory,
@@ -168,15 +165,6 @@ class _ClassesMainScreenState extends State<ClassesMainScreen> {
   }
 }
 
-class _CreateClassResult {
-  final String name;
-  final String subject;
-  final String period;
-  final String? room;
-
-  const _CreateClassResult({required this.name, required this.subject, required this.period, required this.room});
-}
-
 class _CreateClassSheet extends StatefulWidget {
   const _CreateClassSheet();
 
@@ -185,16 +173,113 @@ class _CreateClassSheet extends StatefulWidget {
 }
 
 class _CreateClassSheetState extends State<_CreateClassSheet> {
-  final _name = TextEditingController(text: 'Year 10 Physics');
+  final _name = TextEditingController();
   final _room = TextEditingController();
+  final _studentName = TextEditingController();
   String _subject = 'Physics';
   String _period = 'P1';
+  int? _gradeLevel;
+
+  final List<RosterEntry> _students = [];
+  final ImagePicker _picker = ImagePicker();
+  bool _scanning = false;
+  bool _creating = false;
 
   @override
   void dispose() {
     _name.dispose();
     _room.dispose();
+    _studentName.dispose();
     super.dispose();
+  }
+
+  Future<void> _scanAttendance() async {
+    ImageSource? source = ImageSource.gallery;
+    if (!kIsWeb) {
+      source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(leading: const Icon(Icons.photo_camera_rounded), title: const Text('Take a photo'), onTap: () => Navigator.pop(context, ImageSource.camera)),
+              ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Choose from gallery'), onTap: () => Navigator.pop(context, ImageSource.gallery)),
+            ],
+          ),
+        ),
+      );
+      if (source == null) return;
+    }
+
+    try {
+      final XFile? image = await _picker.pickImage(source: source, imageQuality: 85);
+      if (image == null || !mounted) return;
+      setState(() => _scanning = true);
+      final bytes = await image.readAsBytes();
+      final found = await AiGradingService().extractRoster(pages: [bytes]);
+      if (!mounted) return;
+      final existing = _students.map((s) => s.name.toLowerCase()).toSet();
+      final fresh = found.where((s) => !existing.contains(s.name.toLowerCase())).toList();
+      setState(() => _students.addAll(fresh));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(fresh.isEmpty
+              ? 'No new names found on that photo.'
+              : 'Added ${fresh.length} student${fresh.length == 1 ? '' : 's'} from the attendance sheet.'),
+        ),
+      );
+    } catch (e) {
+      debugPrint('_CreateClassSheet._scanAttendance failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not read the attendance sheet. Try a clearer photo, or add students below.')),
+      );
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  void _addStudentManually() {
+    final name = _studentName.text.trim();
+    if (name.isEmpty) return;
+    if (!_students.any((s) => s.name.toLowerCase() == name.toLowerCase())) {
+      setState(() => _students.add(RosterEntry(name: name)));
+    }
+    _studentName.clear();
+  }
+
+  Future<void> _create() async {
+    final teacherId = context.read<AuthService>().currentUser?.id;
+    final name = _name.text.trim();
+    if (teacherId == null || name.isEmpty) return;
+
+    setState(() => _creating = true);
+    try {
+      final created = await context.read<ClassesService>().create(
+        teacherId: teacherId,
+        name: name,
+        subject: _subject,
+        period: _period,
+        room: _room.text.trim().isEmpty ? null : _room.text.trim(),
+        gradeLevel: _gradeLevel,
+      );
+      if (!mounted) return;
+      final students = context.read<StudentsService>();
+      for (final s in _students) {
+        final code = s.studentId ??
+            '${s.name.trim().split(RegExp(r'\s+')).map((w) => w[0].toUpperCase()).join()}${DateTime.now().millisecondsSinceEpoch % 1000}';
+        await students.create(teacherId: teacherId, classId: created.id, name: s.name, studentId: code);
+      }
+      if (!mounted) return;
+      context.pop(name);
+    } catch (e) {
+      debugPrint('_CreateClassSheet._create failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not create the class. Please try again.')));
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
   }
 
   @override
@@ -203,43 +288,125 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.88),
         decoration: BoxDecoration(color: cs.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text('Create class', style: Theme.of(context).textTheme.titleLarge)),
-                IconButton(onPressed: () => context.pop(), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral)),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text('Create class', style: Theme.of(context).textTheme.titleLarge)),
+                  IconButton(onPressed: () => context.pop(), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _name,
+                textCapitalization: TextCapitalization.words,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Class name', hintText: 'e.g. Year 10 Physics'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField(
+                      value: _subject,
+                      items: const ['Physics', 'Chemistry', 'Biology', 'Math', 'English', 'General'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      onChanged: (v) => setState(() => _subject = v.toString()),
+                      decoration: const InputDecoration(labelText: 'Subject'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField(
+                      value: _period,
+                      items: const ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      onChanged: (v) => setState(() => _period = v.toString()),
+                      decoration: const InputDecoration(labelText: 'Period'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      value: _gradeLevel,
+                      items: [
+                        const DropdownMenuItem<int?>(value: null, child: Text('Not set')),
+                        for (var g = 1; g <= 12; g++) DropdownMenuItem<int?>(value: g, child: Text('Grade $g')),
+                      ],
+                      onChanged: (v) => setState(() => _gradeLevel = v),
+                      decoration: const InputDecoration(labelText: 'Grade level'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: _room, decoration: const InputDecoration(labelText: 'Room (optional)'))),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text('Students', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 6),
+              Text(
+                'Snap your attendance sheet to fill the roster, or add students one by one.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+              ),
+              const SizedBox(height: 10),
+              FilledButton.tonalIcon(
+                onPressed: _scanning ? null : _scanAttendance,
+                icon: _scanning
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.photo_camera_rounded),
+                label: Text(_scanning ? 'Reading names…' : 'Scan attendance sheet'),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _studentName,
+                      textCapitalization: TextCapitalization.words,
+                      onSubmitted: (_) => _addStudentManually(),
+                      decoration: const InputDecoration(labelText: 'Student name'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  IconButton.filled(onPressed: _addStudentManually, icon: const Icon(Icons.add_rounded), tooltip: 'Add student'),
+                ],
+              ),
+              if (_students.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                for (var i = 0; i < _students.length; i++)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      radius: 15,
+                      backgroundColor: cs.primary.withValues(alpha: 0.12),
+                      child: Text(_students[i].name.isEmpty ? '?' : _students[i].name[0].toUpperCase(), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 13)),
+                    ),
+                    title: Text(_students[i].name, style: Theme.of(context).textTheme.bodyMedium),
+                    trailing: IconButton(
+                      icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral, size: 20),
+                      onPressed: () => setState(() => _students.removeAt(i)),
+                    ),
+                  ),
               ],
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField(
-              value: _subject,
-              items: const ['Physics', 'Chemistry', 'Biology', 'Math', 'English'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-              onChanged: (v) => setState(() => _subject = v.toString()),
-              decoration: const InputDecoration(labelText: 'Subject'),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField(
-              value: _period,
-              items: const ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-              onChanged: (v) => setState(() => _period = v.toString()),
-              decoration: const InputDecoration(labelText: 'Period'),
-            ),
-            const SizedBox(height: 12),
-            TextField(controller: _name, decoration: const InputDecoration(labelText: 'Class name')),
-            const SizedBox(height: 12),
-            TextField(controller: _room, decoration: const InputDecoration(labelText: 'Room (optional)')),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => context.pop(_CreateClassResult(name: _name.text.trim(), subject: _subject, period: _period, room: _room.text.trim().isEmpty ? null : _room.text.trim())),
-              style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
-              child: const Text('Create Class'),
-            ),
-          ],
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed: _creating || _name.text.trim().isEmpty ? null : _create,
+                style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
+                child: _creating
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text(_students.isEmpty ? 'Create Class' : 'Create Class with ${_students.length} student${_students.length == 1 ? '' : 's'}'),
+              ),
+            ],
+          ),
         ),
       ),
     );

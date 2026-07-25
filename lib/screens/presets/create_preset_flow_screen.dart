@@ -306,7 +306,7 @@ class _StepCriteriaState extends State<_StepCriteria> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('What should AI check?', style: Theme.of(context).textTheme.headlineSmall),
+        Text('What should be checked?', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 6),
         Text('Add your own criteria, toggle them on or off, or delete any you don’t want.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
         const SizedBox(height: 14),
@@ -432,7 +432,7 @@ class _StepNotes extends StatelessWidget {
         const SizedBox(height: 6),
         Text('Add context like “prioritize units” or “ignore minor spelling”.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
         const SizedBox(height: 14),
-        Expanded(child: TextField(controller: controller, maxLines: null, expands: true, decoration: const InputDecoration(hintText: 'Write custom instructions for AI...'))),
+        Expanded(child: TextField(controller: controller, maxLines: null, expands: true, decoration: const InputDecoration(hintText: 'Write custom marking instructions...'))),
       ],
     );
   }
