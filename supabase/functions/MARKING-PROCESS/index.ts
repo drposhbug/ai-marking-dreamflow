@@ -463,6 +463,21 @@ Read ALL student names visible across all pages. Do not invent names, do not inc
 const ROSTER_SHAPE = `\n\nReturn ONLY a single JSON object with exactly these fields:
 {"students": [{"name": string, "studentId": string or null}]}`;
 
+// Schema for the planning assistant (text-only): lesson plans, assignments,
+// quizzes, and worksheets generated on demand from the Planning screen.
+const PLAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "content"],
+  properties: {
+    title: { type: "string" },
+    content: { type: "string" },
+  },
+} as const;
+
+const PLAN_SHAPE = `\n\nReturn ONLY a single JSON object with exactly these fields:
+{"title": string, "content": string}`;
+
 // Schema for inferring the curriculum region from a school name (text-only).
 const REGION_INFER_SCHEMA = {
   type: "object",
@@ -880,6 +895,51 @@ Deno.serve(async (req) => {
       .limit(50);
     if (error) return json({ error: error.message }, 500);
     return json({ keys: data ?? [] });
+  }
+
+  // ── Planning assistant: generate a lesson plan / assignment / quiz ──────
+  if (action === "plan") {
+    const topic = String(payload?.topic ?? "").trim().slice(0, 600);
+    if (!topic) return json({ error: "topic is required" }, 400);
+    const kind = String(payload?.kind ?? "lesson plan").trim().slice(0, 40);
+    const planGrade = Number.isFinite(Number(payload?.gradeLevel))
+      ? Math.round(clamp(payload.gradeLevel, 1, 12, 6))
+      : null;
+    const subject = String(payload?.subject ?? "").trim().slice(0, 80);
+    const planRegion = CURRICULA[String(payload?.region ?? "").trim()];
+
+    const prompt = `You are an expert teacher's planning assistant. Create a ${kind} for the request below — complete and classroom-ready, so the teacher can use it as-is.
+${planGrade ? `Grade level: ${planGrade} — target that grade's expectations and difficulty.` : ""}
+${subject ? `Subject: ${subject}.` : ""}
+${planRegion ? `Curriculum: ${planRegion.label}. ${planRegion.notes}` : ""}
+
+Request: ${topic}
+
+Rules:
+- title: short and specific.
+- content: the full ${kind} with clear section headings.
+- Lesson plans include: learning goals, materials, a timed flow (minds-on, action, consolidation), differentiation, and a quick check for understanding.
+- Assignments, quizzes, and worksheets include: numbered questions with marks per question, the total marks, and a complete ANSWER KEY section at the end.
+- Match everything to the grade level; keep it practical, no filler.`;
+
+    // deno-lint-ignore no-explicit-any
+    let raw: any = null;
+    const errs: string[] = [];
+    try {
+      raw = await callClaude([], "image/jpeg", { userText: prompt, schema: PLAN_SCHEMA });
+    } catch (e) {
+      errs.push(`claude: ${e instanceof Error ? e.message : e}`);
+      try {
+        raw = await callGemini([], "image/jpeg", prompt, PLAN_SHAPE);
+      } catch (e2) {
+        errs.push(`gemini: ${e2 instanceof Error ? e2.message : e2}`);
+        return json({ error: "Planning failed", details: errs }, 502);
+      }
+    }
+    return json({
+      title: String(raw?.title ?? "Untitled plan"),
+      content: String(raw?.content ?? ""),
+    });
   }
 
   // ── Infer curriculum region from the school name (text-only, no images) ──

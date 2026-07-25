@@ -8,6 +8,8 @@ class AppRoutes {
   static const library = '/library';
   static const settings = '/settings';
 
+  static const planning = '/planning';
+
   static const imagePreview = '/grading/image-preview';
   static const gradingContext = '/grading/context';
   static const result = '/grading/result';

@@ -212,7 +212,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
           children: [
-            TeacherTopbar(title: 'MarkMate', onBell: () {}),
+            TeacherTopbar(title: 'Mark', onBell: () {}),
             const SizedBox(height: 14),
             Text('Good morning,', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
             const SizedBox(height: 2),
@@ -263,7 +263,40 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 12),
+            Card(
+              child: InkWell(
+                splashFactory: NoSplash.splashFactory,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                onTap: () => context.push(AppRoutes.planning),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: AiMarkerColors.tertiary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                        child: const Icon(Icons.event_note_rounded, color: AiMarkerColors.tertiary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Plan with Mark', style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 2),
+                            Text('Draft a lesson plan, quiz, assignment, or worksheet in seconds.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(14),
