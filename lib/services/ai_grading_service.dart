@@ -93,6 +93,15 @@ class RosterEntry {
   const RosterEntry({required this.name, this.studentId});
 }
 
+// ---------- Generated plan (lesson plan / assignment / quiz) ----------
+
+class GeneratedPlan {
+  final String title;
+  final String content;
+
+  const GeneratedPlan({required this.title, required this.content});
+}
+
 // ---------- Region candidate (inferred from the school name) ----------
 
 class RegionCandidate {
@@ -328,6 +337,36 @@ class AiGradingService {
       orElse: () => null,
     );
     return fallback?.id;
+  }
+
+  /// Generates a classroom-ready lesson plan, assignment, quiz, or worksheet.
+  Future<GeneratedPlan> generatePlan({
+    required String topic,
+    required String kind,
+    int? gradeLevel,
+    String? subject,
+    String? region,
+  }) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {
+        'action': 'plan',
+        'topic': topic,
+        'kind': kind,
+        if (gradeLevel != null) 'gradeLevel': gradeLevel,
+        if (subject != null && subject.isNotEmpty) 'subject': subject,
+        if (region != null && region.isNotEmpty) 'region': region,
+      },
+    );
+    final data = res.data;
+    if (data is Map && data['content'] != null) {
+      return GeneratedPlan(
+        title: (data['title'] ?? 'Untitled plan').toString(),
+        content: (data['content'] ?? '').toString(),
+      );
+    }
+    throw Exception('Planning failed: $data');
   }
 
   /// Infers the curriculum region from the school's name. One candidate when

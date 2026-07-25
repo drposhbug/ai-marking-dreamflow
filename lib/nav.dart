@@ -13,6 +13,7 @@ import 'package:marking_prokect_v2/screens/grading/result_screen.dart';
 import 'package:marking_prokect_v2/screens/library/library_screen.dart';
 import 'package:marking_prokect_v2/screens/login/login_screen.dart';
 import 'package:marking_prokect_v2/screens/onboarding/onboarding_screen.dart';
+import 'package:marking_prokect_v2/screens/planning/planning_screen.dart';
 import 'package:marking_prokect_v2/screens/settings/settings_screen.dart';
 import 'package:marking_prokect_v2/screens/students/student_profile_screen.dart';
 import 'package:marking_prokect_v2/screens/classes/class_hub_screen.dart';
@@ -41,6 +42,7 @@ class AppRouter {
           StatefulShellBranch(routes: [GoRoute(path: AppRoutes.settings, name: 'settings', pageBuilder: (context, state) => const NoTransitionPage(child: SettingsScreen()))]),
         ],
       ),
+      GoRoute(path: AppRoutes.planning, name: 'planning', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PlanningScreen())),
       GoRoute(path: AppRoutes.imagePreview, name: 'imagePreview', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ImagePreviewScreen())),
       GoRoute(path: AppRoutes.gradingContext, name: 'gradingContext', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: GradingContextScreen())),
       GoRoute(path: AppRoutes.result, name: 'result', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
