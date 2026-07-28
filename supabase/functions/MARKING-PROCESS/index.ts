@@ -478,6 +478,16 @@ const PLAN_SCHEMA = {
 const PLAN_SHAPE = `\n\nReturn ONLY a single JSON object with exactly these fields:
 {"title": string, "content": string}`;
 
+// Schema for school-name autocomplete while the teacher types (text-only).
+const SCHOOL_SUGGEST_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["schools"],
+  properties: {
+    schools: { type: "array", items: { type: "string" } },
+  },
+} as const;
+
 // Schema for inferring the curriculum region from a school name (text-only).
 const REGION_INFER_SCHEMA = {
   type: "object",
@@ -940,6 +950,26 @@ Rules:
       title: String(raw?.title ?? "Untitled plan"),
       content: String(raw?.content ?? ""),
     });
+  }
+
+  // ── School-name autocomplete while typing (text-only, no images) ───────
+  if (action === "suggest_schools") {
+    const query = String(payload?.query ?? "").trim().slice(0, 80);
+    if (query.length < 3) return json({ schools: [] });
+    const prompt = `A teacher is typing their school's name into a form. The text so far: "${query}".
+List up to 5 plausible FULL names of real North American K-12 schools that start with or contain that text (e.g. "Riverdale High School", "Riverside Secondary School"). Prefer common/well-known school names; return fewer (or none) rather than inventing improbable ones. Names only.`;
+    try {
+      const raw = await callClaude([], "image/jpeg", { userText: prompt, schema: SCHOOL_SUGGEST_SCHEMA });
+      const schools = (Array.isArray(raw?.schools) ? raw.schools : [])
+        // deno-lint-ignore no-explicit-any
+        .map((s: any) => String(s ?? "").trim())
+        .filter((s: string) => s.length > 0)
+        .slice(0, 5);
+      return json({ schools });
+    } catch (e) {
+      console.error("suggest_schools failed:", e instanceof Error ? e.message : e);
+      return json({ schools: [] });
+    }
   }
 
   // ── Infer curriculum region from the school name (text-only, no images) ──

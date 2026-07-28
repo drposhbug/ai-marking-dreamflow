@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:marking_prokect_v2/models/ai_marker_user.dart';
-import 'package:marking_prokect_v2/services/id_factory.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,14 +32,29 @@ class AuthService extends ChangeNotifier {
 
   static Map<String, dynamic> _decode(String raw) => raw.isEmpty ? <String, dynamic>{} : (jsonDecode(raw) as Map).cast<String, dynamic>();
 
+  /// Stable per-email account id: the same email always signs in to the same
+  /// account (classes, answer keys, and settings survive sign-out/sign-in),
+  /// and a new email auto-creates a fresh account — no separate sign-up step.
+  static String stableIdFor(String email) {
+    final slug = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    return 'u_$slug';
+  }
+
+  static String _defaultNameFor(String email) {
+    final local = email.split('@').first.replaceAll(RegExp(r'[._\-]+'), ' ').trim();
+    if (local.isEmpty) return 'Teacher';
+    return local.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+  }
+
   Future<void> signInWithEmail({required String email, required String password}) async {
-    // Local-only auth placeholder.
+    // Local-only auth placeholder: signing in with a new email creates the
+    // account automatically; a known email restores it (same stable id).
     final now = DateTime.now();
     _currentUser = AiMarkerUser(
-      id: 'u_${IdFactory.newId()}',
+      id: stableIdFor(email),
       email: email,
-      name: 'Ms. Johnson',
-      school: 'Riverside High School',
+      name: _defaultNameFor(email),
+      school: '',
       title: 'Teacher',
       avatarUrl: null,
       createdAt: now,

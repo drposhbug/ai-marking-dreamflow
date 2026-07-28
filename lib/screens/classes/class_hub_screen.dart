@@ -1,6 +1,9 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
@@ -146,11 +149,26 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
       ),
       floatingActionButton: SizedBox(
         width: MediaQuery.of(context).size.width - 32,
-        child: FilledButton.icon(
-          onPressed: _openAddStudentSheet,
-          style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xl))),
-          icon: const Icon(Icons.person_add_alt_rounded, color: Colors.white),
-          label: const Text('Add Student'),
+        child: Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _openAddStudentSheet,
+                style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xl))),
+                icon: const Icon(Icons.person_add_alt_rounded, color: Colors.white),
+                label: const Text('Add Student'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.tonalIcon(
+                onPressed: _scanAttendance,
+                style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xl))),
+                icon: const Icon(Icons.photo_camera_rounded),
+                label: const Text('Scan Attendance'),
+              ),
+            ),
+          ],
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -186,6 +204,59 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
     );
     if (saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Class updated.')));
+    }
+  }
+
+  /// Scan an attendance sheet and add every new name to THIS class — for
+  /// teachers who skipped it during class creation.
+  Future<void> _scanAttendance() async {
+    final teacherId = context.read<AuthService>().currentUser?.id;
+    if (teacherId == null) return;
+
+    ImageSource? source = ImageSource.gallery;
+    if (!kIsWeb) {
+      source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(leading: const Icon(Icons.photo_camera_rounded), title: const Text('Take a photo'), onTap: () => Navigator.pop(context, ImageSource.camera)),
+              ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Choose from gallery'), onTap: () => Navigator.pop(context, ImageSource.gallery)),
+            ],
+          ),
+        ),
+      );
+      if (source == null) return;
+    }
+
+    try {
+      final XFile? image = await ImagePicker().pickImage(source: source, imageQuality: 85);
+      if (image == null || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reading names off the attendance sheet…')));
+      final bytes = await image.readAsBytes();
+      final found = await AiGradingService().extractRoster(pages: [bytes]);
+      if (!mounted) return;
+
+      final students = context.read<StudentsService>();
+      final existing = students.byClass(widget.classId).map((s) => s.name.trim().toLowerCase()).toSet();
+      var added = 0;
+      for (final r in found) {
+        if (existing.contains(r.name.trim().toLowerCase())) continue;
+        final code = r.studentId ??
+            '${r.name.trim().split(RegExp(r'\s+')).map((w) => w[0].toUpperCase()).join()}${DateTime.now().millisecondsSinceEpoch % 1000}';
+        await students.create(teacherId: teacherId, classId: widget.classId, name: r.name, studentId: code);
+        added++;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(added == 0 ? 'No new names found on that photo.' : 'Added $added student${added == 1 ? '' : 's'} from the attendance sheet.')),
+      );
+    } catch (e) {
+      debugPrint('ClassHub._scanAttendance failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not read the attendance sheet — try a clearer photo.')));
     }
   }
 }
@@ -348,15 +419,27 @@ class _MiniStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Equal-height, centered boxes; FittedBox keeps labels like STUDENTS on
+    // one line by scaling down instead of wrapping.
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        height: 64,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(AppRadius.lg)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.1, color: AiMarkerColors.neutral)),
-          const SizedBox(height: 4),
-          Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-        ]),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label, maxLines: 1, style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 0.6, color: AiMarkerColors.neutral)),
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(value, maxLines: 1, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+            ),
+          ],
+        ),
       ),
     );
   }

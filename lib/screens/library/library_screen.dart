@@ -111,7 +111,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
             children: [
               TeacherTopbar(
-                title: 'MarkMate',
+                title: 'Markless',
                 trailingIcon: Icons.add_rounded,
                 onBell: _scanNewKey,
               ),

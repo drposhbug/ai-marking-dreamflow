@@ -374,7 +374,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _RowItem(icon: Icons.tune_rounded, title: 'Default Mode', trailing: _modeLabel(appState.defaultMode), onTap: _pickDefaultMode),
                   _RowItem(icon: Icons.speed_rounded, title: 'Default Harshness', trailing: _harshnessLabel(appState.defaultHarshness), onTap: _pickDefaultHarshness),
                   _RowItem(icon: Icons.place_rounded, title: 'Curriculum Region', trailing: _regionLabel(appState.region), onTap: _pickRegion),
-                  _RowItem(icon: Icons.school_rounded, title: 'Marking Feedback', trailing: appState.markingFeedback.isEmpty ? 'None yet' : '${appState.markingFeedback.length} saved', onTap: _manageMarkingFeedback),
+                  _RowItem(icon: Icons.school_rounded, title: 'Teach Mark · Marking Feedback', trailing: appState.markingFeedback.isEmpty ? 'Add feedback' : '${appState.markingFeedback.length} saved', onTap: _manageMarkingFeedback),
                 ],
               ),
             ),
@@ -617,33 +617,36 @@ class _MarkingFeedbackSheetState extends State<_MarkingFeedbackSheet> {
           children: [
             Row(
               children: [
-                Expanded(child: Text('Marking Feedback', style: Theme.of(context).textTheme.titleLarge)),
+                Expanded(child: Text('Teach Mark', style: Theme.of(context).textTheme.titleLarge)),
                 IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral)),
               ],
             ),
             Text(
-              'Standing corrections your assistant follows on every grade. Add one whenever it keeps doing something you disagree with.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+              'Is Mark always doing something you disagree with when marking? Tell it here — every submitted correction is followed on every future grade. For example: "Don\'t deduct for spelling in science" or "Always require units in physics answers".',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    onSubmitted: (_) => _add(),
-                    decoration: const InputDecoration(hintText: "e.g. Don't deduct for spelling in science"),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                IconButton.filled(onPressed: _add, icon: const Icon(Icons.add_rounded), tooltip: 'Add'),
-              ],
+            TextField(
+              controller: _input,
+              maxLines: 2,
+              minLines: 1,
+              onSubmitted: (_) => _add(),
+              decoration: const InputDecoration(
+                labelText: 'What should Mark do differently?',
+                hintText: "e.g. Don't deduct for spelling in science",
+              ),
+            ),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: _add,
+              icon: const Icon(Icons.send_rounded, size: 18),
+              label: const Text('Submit feedback'),
             ),
             const SizedBox(height: 10),
             if (feedback.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text('Nothing saved yet. You can also add feedback from any result screen with "Teach MarkMate".', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                child: Text('Nothing saved yet. You can also add feedback from any result screen with "Teach Mark".', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
               )
             else
               Flexible(

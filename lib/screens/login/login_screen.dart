@@ -75,9 +75,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  Text('MarkMate', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: cs.primary)),
+                  Text('Markless', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: cs.primary)),
                   const SizedBox(height: 6),
-                  Text('Smart grading for brilliant teachers ✨', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
+                  Text('Mark less. Teach more. ✨', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
                   const SizedBox(height: 22),
                   TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(hintText: 'teacher@school.edu', labelText: 'Email')),
                   const SizedBox(height: 12),
@@ -106,7 +106,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   FilledButton(
                     onPressed: _loading ? null : _signIn,
                     style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
-                    child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Sign In'),
+                    child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Continue'),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'New here? Your account is created automatically the first time you continue.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
                   ),
                   const SizedBox(height: 18),
                   Row(
@@ -123,17 +129,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     label: const Text('Sign in with Google'),
                   ),
                   const SizedBox(height: 18),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text('New to MarkMate? ', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                      TextButton(
-                        style: TextButton.styleFrom(foregroundColor: cs.primary, splashFactory: NoSplash.splashFactory),
-                        onPressed: () {},
-                        child: const Text('Contact your admin'),
-                      ),
-                    ],
+                  Text(
+                    'Signing in with the same email always brings back your classes and answer keys.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
                   ),
                 ],
               ),

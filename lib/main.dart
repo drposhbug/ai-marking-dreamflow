@@ -62,7 +62,7 @@ class MyApp extends StatelessWidget {
       child: AppBootstrap(
         child: Consumer<AppState>(
           builder: (context, appState, _) => MaterialApp.router(
-            title: 'MarkMate',
+            title: 'Markless',
             debugShowCheckedModeBanner: false,
             scaffoldMessengerKey: rootMessengerKey,
             theme: lightTheme,
