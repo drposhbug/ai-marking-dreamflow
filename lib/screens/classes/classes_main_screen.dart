@@ -173,7 +173,6 @@ class _CreateClassSheet extends StatefulWidget {
 }
 
 class _CreateClassSheetState extends State<_CreateClassSheet> {
-  final _name = TextEditingController();
   final _room = TextEditingController();
   final _studentName = TextEditingController();
   String _subject = 'Physics';
@@ -185,9 +184,11 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
   bool _scanning = false;
   bool _creating = false;
 
+  /// Classes name themselves — "Physics P1" — no typing needed.
+  String get _autoName => '$_subject $_period';
+
   @override
   void dispose() {
-    _name.dispose();
     _room.dispose();
     _studentName.dispose();
     super.dispose();
@@ -251,8 +252,8 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
 
   Future<void> _create() async {
     final teacherId = context.read<AuthService>().currentUser?.id;
-    final name = _name.text.trim();
-    if (teacherId == null || name.isEmpty) return;
+    final name = _autoName;
+    if (teacherId == null) return;
 
     setState(() => _creating = true);
     try {
@@ -302,14 +303,12 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
                   IconButton(onPressed: () => context.pop(), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral)),
                 ],
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _name,
-                textCapitalization: TextCapitalization.words,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(labelText: 'Class name', hintText: 'e.g. Year 10 Physics'),
+              const SizedBox(height: 4),
+              Text(
+                'Named automatically: $_autoName',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
@@ -401,11 +400,11 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
               ],
               const SizedBox(height: 14),
               FilledButton(
-                onPressed: _creating || _name.text.trim().isEmpty ? null : _create,
+                onPressed: _creating ? null : _create,
                 style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
                 child: _creating
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : Text(_students.isEmpty ? 'Create Class' : 'Create Class with ${_students.length} student${_students.length == 1 ? '' : 's'}'),
+                    : Text(_students.isEmpty ? 'Create $_autoName' : 'Create $_autoName with ${_students.length} student${_students.length == 1 ? '' : 's'}'),
               ),
             ],
           ),
