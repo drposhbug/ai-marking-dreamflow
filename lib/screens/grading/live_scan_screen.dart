@@ -51,8 +51,12 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
   bool _samePage = false;
   bool _dupSkipped = false;
   bool _notAPage = false;
-  bool _processing = false;
   bool _cutOff = false;
+
+  // Straightening runs in the background so the teacher can swap to the
+  // next page immediately instead of holding the pose while it processes.
+  int _processingCount = 0;
+  final List<Future<void>> _processingJobs = [];
   _DistanceHint _hint = _DistanceHint.ok;
 
   // Motion detection: the frame is split into a grid of blocks and each

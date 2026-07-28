@@ -32,9 +32,16 @@ class AuthService extends ChangeNotifier {
 
   static Map<String, dynamic> _decode(String raw) => raw.isEmpty ? <String, dynamic>{} : (jsonDecode(raw) as Map).cast<String, dynamic>();
 
-  /// Stable per-email account id: the same email always signs in to the same
-  /// account (classes, answer keys, and settings survive sign-out/sign-in),
-  /// and a new email auto-creates a fresh account — no separate sign-up step.
+  SupabaseClient? get _supabase {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Stable per-email account id — used only by the local fallback (no
+  /// Supabase configured) and by developer mode.
   static String stableIdFor(String email) {
     final slug = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
     return 'u_$slug';
@@ -48,9 +55,81 @@ class AuthService extends ChangeNotifier {
     return local.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
   }
 
+  /// Real sign-in: fails when the account doesn't exist or the password is
+  /// wrong. Passwords and accounts live in Supabase Auth.
   Future<void> signInWithEmail({required String email, required String password}) async {
-    // Local-only auth placeholder: signing in with a new email creates the
-    // account automatically; a known email restores it (same stable id).
+    final client = _supabase;
+    if (client == null) return _localSignIn(email); // no cloud configured
+    try {
+      final res = await client.auth.signInWithPassword(email: email.trim(), password: password);
+      final u = res.user;
+      if (u == null) throw Exception('Sign in failed — try again.');
+      await _setUser(id: u.id, email: email.trim());
+    } on AuthException catch (e) {
+      throw Exception(_friendlyAuthError(e));
+    }
+  }
+
+  /// Real sign-up: creates the account (password stored by Supabase Auth).
+  Future<void> createAccount({required String email, required String password}) async {
+    final client = _supabase;
+    if (client == null) return _localSignIn(email);
+    try {
+      final res = await client.auth.signUp(email: email.trim(), password: password);
+      var u = res.user;
+      if (res.session == null) {
+        // Email confirmation may be enabled on the project — try signing
+        // straight in; if that's blocked, tell the teacher to confirm.
+        try {
+          final signIn = await client.auth.signInWithPassword(email: email.trim(), password: password);
+          u = signIn.user;
+        } on AuthException {
+          throw Exception('Account created — check your email to confirm it, then sign in.');
+        }
+      }
+      if (u == null) throw Exception('Could not create the account — try again.');
+      await _setUser(id: u.id, email: email.trim());
+    } on AuthException catch (e) {
+      throw Exception(_friendlyAuthError(e));
+    }
+  }
+
+  /// Developer mode / no-cloud fallback: local account, no password checks.
+  Future<void> signInLocal({required String email}) => _localSignIn(email);
+
+  static String _friendlyAuthError(AuthException e) {
+    final m = e.message.toLowerCase();
+    if (m.contains('invalid login')) return 'Wrong password — or no account with that email yet. Use Create Account first.';
+    if (m.contains('already registered') || m.contains('already been registered')) {
+      return 'That email already has an account — use Sign In instead.';
+    }
+    if (m.contains('at least 6') || m.contains('password should')) return 'Password must be at least 6 characters.';
+    if (m.contains('confirm')) return 'Please confirm your email first — check your inbox.';
+    if (m.contains('invalid format') || m.contains('valid email')) return 'That doesn\'t look like a valid email address.';
+    return e.message;
+  }
+
+  Future<void> _setUser({required String id, required String email}) async {
+    final now = DateTime.now();
+    // Keep locally saved profile details when the same account signs back in.
+    final prior = _currentUser;
+    final samePerson = prior != null && (prior.id == id || prior.email.toLowerCase() == email.toLowerCase());
+    _currentUser = AiMarkerUser(
+      id: id,
+      email: email,
+      name: samePerson ? prior.name : defaultNameFor(email),
+      school: samePerson ? prior.school : '',
+      title: samePerson ? prior.title : 'Teacher',
+      avatarUrl: samePerson ? prior.avatarUrl : null,
+      createdAt: samePerson ? prior.createdAt : now,
+      updatedAt: now,
+    );
+    await _store.setString(_kCurrentUserKey, jsonEncode(_currentUser!.toJson()));
+    notifyListeners();
+    await _trySyncProfileFromSupabase();
+  }
+
+  Future<void> _localSignIn(String email) async {
     final now = DateTime.now();
     _currentUser = AiMarkerUser(
       id: stableIdFor(email),
@@ -64,9 +143,6 @@ class AuthService extends ChangeNotifier {
     );
     await _store.setString(_kCurrentUserKey, jsonEncode(_currentUser!.toJson()));
     notifyListeners();
-
-    // Best-effort: if Supabase is configured and the `users` row exists,
-    // pull the real teacher name (and other profile fields).
     await _trySyncProfileFromSupabase();
   }
 
@@ -123,6 +199,11 @@ class AuthService extends ChangeNotifier {
   Future<void> signOut() async {
     _currentUser = null;
     await _store.setString(_kCurrentUserKey, '');
+    try {
+      await _supabase?.auth.signOut();
+    } catch (e) {
+      debugPrint('Supabase signOut failed: $e');
+    }
     notifyListeners();
   }
 }

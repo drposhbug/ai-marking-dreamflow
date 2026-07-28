@@ -28,13 +28,33 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// [createAccount] always walks through the full intro (name, school,
-  /// classes); plain sign-in only shows it if this account never finished it.
+  /// [createAccount] registers a new account (password stored in Supabase
+  /// Auth) and always walks through the full intro; plain sign-in requires
+  /// an existing account with the right password.
   Future<void> _signIn({bool createAccount = false}) async {
+    final email = _email.text.trim();
+    final password = _password.text;
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter your email address.')));
+      return;
+    }
+    if (password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter your password.')));
+      return;
+    }
+    if (createAccount && password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password must be at least 6 characters.')));
+      return;
+    }
+
     setState(() => _loading = true);
     try {
       final auth = context.read<AuthService>();
-      await auth.signInWithEmail(email: _email.text.trim(), password: _password.text);
+      if (createAccount) {
+        await auth.createAccount(email: email, password: password);
+      } else {
+        await auth.signInWithEmail(email: email, password: password);
+      }
       if (!mounted) return;
       final user = auth.currentUser;
       if (createAccount && user != null) {
@@ -48,7 +68,9 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       debugPrint('Login failed: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in failed.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -60,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = true);
     try {
       final auth = context.read<AuthService>();
-      await auth.signInWithEmail(email: 'dev@markless.app', password: 'dev');
+      await auth.signInLocal(email: 'dev@markless.app');
       if (!mounted) return;
       final user = auth.currentUser;
       if (user != null) {
@@ -146,20 +168,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   OutlinedButton(
                     onPressed: _loading ? null : () => _signIn(createAccount: true),
                     child: Text('Create Account', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: cs.outline.withValues(alpha: 0.35))),
-                      Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text('or continue with', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral))),
-                      Expanded(child: Divider(color: cs.outline.withValues(alpha: 0.35))),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  OutlinedButton.icon(
-                    onPressed: _loading ? null : _signIn,
-                    icon: Icon(Icons.g_mobiledata_rounded, color: cs.primary),
-                    label: const Text('Sign in with Google'),
                   ),
                   const SizedBox(height: 18),
                   Text(
