@@ -50,6 +50,7 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
   bool _noPaper = false;
   bool _samePage = false;
   bool _dupSkipped = false;
+  bool _notAPage = false;
   bool _processing = false;
   bool _cutOff = false;
   _DistanceHint _hint = _DistanceHint.ok;
@@ -110,6 +111,31 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
   }
 
   double _lastTextScore = 0;
+  double _lastChromaScore = 0;
+
+  /// Mean chroma (color-ness) of the center of the frame, from the camera's
+  /// U/V planes. Paper is white → near zero; a wooden desk, carpet, or lap
+  /// is strongly colored → high. Cheap and immune to auto-exposure tricks.
+  void _sampleChroma(CameraImage image) {
+    if (image.planes.length < 3) return;
+    final u = image.planes[1], v = image.planes[2];
+    final uvRow = u.bytesPerRow;
+    final uvPix = u.bytesPerPixel ?? 1;
+    final w = image.width ~/ 2, h = image.height ~/ 2;
+    double sum = 0;
+    var n = 0;
+    const step = 6;
+    for (var y = h ~/ 4; y < (3 * h) ~/ 4; y += step) {
+      final row = y * uvRow;
+      for (var x = w ~/ 4; x < (3 * w) ~/ 4; x += step) {
+        final idx = row + x * uvPix;
+        if (idx >= u.bytes.length || idx >= v.bytes.length) continue;
+        sum += (u.bytes[idx] - 128).abs() + (v.bytes[idx] - 128).abs();
+        n++;
+      }
+    }
+    if (n > 0) _lastChromaScore = sum / n;
+  }
 
   Float64List _sampleBlocks(CameraImage image) {
     final plane = image.planes[0];
@@ -277,8 +303,13 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
     // otherwise the page must be clearly brighter than its surroundings.
     final brightEnough = center >= 165 || (center >= 120 && center - border >= 12);
     // Ink: a real page has writing on it. Auto-exposure can make a dark
-    // mousepad read "bright", but it can't fake text edges.
-    return brightEnough && _lastTextScore >= 0.006;
+    // mousepad read "bright", but wood grain also fakes some edges — so the
+    // bar is higher than pure noise, and paired with the chroma check below.
+    final hasInk = _lastTextScore >= 0.012;
+    // Color: paper is white/neutral. A bright wooden desk, cardboard, or a
+    // lap is warm-toned and fails this even when brightness+edges pass.
+    final isNeutral = _lastChromaScore <= 15;
+    return brightEnough && hasInk && isNeutral;
   }
 
   double _motionScore(Float64List cur, Float64List prev) {
@@ -300,6 +331,7 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
   void _onFrame(CameraImage image) {
     if (_state == _ScanState.capturing) return;
 
+    _sampleChroma(image);
     final blocks = _sampleBlocks(image);
     final last = _lastBlocks;
     _lastBlocks = blocks;
@@ -371,6 +403,7 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
           setState(() {
             _state = _ScanState.idle;
             _dupSkipped = false;
+            _notAPage = false;
           });
         }
         break;
@@ -390,6 +423,7 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
       _state = _ScanState.capturing;
       _noPaper = false;
       _samePage = false;
+      _notAPage = false;
     });
 
     try {
@@ -399,13 +433,32 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
       final file = await controller.takePicture();
       final bytes = await file.readAsBytes();
 
-      // Straighten the page and boost contrast (runs off the UI thread).
+      // Straighten, boost contrast, sharpen, and verify it's really a page
+      // (runs off the UI thread).
       if (mounted) setState(() => _processing = true);
-      final processed = await DocumentProcessor.processPage(bytes);
+      final detail = await DocumentProcessor.processPageDetailed(bytes);
       if (mounted) setState(() => _processing = false);
+      if (!mounted) return;
+
+      // Auto-capture of something that isn't a document (desk, floor, lap):
+      // throw it away instead of saving junk. The manual shutter bypasses
+      // this so an unusual page can still be forced through.
+      if (!force && !detail.isDocument) {
+        setState(() {
+          _notAPage = true;
+          _state = _ScanState.cooldown;
+          _stillSince = null;
+          _lastBlocks = null;
+          if (signature != null) _lastCaptureBlocks = signature;
+        });
+        if (!_webFallback) {
+          await controller.startImageStream(_onFrame);
+        }
+        return;
+      }
 
       final page = ScannedPage(
-        bytes: processed,
+        bytes: detail.bytes,
         fileName: 'scan_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
 
@@ -486,6 +539,7 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
       case _ScanState.capturing:
         return _processing ? 'Straightening & sharpening…' : 'Capturing...';
       case _ScanState.cooldown:
+        if (_notAPage) return 'That didn\'t look like a page — nothing saved. Use the shutter to force it';
         return _dupSkipped
             ? 'Same page — not saved. Swap to the next page'
             : 'Page ${_pages.length} captured ✓  Slide in the next page';
@@ -503,7 +557,7 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
     }
   }
 
-  bool get _showWarningIcon => _noPaper || _samePage || _cutOff || _hint != _DistanceHint.ok;
+  bool get _showWarningIcon => _noPaper || _samePage || _notAPage || _cutOff || _hint != _DistanceHint.ok;
 
   @override
   Widget build(BuildContext context) {
