@@ -366,6 +366,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Edit Profile'),
             ),
             const SizedBox(height: 18),
+            // Big, obvious feedback entry — the most important control here.
+            Card(
+              color: cs.primary.withValues(alpha: 0.08),
+              child: InkWell(
+                splashFactory: NoSplash.splashFactory,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                onTap: _manageMarkingFeedback,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                        child: Icon(Icons.school_rounded, color: cs.primary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Teach Mark — Marking Feedback', style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 2),
+                            Text(
+                              appState.markingFeedback.isEmpty
+                                  ? 'Disagree with how it marks? Tap to tell Mark — it follows your feedback on every grade.'
+                                  : '${appState.markingFeedback.length} correction${appState.markingFeedback.length == 1 ? '' : 's'} active — tap to add more or manage.',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
             Text('MY PREFERENCES', style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
             const SizedBox(height: 10),
             Card(
@@ -374,7 +414,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _RowItem(icon: Icons.tune_rounded, title: 'Default Mode', trailing: _modeLabel(appState.defaultMode), onTap: _pickDefaultMode),
                   _RowItem(icon: Icons.speed_rounded, title: 'Default Harshness', trailing: _harshnessLabel(appState.defaultHarshness), onTap: _pickDefaultHarshness),
                   _RowItem(icon: Icons.place_rounded, title: 'Curriculum Region', trailing: _regionLabel(appState.region), onTap: _pickRegion),
-                  _RowItem(icon: Icons.school_rounded, title: 'Teach Mark · Marking Feedback', trailing: appState.markingFeedback.isEmpty ? 'Add feedback' : '${appState.markingFeedback.length} saved', onTap: _manageMarkingFeedback),
                 ],
               ),
             ),
