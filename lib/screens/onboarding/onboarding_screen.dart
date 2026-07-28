@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -49,6 +51,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String _regionLabel = '';
   bool _inferringRegion = false;
 
+  // School-name autocomplete while typing.
+  Timer? _schoolDebounce;
+  List<String> _schoolSuggestions = const [];
+
   /// Names of classes already created this session — teachers usually have
   /// about 3, so the setup step loops: save a class, form clears, add the next.
   final List<String> _createdClasses = [];
@@ -57,9 +63,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void initState() {
     super.initState();
     _school.text = context.read<AppState>().school;
-    final currentName = context.read<AuthService>().currentUser?.name ?? '';
-    // 'Ms. Johnson' is the placeholder profile name — don't prefill with it.
-    if (currentName.isNotEmpty && currentName != 'Ms. Johnson') _name.text = currentName;
+    // Prefill with the name derived from their email — easy to correct.
+    _name.text = context.read<AuthService>().currentUser?.name ?? '';
+  }
+
+  /// Debounced autocomplete: after a short typing pause, suggest full school
+  /// names the teacher can tap instead of typing everything out.
+  void _onSchoolTyped(String value) {
+    setState(() {});
+    _schoolDebounce?.cancel();
+    final q = value.trim();
+    if (q.length < 3) {
+      if (_schoolSuggestions.isNotEmpty) setState(() => _schoolSuggestions = const []);
+      return;
+    }
+    _schoolDebounce = Timer(const Duration(milliseconds: 650), () async {
+      try {
+        final found = await AiGradingService().suggestSchools(query: q);
+        if (!mounted || _school.text.trim() != q) return;
+        setState(() => _schoolSuggestions = found.where((s) => s.toLowerCase() != q.toLowerCase()).toList());
+      } catch (e) {
+        debugPrint('OnboardingScreen school suggest failed: $e');
+      }
+    });
+  }
+
+  void _pickSchoolSuggestion(String school) {
+    _schoolDebounce?.cancel();
+    _school.text = school;
+    setState(() => _schoolSuggestions = const []);
+    FocusScope.of(context).unfocus();
+    _inferRegionFromSchool();
   }
 
   Future<void> _inferRegionFromSchool() async {
@@ -97,6 +131,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   void dispose() {
+    _schoolDebounce?.cancel();
     _subject.dispose();
     _period.dispose();
     _studentName.dispose();
@@ -323,7 +358,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               TextField(
                 controller: _school,
                 textCapitalization: TextCapitalization.words,
-                onChanged: (_) => setState(() {}),
+                onChanged: _onSchoolTyped,
                 onSubmitted: (_) => _inferRegionFromSchool(),
                 onEditingComplete: () {
                   FocusScope.of(context).unfocus();
@@ -331,6 +366,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 },
                 decoration: const InputDecoration(labelText: 'Which school do you teach at?', hintText: 'e.g. Riverdale High School'),
               ),
+              if (_schoolSuggestions.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      for (final s in _schoolSuggestions)
+                        ListTile(
+                          dense: true,
+                          leading: Icon(Icons.school_rounded, size: 18, color: cs.primary),
+                          title: Text(s, style: Theme.of(context).textTheme.bodyMedium),
+                          onTap: () => _pickSchoolSuggestion(s),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
               if (_inferringRegion) ...[
                 const SizedBox(height: 10),
                 Row(
@@ -405,7 +457,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
               const SizedBox(height: 18),
-              Text('Welcome to MarkMate', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: cs.primary)),
+              Text('Welcome to Markless', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: cs.primary)),
               const SizedBox(height: 8),
               Text(
                 'Your marking assistant — scan student work, get it marked in seconds, and keep every class organized.',

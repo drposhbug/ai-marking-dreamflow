@@ -369,6 +369,20 @@ class AiGradingService {
     throw Exception('Planning failed: $data');
   }
 
+  /// Autocomplete suggestions while the teacher types their school's name.
+  Future<List<String>> suggestSchools({required String query}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'suggest_schools', 'query': query},
+    );
+    final data = res.data;
+    if (data is Map && data['schools'] is List) {
+      return (data['schools'] as List).whereType<String>().where((s) => s.trim().isNotEmpty).toList(growable: false);
+    }
+    return const [];
+  }
+
   /// Infers the curriculum region from the school's name. One candidate when
   /// the AI is confident; several when the name exists in multiple regions
   /// (the UI then shows the place in brackets for the teacher to pick).

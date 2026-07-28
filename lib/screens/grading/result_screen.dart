@@ -71,7 +71,7 @@ class _ResultScreenState extends State<ResultScreen> {
     final text = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Teach MarkMate'),
+        title: const Text('Teach Mark'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -452,7 +452,7 @@ class _ResultScreenState extends State<ResultScreen> {
                     OutlinedButton.icon(
                       onPressed: _teachTheAi,
                       icon: const Icon(Icons.school_rounded, size: 18),
-                      label: const Text('Teach MarkMate — correct how it marks'),
+                      label: const Text('Teach Mark — correct how it marks'),
                     ),
                   ] else ...[
                     // No live result in memory — show the stored summary.
