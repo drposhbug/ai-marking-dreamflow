@@ -24,7 +24,8 @@ class StudentProfileScreen extends StatelessWidget {
       return Scaffold(appBar: AppBar(title: const Text('Student Profile')), body: const Center(child: Text('Student not found')));
     }
 
-    final avg = submissions.isEmpty ? 0.72 : (submissions.map((s) => s.maxScore == 0 ? 0 : (s.score / s.maxScore)).reduce((a, b) => a + b) / submissions.length).clamp(0, 1);
+    final scored = submissions.where((s) => s.maxScore > 0).toList();
+    final avg = scored.isEmpty ? 0.0 : (scored.map((s) => s.score / s.maxScore).reduce((a, b) => a + b) / scored.length).clamp(0.0, 1.0);
     final flags = submissions.where((s) => s.triageStatus == TriageStatus.needsReview).length;
 
     return Scaffold(
@@ -60,7 +61,7 @@ class StudentProfileScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(child: _StatCard(label: 'Avg Score', value: '${(avg * 100).round()}%', icon: Icons.show_chart_rounded, accent: cs.primary)),
+                Expanded(child: _StatCard(label: 'Avg Score', value: scored.isEmpty ? '—' : '${(avg * 100).round()}%', icon: Icons.show_chart_rounded, accent: cs.primary)),
                 const SizedBox(width: 12),
                 Expanded(child: _StatCard(label: 'Total Submissions', value: '${submissions.length}', icon: Icons.fact_check_rounded, accent: AiMarkerColors.tertiary)),
               ],

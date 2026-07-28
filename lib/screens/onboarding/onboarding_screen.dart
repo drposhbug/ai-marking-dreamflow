@@ -29,7 +29,6 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   int _step = 0; // 0 = welcome, 1 = name + school (required), 2 = classes
 
-  final _className = TextEditingController();
   final _subject = TextEditingController();
   final _period = TextEditingController();
   final _studentName = TextEditingController();
@@ -98,7 +97,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   void dispose() {
-    _className.dispose();
     _subject.dispose();
     _period.dispose();
     _studentName.dispose();
@@ -203,16 +201,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _saveClass({required bool addAnother}) async {
     final user = context.read<AuthService>().currentUser;
     if (user == null) return _finish();
-    final name = _className.text.trim();
-    if (name.isEmpty) return;
+    final subject = _subject.text.trim().isEmpty ? 'General' : _subject.text.trim();
+    final period = _period.text.trim().isEmpty ? 'P1' : _period.text.trim();
+    // Classes name themselves: "Physics P2" — no typing needed.
+    final name = '$subject $period';
+    if (_subject.text.trim().isEmpty) return;
 
     setState(() => _creating = true);
     try {
       final created = await context.read<ClassesService>().create(
         teacherId: user.id,
         name: name,
-        subject: _subject.text.trim().isEmpty ? 'General' : _subject.text.trim(),
-        period: _period.text.trim().isEmpty ? 'P1' : _period.text.trim(),
+        subject: subject,
+        period: period,
         gradeLevel: _classGrade,
       );
       if (!mounted) return;
@@ -230,7 +231,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _createdClasses.add(name);
       if (addAnother) {
         // Clear the form and stay for the next class.
-        _className.clear();
         _subject.clear();
         _period.clear();
         _studentName.clear();
@@ -279,12 +279,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         automaticallyImplyLeading: false,
         title: Text(switch (_step) { 0 => 'Welcome', 1 => 'About you', _ => 'Set up your classes' }),
         actions: [
-          // Name + school are required — no skip on that step.
-          if (_step != 1)
-            TextButton(
-              onPressed: _creating ? null : _finish,
-              child: Text(_step == 0 ? 'Skip' : (_createdClasses.isEmpty ? 'Resume later' : 'Done')),
-            ),
+          // Only the welcome step gets a top-right skip; the other steps
+          // have their own buttons at the bottom.
+          if (_step == 0)
+            TextButton(onPressed: _creating ? null : _finish, child: const Text('Skip')),
         ],
       ),
       body: SafeArea(
@@ -470,23 +468,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Text(_createdClasses.isEmpty ? 'Your first class' : 'Class ${_createdClasses.length + 1}', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 6),
               Text(
-                'Most teachers have about 3 classes — save one, then add the next.',
+                'Most teachers have about 3 classes — save one, then add the next. The class names itself, like "Physics P2".',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
               ),
               const SizedBox(height: 10),
-              TextField(
-                controller: _className,
-                textCapitalization: TextCapitalization.words,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(labelText: 'Class name', hintText: 'e.g. Year 10 Physics'),
-              ),
-              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: TextField(
                       controller: _subject,
                       textCapitalization: TextCapitalization.words,
+                      onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(labelText: 'Subject', hintText: 'Physics'),
                     ),
                   ),
@@ -494,6 +486,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   Expanded(
                     child: TextField(
                       controller: _period,
+                      onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(labelText: 'Period', hintText: 'P2'),
                     ),
                   ),
@@ -579,7 +572,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: _creating || _className.text.trim().isEmpty ? null : () => _saveClass(addAnother: true),
+                onPressed: _creating || _subject.text.trim().isEmpty ? null : () => _saveClass(addAnother: true),
                 icon: _creating
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.add_rounded),
@@ -589,7 +582,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               const SizedBox(height: 10),
               OutlinedButton(
-                onPressed: _creating || _className.text.trim().isEmpty ? null : () => _saveClass(addAnother: false),
+                onPressed: _creating || _subject.text.trim().isEmpty ? null : () => _saveClass(addAnother: false),
                 child: const Text('Save class & finish'),
               ),
               const SizedBox(height: 10),
