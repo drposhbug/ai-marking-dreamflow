@@ -38,7 +38,7 @@ class _SavedPlan {
 }
 
 class _PlanningScreenState extends State<PlanningScreen> {
-  static const _kinds = ['Lesson plan', 'Assignment', 'Quiz', 'Worksheet'];
+  static const _kinds = ['Lesson plan', 'Test', 'Quiz', 'Assignment', 'Worksheet'];
 
   final _topic = TextEditingController();
   String _kind = _kinds.first;

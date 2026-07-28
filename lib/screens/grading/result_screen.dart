@@ -107,8 +107,10 @@ class _ResultScreenState extends State<ResultScreen> {
 
   // ── Teacher overrides ───────────────────────────────────────────────
 
+  // Must match levelFromPercentage() in the MARKING-PROCESS edge function.
   static (int?, String) _levelFor(double pct) {
-    if (pct >= 80) return (4, 'Level 4 (80–100%)');
+    if (pct >= 95) return (4, 'Level 4+ (95–100%)');
+    if (pct >= 80) return (4, 'Level 4 (80–94%)');
     if (pct >= 70) return (3, 'Level 3 (70–79%)');
     if (pct >= 60) return (2, 'Level 2 (60–69%)');
     if (pct >= 50) return (1, 'Level 1 (50–59%)');
@@ -453,10 +455,15 @@ class _ResultScreenState extends State<ResultScreen> {
                       label: const Text('Teach MarkMate — correct how it marks'),
                     ),
                   ] else ...[
-                    // Fallback to stored feedback when no live result
-                    _FeedbackCard(title: 'What was done well', color: AiMarkerColors.secondary, body: 'Clear method + consistent units where shown.'),
-                    const SizedBox(height: 10),
-                    _FeedbackCard(title: 'What to improve', color: AiMarkerColors.error, body: 'Show working more explicitly on multi-step questions.'),
+                    // No live result in memory — show the stored summary.
+                    if ((sub?.feedback ?? '').trim().isNotEmpty)
+                      _FeedbackCard(title: 'Summary', color: cs.primary, body: sub!.feedback.trim())
+                    else
+                      _FeedbackCard(
+                        title: 'Summary',
+                        color: cs.primary,
+                        body: 'Detailed feedback is shown right after marking. This saved result keeps the score and summary only.',
+                      ),
                   ],
 
                   if (sub != null && sub.triageFlags.isNotEmpty) ...[

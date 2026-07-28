@@ -1,12 +1,15 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
+import 'package:marking_prokect_v2/models/submission.dart';
+import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/progress_ring.dart';
+import 'package:marking_prokect_v2/widgets/time_ago.dart';
 import 'package:provider/provider.dart';
 
 class ClassHubScreen extends StatefulWidget {
@@ -62,10 +65,12 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
     final submissions = context.watch<SubmissionsService>().submissions;
 
     final students = studentsService.byClass(widget.classId);
-    final classSubmissions = submissions.where((s) => s.classId == widget.classId).toList();
-    final avg = classSubmissions.isEmpty
-        ? 0.72
-        : (classSubmissions.map((e) => e.maxScore == 0 ? 0.0 : (e.score / e.maxScore)).reduce((a, b) => a + b) / classSubmissions.length).clamp(0.0, 1.0).toDouble();
+    final classSubmissions = submissions.where((s) => s.classId == widget.classId).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final scored = classSubmissions.where((s) => s.maxScore > 0).toList();
+    final avg = scored.isEmpty
+        ? 0.0
+        : (scored.map((e) => e.score / e.maxScore).reduce((a, b) => a + b) / scored.length).clamp(0.0, 1.0).toDouble();
 
     final filteredStudents = students.where((s) => _search.text.trim().isEmpty || s.name.toLowerCase().contains(_search.text.trim().toLowerCase())).toList();
 
@@ -73,7 +78,13 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
       appBar: AppBar(
         leading: IconButton(onPressed: () => context.pop(), icon: Icon(Icons.arrow_back_rounded, color: cs.primary)),
         title: Text('${klass?.subject ?? 'Class'} · ${klass?.period ?? ''}'),
-        actions: [IconButton(onPressed: () {}, icon: Icon(Icons.more_vert_rounded, color: AiMarkerColors.neutral))],
+        actions: [
+          IconButton(
+            tooltip: 'Edit class',
+            onPressed: klass == null ? null : () => _openEditClassSheet(klass),
+            icon: Icon(Icons.more_vert_rounded, color: AiMarkerColors.neutral),
+          ),
+        ],
       ),
       body: SafeArea(
         child: ListView(
@@ -85,7 +96,7 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                   padding: const EdgeInsets.all(14),
                   child: Row(
                     children: [
-                      ProgressRing(value: avg, size: 84, stroke: 10, label: '${(avg * 100).round()}%'),
+                      ProgressRing(value: avg, size: 84, stroke: 10, label: scored.isEmpty ? '—' : '${(avg * 100).round()}%'),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Column(
@@ -99,7 +110,7 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                                 const SizedBox(width: 10),
                                 _MiniStat(label: 'ASSIGNMENTS', value: '${classSubmissions.length}'),
                                 const SizedBox(width: 10),
-                                _MiniStat(label: 'LAST GRADED', value: classSubmissions.isEmpty ? '—' : '2d ago'),
+                                _MiniStat(label: 'LAST GRADED', value: classSubmissions.isEmpty ? '—' : timeAgo(classSubmissions.first.createdAt)),
                               ],
                             ),
                           ],
@@ -119,9 +130,9 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                   children: [
                     for (final s in filteredStudents)
                       ListTile(
-                        leading: CircleAvatar(backgroundColor: cs.primary.withValues(alpha: 0.12), child: Text(s.name.substring(0, 1), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800))),
+                        leading: CircleAvatar(backgroundColor: cs.primary.withValues(alpha: 0.12), child: Text(s.name.isEmpty ? '?' : s.name.substring(0, 1), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800))),
                         title: Text(s.name, style: Theme.of(context).textTheme.titleSmall),
-                        subtitle: Text('Last: Kinematics Quiz', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                        subtitle: Text(_lastMarkLabel(s.id, classSubmissions), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                         trailing: _TrendBadge(kind: _trendFor(s.id, classSubmissions)),
                         onTap: () => context.push('${AppRoutes.studentProfile}?studentId=${s.id}&classId=${widget.classId}'),
                       ),
@@ -146,11 +157,187 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
     );
   }
 
-  TrendKind _trendFor(String studentId, List<dynamic> submissions) {
-    final n = submissions.where((s) => s.studentId == studentId).length;
-    if (n % 3 == 0) return TrendKind.improving;
-    if (n % 3 == 1) return TrendKind.consistent;
-    return TrendKind.attention;
+  /// Most recent marked work for this student, e.g. "Last: Physics · 2d ago".
+  String _lastMarkLabel(String studentId, List<Submission> submissions) {
+    final own = submissions.where((s) => s.studentId == studentId).toList();
+    if (own.isEmpty) return 'No marks yet';
+    final last = own.first; // submissions are pre-sorted newest first
+    return 'Last: ${last.subject} · ${timeAgo(last.createdAt)}';
+  }
+
+  /// Real trend: compares the student's two most recent percentages.
+  TrendKind _trendFor(String studentId, List<Submission> submissions) {
+    final own = submissions.where((s) => s.studentId == studentId && s.maxScore > 0).toList();
+    if (own.length < 2) return TrendKind.consistent;
+    final latest = own[0].score / own[0].maxScore;
+    final previous = own[1].score / own[1].maxScore;
+    final diff = latest - previous;
+    if (diff >= 0.05) return TrendKind.improving;
+    if (diff <= -0.05) return TrendKind.attention;
+    return TrendKind.consistent;
+  }
+
+  Future<void> _openEditClassSheet(TeacherClass klass) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _EditClassSheet(klass: klass),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Class updated.')));
+    }
+  }
+}
+
+class _EditClassSheet extends StatefulWidget {
+  final TeacherClass klass;
+  const _EditClassSheet({required this.klass});
+
+  @override
+  State<_EditClassSheet> createState() => _EditClassSheetState();
+}
+
+class _EditClassSheetState extends State<_EditClassSheet> {
+  late final TextEditingController _name = TextEditingController(text: widget.klass.name);
+  late final TextEditingController _subject = TextEditingController(text: widget.klass.subject);
+  late final TextEditingController _room = TextEditingController(text: widget.klass.room ?? '');
+  late String _period = widget.klass.period;
+  late int? _gradeLevel = widget.klass.gradeLevel;
+  bool _saving = false;
+
+  static final _periods = [for (var p = 1; p <= 12; p++) 'P$p'];
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _subject.dispose();
+    _room.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_name.text.trim().isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      await context.read<ClassesService>().update(
+            id: widget.klass.id,
+            name: _name.text.trim(),
+            subject: _subject.text.trim().isEmpty ? 'General' : _subject.text.trim(),
+            period: _period,
+            room: _room.text.trim().isEmpty ? null : _room.text.trim(),
+            gradeLevel: _gradeLevel,
+          );
+      if (!mounted) return;
+      context.pop(true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _delete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete ${widget.klass.name}?'),
+        content: const Text('The class will be removed. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AiMarkerColors.error, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await context.read<ClassesService>().delete(widget.klass.id);
+    if (!mounted) return;
+    context.pop(false); // close sheet
+    context.pop(); // leave the class hub — the class is gone
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Keep the dropdown valid even for periods outside P1–P12 (old data).
+    final periods = _periods.contains(_period) ? _periods : [..._periods, _period];
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(color: cs.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text('Edit class', style: Theme.of(context).textTheme.titleLarge)),
+                  IconButton(onPressed: () => context.pop(), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _name,
+                textCapitalization: TextCapitalization.words,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Class name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _subject,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Subject'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _period,
+                      items: [for (final p in periods) DropdownMenuItem(value: p, child: Text(p))],
+                      onChanged: (v) => setState(() => _period = v ?? _period),
+                      decoration: const InputDecoration(labelText: 'Period'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      value: _gradeLevel,
+                      items: [
+                        const DropdownMenuItem<int?>(value: null, child: Text('Not set')),
+                        for (var g = 1; g <= 12; g++) DropdownMenuItem<int?>(value: g, child: Text('Grade $g')),
+                      ],
+                      onChanged: (v) => setState(() => _gradeLevel = v),
+                      decoration: const InputDecoration(labelText: 'Grade level'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: _room, decoration: const InputDecoration(labelText: 'Room (optional)')),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _saving || _name.text.trim().isEmpty ? null : _save,
+                style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
+                child: _saving
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Save changes'),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _saving ? null : _delete,
+                icon: Icon(Icons.delete_outline_rounded, color: AiMarkerColors.error, size: 20),
+                label: Text('Delete class', style: TextStyle(color: AiMarkerColors.error)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
