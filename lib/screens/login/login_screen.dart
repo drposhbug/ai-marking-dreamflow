@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
+import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/screens/onboarding/onboarding_screen.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
@@ -48,6 +49,33 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('Login failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in failed.')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Developer shortcut: instant dev account, onboarding skipped, sensible
+  /// defaults set — straight to the app for feature testing.
+  Future<void> _devMode() async {
+    setState(() => _loading = true);
+    try {
+      final auth = context.read<AuthService>();
+      await auth.signInWithEmail(email: 'dev@markless.app', password: 'dev');
+      if (!mounted) return;
+      final user = auth.currentUser;
+      if (user != null) {
+        await const LocalStore().setString(OnboardingScreen.doneKey(user.id), '1');
+        if (!mounted) return;
+        final app = context.read<AppState>();
+        if (app.region.isEmpty) await app.setRegion(teacherId: user.id, regionId: 'ca-on');
+        if (!mounted) return;
+        if (app.school.isEmpty) await app.setSchool(teacherId: user.id, school: 'Dev Test School');
+        await auth.updateProfile(name: 'Dev Teacher', school: 'Dev Test School');
+      }
+      if (!mounted) return;
+      context.go(AppRoutes.grading);
+    } catch (e) {
+      debugPrint('Dev mode sign-in failed: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -138,6 +166,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     'Signing in with the same email always brings back your classes and answer keys.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: _loading ? null : _devMode,
+                    icon: Icon(Icons.build_rounded, size: 16, color: AiMarkerColors.neutral),
+                    label: Text('Developer mode — skip sign-in & setup', style: TextStyle(color: AiMarkerColors.neutral)),
                   ),
                 ],
               ),

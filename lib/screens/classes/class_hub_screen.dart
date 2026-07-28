@@ -97,27 +97,39 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
-                  child: Row(
+                  child: Column(
                     children: [
-                      ProgressRing(value: avg, size: 84, stroke: 10, label: scored.isEmpty ? '—' : '${(avg * 100).round()}%'),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Class Average', style: Theme.of(context).textTheme.titleSmall),
-                            const SizedBox(height: 8),
-                            Row(
+                      Row(
+                        children: [
+                          ProgressRing(value: avg, size: 84, stroke: 10, label: scored.isEmpty ? '—' : '${(avg * 100).round()}%'),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _MiniStat(label: 'STUDENTS', value: '${students.length}'),
-                                const SizedBox(width: 10),
-                                _MiniStat(label: 'ASSIGNMENTS', value: '${classSubmissions.length}'),
-                                const SizedBox(width: 10),
-                                _MiniStat(label: 'LAST GRADED', value: classSubmissions.isEmpty ? '—' : timeAgo(classSubmissions.first.createdAt)),
+                                Text('Class Average', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 4),
+                                Text(
+                                  scored.isEmpty
+                                      ? 'No marked work yet — scan the first assignment to see stats.'
+                                      : 'Across ${scored.length} marked submission${scored.length == 1 ? '' : 's'}.',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
+                                ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Full-width row: the three boxes share the card evenly.
+                      Row(
+                        children: [
+                          _MiniStat(label: 'STUDENTS', value: '${students.length}'),
+                          const SizedBox(width: 10),
+                          _MiniStat(label: 'ASSIGNMENTS', value: '${classSubmissions.length}'),
+                          const SizedBox(width: 10),
+                          _MiniStat(label: 'LAST GRADED', value: classSubmissions.isEmpty ? '—' : timeAgo(classSubmissions.first.createdAt)),
+                        ],
                       ),
                     ],
                   ),

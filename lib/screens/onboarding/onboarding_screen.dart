@@ -63,8 +63,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void initState() {
     super.initState();
     _school.text = context.read<AppState>().school;
-    // Prefill with the name derived from their email — easy to correct.
-    _name.text = context.read<AuthService>().currentUser?.name ?? '';
+    // Only prefill a name the teacher actually typed before — auto-derived
+    // placeholders stay blank so the field starts empty.
+    final u = context.read<AuthService>().currentUser;
+    if (u != null && u.name.isNotEmpty && u.name != 'Teacher' && u.name != AuthService.defaultNameFor(u.email)) {
+      _name.text = u.name;
+    }
   }
 
   /// Debounced autocomplete: after a short typing pause, suggest full school
