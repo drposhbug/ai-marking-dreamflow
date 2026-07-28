@@ -10,6 +10,7 @@ import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
+import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
@@ -46,9 +47,12 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     if (image == null) return;
     try {
       final Uint8List bytes = await image.readAsBytes();
-      context.read<AppState>().setImageBytes(bytes: bytes, fileName: image.name);
+      // Gallery photos get the same scanner treatment as live scans:
+      // EXIF/sideways rotation, straightening, contrast, and sharpening.
+      final processed = await DocumentProcessor.processPage(bytes);
       if (!mounted) return;
-      context.push(AppRoutes.gradingContext, extra: {'imageBytes': bytes, 'fileName': image.name});
+      context.read<AppState>().setImageBytes(bytes: processed, fileName: image.name);
+      context.push(AppRoutes.gradingContext, extra: {'imageBytes': processed, 'fileName': image.name});
     } catch (e) {
       debugPrint('Failed to read picked image bytes: $e');
       if (!mounted) return;
@@ -152,9 +156,10 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       if (kIsWeb) {
         final picked = await pickWebImage(captureEnvironmentCamera: false);
         if (picked == null) return;
+        final processed = await DocumentProcessor.processPage(picked.bytes);
         if (!mounted) return;
-        context.read<AppState>().setImageBytes(bytes: picked.bytes, fileName: picked.name);
-        context.push(AppRoutes.gradingContext, extra: {'imageBytes': picked.bytes, 'fileName': picked.name});
+        context.read<AppState>().setImageBytes(bytes: processed, fileName: picked.name);
+        context.push(AppRoutes.gradingContext, extra: {'imageBytes': processed, 'fileName': picked.name});
         return;
       }
 

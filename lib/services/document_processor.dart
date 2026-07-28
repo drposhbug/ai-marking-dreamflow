@@ -42,6 +42,10 @@ class DocumentProcessor {
   var image = img.decodeImage(jpegBytes);
   if (image == null) return (jpegBytes, false);
 
+  // Respect the EXIF orientation flag — gallery photos shot sideways come
+  // in rotated on disk and would otherwise stay sideways.
+  image = img.bakeOrientation(image);
+
   final corners = _findPageCorners(image);
   final isDocument = corners != null || _looksLikeDocument(image);
 
@@ -56,9 +60,59 @@ class DocumentProcessor {
     );
   }
 
+  // Page photographed sideways (text lines running vertically) → rotate
+  // upright so the teacher and the marker both read it normally.
+  image = _autoRotateForText(image);
+
   _stretchContrast(image);
   image = _sharpen(image);
   return (Uint8List.fromList(img.encodeJpg(image, quality: 88)), isDocument);
+}
+
+/// Detects sideways text by comparing the line structure of the ink: text
+/// forms distinct horizontal streaks, so ink-per-row varies strongly when
+/// upright and ink-per-column varies strongly when sideways.
+img.Image _autoRotateForText(img.Image src) {
+  try {
+    final small = img.copyResize(src, width: 160);
+    final w = small.width, h = small.height;
+    final rowInk = List<int>.filled(h, 0);
+    final colInk = List<int>.filled(w, 0);
+    var total = 0;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        final p = small.getPixel(x, y);
+        final l = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+        if (l < 110) {
+          rowInk[y]++;
+          colInk[x]++;
+          total++;
+        }
+      }
+    }
+    if (total < w * h * 0.005) return src; // not enough ink to judge
+
+    double variance(List<int> v) {
+      final mean = v.reduce((a, b) => a + b) / v.length;
+      var s = 0.0;
+      for (final x in v) {
+        s += (x - mean) * (x - mean);
+      }
+      return s / v.length;
+    }
+
+    // Normalize each profile by its perpendicular axis length so the
+    // comparison is fair for non-square images.
+    final vRows = variance(rowInk) / (w * w);
+    final vCols = variance(colInk) / (h * h);
+    if (vCols > vRows * 1.4) {
+      return img.copyRotate(src, angle: -90);
+    }
+    return src;
+  } catch (e) {
+    debugPrint('DocumentProcessor auto-rotate failed: $e');
+    return src;
+  }
 }
 
 /// Full-photo sanity check: a real page is a large, near-WHITE (not just

@@ -392,14 +392,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             const SizedBox(height: 2),
                             Text(
                               appState.markingFeedback.isEmpty
-                                  ? 'Disagree with how it marks? Tap to tell Mark — it follows your feedback on every grade.'
-                                  : '${appState.markingFeedback.length} correction${appState.markingFeedback.length == 1 ? '' : 's'} active — tap to add more or manage.',
+                                  ? 'Disagree with how it marks? Tell Mark — it follows your feedback on every grade.'
+                                  : '${appState.markingFeedback.length} correction${appState.markingFeedback.length == 1 ? '' : 's'} active.',
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: _manageMarkingFeedback,
+                                style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
+                                icon: const Icon(Icons.rate_review_rounded, size: 18),
+                                label: Text(appState.markingFeedback.isEmpty ? 'Give feedback' : 'Give more feedback'),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
                     ],
                   ),
                 ),
@@ -667,12 +676,13 @@ class _MarkingFeedbackSheetState extends State<_MarkingFeedbackSheet> {
             const SizedBox(height: 12),
             TextField(
               controller: _input,
-              maxLines: 2,
-              minLines: 1,
-              onSubmitted: (_) => _add(),
+              minLines: 4,
+              maxLines: 7,
+              textInputAction: TextInputAction.newline,
               decoration: const InputDecoration(
                 labelText: 'What should Mark do differently?',
-                hintText: "e.g. Don't deduct for spelling in science",
+                hintText: "e.g. Don't deduct for spelling in science answers",
+                alignLabelWithHint: true,
               ),
             ),
             const SizedBox(height: 10),
