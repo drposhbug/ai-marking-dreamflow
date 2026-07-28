@@ -27,17 +27,23 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _signIn() async {
+  /// [createAccount] always walks through the full intro (name, school,
+  /// classes); plain sign-in only shows it if this account never finished it.
+  Future<void> _signIn({bool createAccount = false}) async {
     setState(() => _loading = true);
     try {
       final auth = context.read<AuthService>();
       await auth.signInWithEmail(email: _email.text.trim(), password: _password.text);
       if (!mounted) return;
-      // First sign-in on this device → walk through onboarding (skippable).
       final user = auth.currentUser;
+      if (createAccount && user != null) {
+        // Reset the done-flag so the intro runs even for a returning email.
+        await const LocalStore().setString(OnboardingScreen.doneKey(user.id), '');
+      }
+      if (!mounted) return;
       final done = user == null ? '1' : await const LocalStore().getString(OnboardingScreen.doneKey(user.id));
       if (!mounted) return;
-      context.go(done == '1' ? AppRoutes.grading : AppRoutes.onboarding);
+      context.go(!createAccount && done == '1' ? AppRoutes.grading : AppRoutes.onboarding);
     } catch (e) {
       debugPrint('Login failed: $e');
       if (!mounted) return;
@@ -104,15 +110,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 10),
                   FilledButton(
-                    onPressed: _loading ? null : _signIn,
+                    onPressed: _loading ? null : () => _signIn(),
                     style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
-                    child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Continue'),
+                    child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Sign In'),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'New here? Your account is created automatically the first time you continue.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                  const SizedBox(height: 10),
+                  OutlinedButton(
+                    onPressed: _loading ? null : () => _signIn(createAccount: true),
+                    child: Text('Create Account', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
                   ),
                   const SizedBox(height: 18),
                   Row(
