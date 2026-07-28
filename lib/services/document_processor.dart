@@ -3,28 +3,48 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
+/// A processed capture plus the verdict on whether it actually shows a page.
+class ProcessedPage {
+  final Uint8List bytes;
+
+  /// False when the photo doesn't look like a document at all (desk, floor,
+  /// lap...) — the scanner uses this to refuse to save junk auto-captures.
+  final bool isDocument;
+
+  const ProcessedPage(this.bytes, this.isDocument);
+}
+
 /// Post-processes captured document photos like a document scanner:
-/// straightens pages shot at an angle (perspective correction) and
-/// stretches contrast so paper reads white and ink reads dark.
+/// straightens pages shot at an angle (perspective correction), stretches
+/// contrast so paper reads white and ink reads dark, and sharpens the text.
 class DocumentProcessor {
   /// Runs in a background isolate; falls back to the original bytes if
   /// anything about the photo defeats the processing.
-  static Future<Uint8List> processPage(Uint8List jpegBytes) async {
+  static Future<Uint8List> processPage(Uint8List jpegBytes) async =>
+      (await processPageDetailed(jpegBytes)).bytes;
+
+  /// Like [processPage] but also reports whether the photo looks like an
+  /// actual document. Fails open (isDocument = true) so a processing crash
+  /// never blocks a legitimate scan.
+  static Future<ProcessedPage> processPageDetailed(Uint8List jpegBytes) async {
     try {
-      return await compute(processPageSync, jpegBytes);
+      final (bytes, isDoc) = await compute(processPageSync, jpegBytes);
+      return ProcessedPage(bytes, isDoc);
     } catch (e) {
       debugPrint('DocumentProcessor failed: $e');
-      return jpegBytes;
+      return ProcessedPage(jpegBytes, true);
     }
   }
 }
 
 @visibleForTesting
-Uint8List processPageSync(Uint8List jpegBytes) {
+(Uint8List, bool) processPageSync(Uint8List jpegBytes) {
   var image = img.decodeImage(jpegBytes);
-  if (image == null) return jpegBytes;
+  if (image == null) return (jpegBytes, false);
 
   final corners = _findPageCorners(image);
+  final isDocument = corners != null || _looksLikeDocument(image);
+
   if (corners != null) {
     image = img.copyRectify(
       image,
@@ -37,7 +57,51 @@ Uint8List processPageSync(Uint8List jpegBytes) {
   }
 
   _stretchContrast(image);
-  return Uint8List.fromList(img.encodeJpg(image, quality: 88));
+  image = _sharpen(image);
+  return (Uint8List.fromList(img.encodeJpg(image, quality: 88)), isDocument);
+}
+
+/// Full-photo sanity check: a real page is a large, near-WHITE (not just
+/// bright — also color-neutral) region carrying genuine ink transitions.
+/// A wooden desk is bright but warm-toned; bare floors and fabric have no
+/// ink-like edges. Checked on a downscaled copy for speed.
+bool _looksLikeDocument(img.Image src) {
+  final small = img.copyResize(src, width: 200);
+  var n = 0, bright = 0, brightSamples = 0, inkEdges = 0;
+  double chroma = 0;
+  for (var y = 0; y < small.height; y++) {
+    var prev = -1;
+    for (var x = 0; x < small.width; x++) {
+      final p = small.getPixel(x, y);
+      final l = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round();
+      n++;
+      if (l >= 150) {
+        bright++;
+        chroma += ((p.r - p.g).abs() + (p.g - p.b).abs() + (p.r - p.b).abs()).toDouble();
+        brightSamples++;
+      }
+      if (prev >= 0) {
+        final hi = l > prev ? l : prev;
+        if (hi >= 120 && (l - prev).abs() >= 45) inkEdges++;
+      }
+      prev = l;
+    }
+  }
+  if (n == 0) return false;
+  final brightFrac = bright / n;
+  final meanChroma = brightSamples == 0 ? 999.0 : chroma / brightSamples;
+  final inkScore = inkEdges / n;
+  return brightFrac >= 0.28 && meanChroma <= 70 && inkScore >= 0.008;
+}
+
+/// Light unsharp-style pass so pencil and faint pen read crisply.
+img.Image _sharpen(img.Image image) {
+  try {
+    return img.convolution(image, filter: [0, -1, 0, -1, 6, -1, 0, -1, 0], div: 2);
+  } catch (e) {
+    debugPrint('DocumentProcessor sharpen failed: $e');
+    return image;
+  }
 }
 
 /// Finds the four corners of the page (the dominant bright region).
