@@ -40,7 +40,9 @@ class AuthService extends ChangeNotifier {
     return 'u_$slug';
   }
 
-  static String _defaultNameFor(String email) {
+  /// The auto-derived display name for an email — used to tell "name the
+  /// teacher actually typed" apart from "placeholder we generated".
+  static String defaultNameFor(String email) {
     final local = email.split('@').first.replaceAll(RegExp(r'[._\-]+'), ' ').trim();
     if (local.isEmpty) return 'Teacher';
     return local.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
@@ -53,7 +55,7 @@ class AuthService extends ChangeNotifier {
     _currentUser = AiMarkerUser(
       id: stableIdFor(email),
       email: email,
-      name: _defaultNameFor(email),
+      name: defaultNameFor(email),
       school: '',
       title: 'Teacher',
       avatarUrl: null,

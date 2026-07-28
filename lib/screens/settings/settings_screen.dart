@@ -375,38 +375,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: _manageMarkingFeedback,
                 child: Padding(
                   padding: const EdgeInsets.all(14),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
-                        child: Icon(Icons.school_rounded, color: cs.primary),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 46,
+                            height: 46,
+                            decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                            child: Icon(Icons.school_rounded, color: cs.primary),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Teach Mark — Marking Feedback', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 2),
+                                Text(
+                                  appState.markingFeedback.isEmpty
+                                      ? 'Disagree with how it marks? Tell Mark — it follows your feedback on every grade.'
+                                      : '${appState.markingFeedback.length} correction${appState.markingFeedback.length == 1 ? '' : 's'} active.',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Teach Mark — Marking Feedback', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 2),
-                            Text(
-                              appState.markingFeedback.isEmpty
-                                  ? 'Disagree with how it marks? Tell Mark — it follows your feedback on every grade.'
-                                  : '${appState.markingFeedback.length} correction${appState.markingFeedback.length == 1 ? '' : 's'} active.',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
-                            ),
-                            const SizedBox(height: 10),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FilledButton.icon(
-                                onPressed: _manageMarkingFeedback,
-                                style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
-                                icon: const Icon(Icons.rate_review_rounded, size: 18),
-                                label: Text(appState.markingFeedback.isEmpty ? 'Give feedback' : 'Give more feedback'),
-                              ),
-                            ),
-                          ],
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _manageMarkingFeedback,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: cs.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          icon: const Icon(Icons.rate_review_rounded, size: 20),
+                          label: Text(
+                            appState.markingFeedback.isEmpty ? 'Give feedback' : 'Give more feedback',
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                          ),
                         ),
                       ),
                     ],
