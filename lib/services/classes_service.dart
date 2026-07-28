@@ -12,22 +12,30 @@ class ClassesService extends ChangeNotifier {
 
   ClassesService({LocalStore? store}) : _store = store ?? const LocalStore();
 
+  // The demo/template classes older builds seeded automatically — matched by
+  // exact name+period+room so real classes are never touched.
+  static bool _isLegacySeed(TeacherClass c) {
+    const seeds = {
+      ('Year 10 Physics', 'P2', 'B12'),
+      ('Year 10 Physics', 'P4', 'B12'),
+      ('Year 11 Chemistry', 'P4', 'C03'),
+      ('Year 12 English', 'P1', 'E02'),
+    };
+    return seeds.contains((c.name, c.period, c.room ?? ''));
+  }
+
   Future<void> init({required String teacherId}) async {
     try {
       final raw = await _store.getString(_kKey);
-      if (raw == null || raw.isEmpty) {
-        _classes = _seed(teacherId);
-        await _persist();
-      } else {
-        _classes = TeacherClass.decodeList(raw);
-        if (_classes.isEmpty) {
-          _classes = _seed(teacherId);
-          await _persist();
-        }
-      }
+      _classes = (raw == null || raw.isEmpty) ? const [] : TeacherClass.decodeList(raw);
+
+      // One-time cleanup: drop the template classes seeded by old builds.
+      final before = _classes.length;
+      _classes = _classes.where((c) => !_isLegacySeed(c)).toList();
+      if (_classes.length != before) await _persist();
     } catch (e) {
       debugPrint('ClassesService.init failed: $e');
-      _classes = _seed(teacherId);
+      _classes = const [];
     } finally {
       notifyListeners();
     }
@@ -46,6 +54,16 @@ class ClassesService extends ChangeNotifier {
 
   TeacherClass? getById(String id) => _classes.cast<TeacherClass?>().firstWhere((c) => c?.id == id, orElse: () => null);
 
+  Future<void> update({required String id, String? name, String? subject, String? period, String? room, int? gradeLevel}) async {
+    _classes = _classes
+        .map((c) => c.id == id
+            ? c.copyWith(name: name, subject: subject, period: period, room: room, gradeLevel: gradeLevel, updatedAt: DateTime.now())
+            : c)
+        .toList();
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> delete(String id) async {
     _classes = _classes.where((c) => c.id != id).toList(growable: false);
     await _persist();
@@ -53,14 +71,4 @@ class ClassesService extends ChangeNotifier {
   }
 
   Future<void> _persist() async => _store.setString(_kKey, TeacherClass.encodeList(_classes));
-
-  List<TeacherClass> _seed(String teacherId) {
-    final now = DateTime.now();
-    return [
-      TeacherClass(id: 'c_${IdFactory.newId()}', teacherId: teacherId, name: 'Year 10 Physics', subject: 'Physics', period: 'P2', room: 'B12', createdAt: now, updatedAt: now),
-      TeacherClass(id: 'c_${IdFactory.newId()}', teacherId: teacherId, name: 'Year 10 Physics', subject: 'Physics', period: 'P4', room: 'B12', createdAt: now, updatedAt: now),
-      TeacherClass(id: 'c_${IdFactory.newId()}', teacherId: teacherId, name: 'Year 11 Chemistry', subject: 'Chemistry', period: 'P4', room: 'C03', createdAt: now, updatedAt: now),
-      TeacherClass(id: 'c_${IdFactory.newId()}', teacherId: teacherId, name: 'Year 12 English', subject: 'English', period: 'P1', room: 'E02', createdAt: now, updatedAt: now),
-    ];
-  }
 }

@@ -319,7 +319,9 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
             label: preStudent?.name,
           );
 
-      context.read<AppState>().resetDraft();
+      // Keep the class, grade level, and answer key for the next paper in
+      // the pile — only the scanned pages and student reset.
+      context.read<AppState>().prepareNextScan();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Marking in the background — keep scanning. You\'ll be notified when it\'s ready.')),
       );

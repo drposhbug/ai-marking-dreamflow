@@ -315,7 +315,9 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
                   Expanded(
                     child: DropdownButtonFormField(
                       value: _subject,
-                      items: const ['Physics', 'Chemistry', 'Biology', 'Math', 'English', 'General'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      items: const ['Physics', 'Chemistry', 'Biology', 'Science', 'Math', 'English', 'History', 'Geography', 'French', 'Art', 'Music', 'General']
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
                       onChanged: (v) => setState(() => _subject = v.toString()),
                       decoration: const InputDecoration(labelText: 'Subject'),
                     ),
@@ -324,7 +326,7 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
                   Expanded(
                     child: DropdownButtonFormField(
                       value: _period,
-                      items: const ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      items: [for (var p = 1; p <= 12; p++) DropdownMenuItem(value: 'P$p', child: Text('P$p'))],
                       onChanged: (v) => setState(() => _period = v.toString()),
                       decoration: const InputDecoration(labelText: 'Period'),
                     ),

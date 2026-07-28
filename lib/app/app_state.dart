@@ -277,10 +277,33 @@ class AppState extends ChangeNotifier {
       notes: _draft.notes,
       oneTimeOverride: _draft.oneTimeOverride,
       autoDetectScheme: _draft.autoDetectScheme,
+      answerKeyId: _draft.answerKeyId,
+      answerKeyName: _draft.answerKeyName,
       detectedSubject: _draft.detectedSubject,
       detectedStudentName: _draft.detectedStudentName,
       detectedMaxScore: _draft.detectedMaxScore,
       studentId: _draft.studentId,
+      classId: _draft.classId,
+      presetId: _draft.presetId,
+    );
+    notifyListeners();
+  }
+
+  /// After a scan is queued for marking: clear the pages and the per-student
+  /// bits, but KEEP everything the teacher set up for the batch — class,
+  /// grade level, answer key, criteria, notes — so they can scan the next
+  /// student's paper straight away.
+  void prepareNextScan() {
+    _draft = GradingDraft(
+      mode: _draft.mode,
+      criteria: _draft.criteria,
+      harshness: _draft.harshness,
+      gradeLevel: _draft.gradeLevel,
+      notes: _draft.notes,
+      oneTimeOverride: _draft.oneTimeOverride,
+      autoDetectScheme: _draft.autoDetectScheme,
+      answerKeyId: _draft.answerKeyId,
+      answerKeyName: _draft.answerKeyName,
       classId: _draft.classId,
       presetId: _draft.presetId,
     );
