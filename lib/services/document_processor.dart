@@ -64,6 +64,10 @@ class DocumentProcessor {
   // upright so the teacher and the marker both read it normally.
   image = _autoRotateForText(image);
 
+  // Perspective correction rarely lands perfectly square — measure the
+  // residual tilt of the text lines and take out the last few degrees.
+  image = _deskewSmallAngle(image);
+
   _stretchContrast(image);
   image = _sharpen(image);
   return (Uint8List.fromList(img.encodeJpg(image, quality: 88)), isDocument);
@@ -74,6 +78,10 @@ class DocumentProcessor {
 /// upright and ink-per-column varies strongly when sideways.
 img.Image _autoRotateForText(img.Image src) {
   try {
+    // Only landscape shots are candidates: worksheets are portrait, so a
+    // portrait image is already upright — rotating one to horizontal (a
+    // misfire this heuristic used to make) is never an improvement.
+    if (src.width <= src.height) return src;
     final small = img.copyResize(src, width: 160);
     final w = small.width, h = small.height;
     final rowInk = List<int>.filled(h, 0);
@@ -111,6 +119,73 @@ img.Image _autoRotateForText(img.Image src) {
     return src;
   } catch (e) {
     debugPrint('DocumentProcessor auto-rotate failed: $e');
+    return src;
+  }
+}
+
+/// Removes the last few degrees of tilt left after perspective correction.
+/// Tries small rotations on a thumbnail and keeps the one whose ink rows
+/// are most sharply separated (upright text = strong row-profile variance),
+/// then applies it to the full image and crops away the rotation border.
+img.Image _deskewSmallAngle(img.Image src) {
+  try {
+    final small = img.copyResize(src, width: 240);
+
+    // Score only the central region so the black corners introduced by
+    // trial rotations never count as ink.
+    double rowVariance(img.Image im) {
+      final x0 = (im.width * 0.15).round(), x1 = (im.width * 0.85).round();
+      final y0 = (im.height * 0.15).round(), y1 = (im.height * 0.85).round();
+      final rows = y1 - y0;
+      if (rows <= 0 || x1 <= x0) return -1;
+      final rowInk = List<int>.filled(rows, 0);
+      var total = 0;
+      for (var y = y0; y < y1; y++) {
+        for (var x = x0; x < x1; x++) {
+          final p = im.getPixel(x, y);
+          final l = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+          if (l < 110) {
+            rowInk[y - y0]++;
+            total++;
+          }
+        }
+      }
+      if (total < (x1 - x0) * rows * 0.004) return -1; // not enough ink
+      final mean = rowInk.reduce((a, b) => a + b) / rows;
+      var s = 0.0;
+      for (final v in rowInk) {
+        s += (v - mean) * (v - mean);
+      }
+      return s / rows;
+    }
+
+    final base = rowVariance(small);
+    if (base < 0) return src;
+    var bestAngle = 0.0;
+    var bestScore = base;
+    for (var a = -4.0; a <= 4.01; a += 0.5) {
+      if (a == 0) continue;
+      final rot = img.copyRotate(small, angle: a, interpolation: img.Interpolation.linear);
+      final score = rowVariance(rot);
+      if (score > bestScore) {
+        bestScore = score;
+        bestAngle = a;
+      }
+    }
+    // Only act on a clear win — resampling the page isn't free.
+    if (bestAngle == 0 || bestScore < base * 1.08) return src;
+
+    var out = img.copyRotate(src, angle: bestAngle, interpolation: img.Interpolation.cubic);
+    // Crop the dark wedges the rotation adds at the edges.
+    final s = math.sin(bestAngle.abs() * math.pi / 180);
+    final insetX = (src.height * s).ceil();
+    final insetY = (src.width * s).ceil();
+    if (out.width > insetX * 2 + 40 && out.height > insetY * 2 + 40) {
+      out = img.copyCrop(out, x: insetX, y: insetY, width: out.width - insetX * 2, height: out.height - insetY * 2);
+    }
+    return out;
+  } catch (e) {
+    debugPrint('DocumentProcessor deskew failed: $e');
     return src;
   }
 }

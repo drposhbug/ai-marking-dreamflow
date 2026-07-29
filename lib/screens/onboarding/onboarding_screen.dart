@@ -59,15 +59,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   /// about 3, so the setup step loops: save a class, form clears, add the next.
   final List<String> _createdClasses = [];
 
+  /// How the teacher wants to be addressed. Always their explicit pick —
+  /// never inferred, since a name says nothing certain about gender.
+  String? _title;
+  static const _titleOptions = ['Mr.', 'Ms.', 'Mx.', 'Dr.', 'Teacher'];
+
   @override
   void initState() {
     super.initState();
     _school.text = context.read<AppState>().school;
     // Only prefill a name the teacher actually typed before — auto-derived
     // placeholders stay blank so the field starts empty.
-    final u = context.read<AuthService>().currentUser;
+    final auth = context.read<AuthService>();
+    final u = auth.currentUser;
     if (u != null && u.name.isNotEmpty && u.name != 'Teacher' && u.name != AuthService.defaultNameFor(u.email)) {
       _name.text = u.name;
+    }
+    // Google/Apple sign-ins: suggest just the last name ("Lee"), so with a
+    // title pick it reads like a teacher's name — "Ms. Lee".
+    if (_name.text.isEmpty) {
+      final full = auth.oauthFullName;
+      if (full != null) _name.text = AuthService.lastNameOf(full);
     }
   }
 
@@ -308,15 +320,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
+  /// The name as students/feedback will see it: picked title + typed name,
+  /// without doubling a title the teacher already typed themselves.
+  String get _displayName {
+    final raw = _name.text.trim();
+    final t = _title;
+    if (t == null || raw.isEmpty) return raw;
+    final lower = raw.toLowerCase();
+    for (final o in _titleOptions) {
+      if (lower.startsWith(o.toLowerCase()) || lower.startsWith(o.toLowerCase().replaceAll('.', ' '))) return raw;
+    }
+    return '$t $raw';
+  }
+
   /// Saves the required name + school, kicks off curriculum matching, and
   /// moves on to class setup.
   Future<void> _continueProfile() async {
-    final name = _name.text.trim();
+    final name = _displayName;
     final school = _school.text.trim();
     if (name.isEmpty || school.isEmpty) return;
     final user = context.read<AuthService>().currentUser;
     if (user != null) {
-      await context.read<AuthService>().updateProfile(name: name, school: school);
+      await context.read<AuthService>().updateProfile(name: name, school: school, title: _title ?? 'Teacher');
       await context.read<AppState>().setSchool(teacherId: user.id, school: school);
     }
     if (!mounted) return;
@@ -365,11 +390,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
               ),
               const SizedBox(height: 18),
+              Text('How should you be addressed?', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final t in _titleOptions)
+                    ChoiceChip(
+                      label: Text(t),
+                      selected: _title == t,
+                      onSelected: (sel) => setState(() => _title = sel ? t : null),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: _name,
                 textCapitalization: TextCapitalization.words,
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(labelText: 'Your name', hintText: 'e.g. Ms. Rivera'),
+                decoration: InputDecoration(
+                  labelText: 'Your name',
+                  hintText: 'e.g. Rivera',
+                  helperText: _displayName.isEmpty ? null : 'Students will see: $_displayName',
+                ),
               ),
               const SizedBox(height: 16),
               TextField(

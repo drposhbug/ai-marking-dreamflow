@@ -331,6 +331,61 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
     }
   }
 
+  /// Full-screen, pinch-zoomable preview of the scanned pages so the
+  /// teacher can check exactly what Mark will be looking at.
+  void _expandPage(int index) {
+    final pages = context.read<AppState>().draft.pages;
+    if (pages.isEmpty) return;
+    var current = index.clamp(0, pages.length - 1);
+    final pc = PageController(initialPage: current);
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.94),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog.fullscreen(
+          backgroundColor: Colors.transparent,
+          child: Stack(
+            children: [
+              PageView.builder(
+                controller: pc,
+                onPageChanged: (i) => setDialogState(() => current = i),
+                itemCount: pages.length,
+                itemBuilder: (context, i) => InteractiveViewer(
+                  maxScale: 6,
+                  child: Center(child: Image.memory(pages[i].bytes, fit: BoxFit.contain, gaplessPlayback: true)),
+                ),
+              ),
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(999)),
+                        child: Text(
+                          'Page ${current + 1} of ${pages.length} — pinch to zoom',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: IconButton.styleFrom(backgroundColor: Colors.black.withValues(alpha: 0.6), foregroundColor: Colors.white),
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Close',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).then((_) => pc.dispose());
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -363,7 +418,31 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          Image.memory(draft.pages[i].bytes, fit: BoxFit.cover, gaplessPlayback: true),
+                          GestureDetector(
+                            onTap: () => _expandPage(i),
+                            child: Image.memory(draft.pages[i].bytes, fit: BoxFit.cover, gaplessPlayback: true),
+                          ),
+                          Positioned(
+                            bottom: 10,
+                            left: 10,
+                            child: IgnorePointer(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.zoom_in_rounded, color: Colors.white, size: 16),
+                                    SizedBox(width: 4),
+                                    Text('Tap to inspect', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                           Positioned(
                             top: 10,
                             left: 10,
