@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:marking_prokect_v2/models/ai_marker_user.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
@@ -9,6 +10,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService extends ChangeNotifier {
   static const _kCurrentUserKey = 'ai_marker.current_user';
+  // Must match main.dart's Supabase.initialize values.
+  static const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: 'https://zxikjizraeqejbsncqpg.supabase.co');
+  static const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   final LocalStore _store;
 
   AiMarkerUser? _currentUser;
@@ -108,6 +112,32 @@ class AuthService extends ChangeNotifier {
     return s.contains('SocketException') || s.contains('Failed host lookup') || s.contains('ClientException') || s.contains('Connection refused') || s.contains('Connection timed out');
   }
 
+  /// Which OAuth providers are switched on in the Supabase dashboard
+  /// ('google', 'apple', 'azure', ...). Empty when none are or the endpoint
+  /// can't be reached — the login screen only shows buttons that will
+  /// actually work, so enabling a provider server-side is all it takes.
+  Future<Set<String>> enabledOAuthProviders() async {
+    if (_supabase == null || _supabaseAnonKey.isEmpty) return const {};
+    try {
+      final res = await http
+          .get(Uri.parse('$_supabaseUrl/auth/v1/settings'), headers: {'apikey': _supabaseAnonKey})
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) return const {};
+      final map = (jsonDecode(res.body) as Map).cast<String, dynamic>();
+      final external = (map['external'] as Map?)?.cast<String, dynamic>() ?? const {};
+      return external.entries.where((e) => e.value == true).map((e) => e.key).toSet();
+    } catch (e) {
+      debugPrint('AuthService.enabledOAuthProviders failed: $e');
+      return const {};
+    }
+  }
+
+  static String _providerLabel(OAuthProvider p) {
+    if (p == OAuthProvider.azure) return 'Microsoft';
+    final n = p.name;
+    return '${n[0].toUpperCase()}${n.substring(1)}';
+  }
+
   /// OAuth sign-in (Google / Apple) via the system browser. The redirect
   /// deep link (com.markless.app://login-callback) is caught by
   /// supabase_flutter, which completes the session; we wait for it here.
@@ -115,6 +145,12 @@ class AuthService extends ChangeNotifier {
   Future<void> signInWithProvider(OAuthProvider provider) async {
     final client = _supabase;
     if (client == null) throw Exception('Cloud sign-in isn\'t available in this build.');
+    // Pre-flight: a disabled provider would otherwise dump the teacher on a
+    // raw 400 error page in the browser.
+    final enabled = await enabledOAuthProviders();
+    if (enabled.isNotEmpty && !enabled.contains(provider.name)) {
+      throw Exception('${_providerLabel(provider)} sign-in isn\'t switched on for the server yet — use email & password for now.');
+    }
     final completer = Completer<void>();
     late final StreamSubscription<AuthState> sub;
     sub = client.auth.onAuthStateChange.listen((state) {
