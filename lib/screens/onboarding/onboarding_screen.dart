@@ -73,7 +73,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final auth = context.read<AuthService>();
     final u = auth.currentUser;
     if (u != null && u.name.isNotEmpty && u.name != 'Teacher' && u.name != AuthService.defaultNameFor(u.email)) {
-      _name.text = u.name;
+      // The chips own the honorific — hold the bare name in the field so a
+      // returning "Mr. Lee" shows chip Mr. + name Lee, not a doubled title.
+      _name.text = AuthService.stripHonorific(u.name);
     }
     // Google/Apple sign-ins: suggest just the last name ("Lee"), so with a
     // title pick it reads like a teacher's name — "Ms. Lee".
@@ -81,6 +83,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       final full = auth.oauthFullName;
       if (full != null) _name.text = AuthService.lastNameOf(full);
     }
+    if (u != null && _titleOptions.contains(u.title)) _title = u.title;
   }
 
   /// Debounced autocomplete: after a short typing pause, suggest full school
@@ -341,7 +344,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (name.isEmpty || school.isEmpty) return;
     final user = context.read<AuthService>().currentUser;
     if (user != null) {
-      await context.read<AuthService>().updateProfile(name: name, school: school, title: _title ?? 'Teacher');
+      await context.read<AuthService>().updateProfile(name: name, school: school, title: _title ?? user.title);
       await context.read<AppState>().setSchool(teacherId: user.id, school: school);
     }
     if (!mounted) return;
@@ -356,10 +359,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         automaticallyImplyLeading: false,
         title: Text(switch (_step) { 0 => 'Welcome', 1 => 'About you', _ => 'Set up your classes' }),
         actions: [
-          // Only the welcome step gets a top-right skip; the other steps
-          // have their own buttons at the bottom.
+          // Only the welcome step gets a top-right skip, and it only skips
+          // the tour — the About-you info (name, title, school) is required.
           if (_step == 0)
-            TextButton(onPressed: _creating ? null : _finish, child: const Text('Skip')),
+            TextButton(onPressed: () => setState(() => _step = 1), child: const Text('Skip')),
         ],
       ),
       body: SafeArea(
@@ -535,7 +538,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: const Text('Get started'),
               ),
               const SizedBox(height: 10),
-              OutlinedButton(onPressed: _finish, child: const Text('Skip for now')),
+              // Skipping the tour is fine — but name, title, and school are
+              // required, so the shortcut still lands on the About-you step.
+              OutlinedButton(onPressed: () => setState(() => _step = 1), child: const Text('Skip the tour')),
             ],
           ),
         ),
