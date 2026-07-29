@@ -178,6 +178,21 @@ class AuthService extends ChangeNotifier {
   /// Auth events from Supabase (null when no cloud is configured).
   Stream<AuthState>? get authStateChanges => _supabase?.auth.onAuthStateChange;
 
+  /// Display name provided by the OAuth provider (Google/Apple) for the
+  /// current session, or null for email/local accounts.
+  String? get oauthFullName {
+    final meta = _supabase?.auth.currentUser?.userMetadata;
+    final n = ((meta?['full_name'] ?? meta?['name']) ?? '').toString().trim();
+    return n.isEmpty ? null : n;
+  }
+
+  /// Last word of a full name — used to suggest "Ms. Lee"-style teacher
+  /// names without ever guessing a gendered title.
+  static String lastNameOf(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    return parts.isEmpty ? fullName.trim() : parts.last;
+  }
+
   /// True when a Supabase session already exists — a persisted "stay signed
   /// in" from a previous run, or an OAuth callback that completed while the
   /// router was busy elsewhere. Ensures the local user matches the session.
