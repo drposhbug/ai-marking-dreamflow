@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
@@ -22,6 +23,18 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
+
+  /// OAuth providers the server actually has switched on — buttons only
+  /// render for these, so a disabled provider can't dead-end the teacher.
+  Set<String> _providers = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<AuthService>().enabledOAuthProviders().then((p) {
+      if (mounted) setState(() => _providers = p);
+    });
+  }
 
   @override
   void dispose() {
@@ -86,6 +99,8 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final auth = context.read<AuthService>();
       await auth.signInWithEmail(email: email, password: password);
+      // Let Android's password manager offer to save these credentials.
+      TextInput.finishAutofillContext();
       if (!mounted) return;
       final restoredDone = await _restoreProfile(auth);
       if (!mounted) return;
@@ -164,6 +179,30 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// One button per provider the server has enabled (Google, Microsoft,
+  /// Apple) — enabling one in the Supabase dashboard is all it takes for
+  /// its button to appear here on the next app open.
+  List<Widget> get _oauthButtons => [
+        if (_providers.contains('google'))
+          OutlinedButton.icon(
+            onPressed: _loading ? null : () => _oauth(OAuthProvider.google),
+            icon: const Icon(Icons.g_mobiledata_rounded, size: 26),
+            label: const Text('Google'),
+          ),
+        if (_providers.contains('azure'))
+          OutlinedButton.icon(
+            onPressed: _loading ? null : () => _oauth(OAuthProvider.azure),
+            icon: const Icon(Icons.grid_view_rounded, size: 18),
+            label: const Text('Microsoft'),
+          ),
+        if (_providers.contains('apple'))
+          OutlinedButton.icon(
+            onPressed: _loading ? null : () => _oauth(OAuthProvider.apple),
+            icon: const Icon(Icons.apple_rounded, size: 22),
+            label: const Text('Apple'),
+          ),
+      ];
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -196,19 +235,32 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 6),
                   Text('Mark less. Teach more. ✨', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
                   const SizedBox(height: 22),
-                  TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(hintText: 'teacher@school.edu', labelText: 'Email')),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _password,
-                    obscureText: _obscure,
-                    onSubmitted: (_) => _loading ? null : _signIn(),
-                    decoration: InputDecoration(
-                      hintText: 'Password',
-                      labelText: 'Password',
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                        icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded, color: AiMarkerColors.neutral),
-                      ),
+                  AutofillGroup(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          controller: _email,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [AutofillHints.username, AutofillHints.email],
+                          decoration: const InputDecoration(hintText: 'teacher@school.edu', labelText: 'Email'),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _password,
+                          obscureText: _obscure,
+                          autofillHints: const [AutofillHints.password],
+                          onSubmitted: (_) => _loading ? null : _signIn(),
+                          decoration: InputDecoration(
+                            hintText: 'Password',
+                            labelText: 'Password',
+                            suffixIcon: IconButton(
+                              onPressed: () => setState(() => _obscure = !_obscure),
+                              icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded, color: AiMarkerColors.neutral),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -222,37 +274,28 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _loading ? null : _openCreateAccount,
                     child: Text('Create Account', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Text('or continue with', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                      ),
-                      const Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _loading ? null : () => _oauth(OAuthProvider.google),
-                          icon: const Icon(Icons.g_mobiledata_rounded, size: 26),
-                          label: const Text('Google'),
+                  if (_oauthButtons.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Text('or continue with', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _loading ? null : () => _oauth(OAuthProvider.apple),
-                          icon: const Icon(Icons.apple_rounded, size: 22),
-                          label: const Text('Apple'),
-                        ),
-                      ),
-                    ],
-                  ),
+                        const Expanded(child: Divider()),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        for (var i = 0; i < _oauthButtons.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 10),
+                          Expanded(child: _oauthButtons[i]),
+                        ],
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   Text(
                     'Signing in with the same account always brings back your name, school, and marking preferences.',
@@ -314,6 +357,8 @@ class _CreateAccountSheetState extends State<_CreateAccountSheet> {
     });
     try {
       await context.read<AuthService>().createAccount(email: email, password: password);
+      // Let Android's password manager offer to save the new credentials.
+      TextInput.finishAutofillContext();
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -348,30 +393,40 @@ class _CreateAccountSheetState extends State<_CreateAccountSheet> {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
             ),
             const SizedBox(height: 14),
-            TextField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              autofocus: widget.initialEmail.isEmpty,
-              decoration: const InputDecoration(labelText: 'Email', hintText: 'teacher@school.edu'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _password,
-              obscureText: _obscure,
-              decoration: InputDecoration(
-                labelText: 'Password (6+ characters)',
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                  icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded, color: AiMarkerColors.neutral),
-                ),
+            AutofillGroup(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    autofocus: widget.initialEmail.isEmpty,
+                    autofillHints: const [AutofillHints.username, AutofillHints.email],
+                    decoration: const InputDecoration(labelText: 'Email', hintText: 'teacher@school.edu'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _password,
+                    obscureText: _obscure,
+                    autofillHints: const [AutofillHints.newPassword],
+                    decoration: InputDecoration(
+                      labelText: 'Password (6+ characters)',
+                      suffixIcon: IconButton(
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                        icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded, color: AiMarkerColors.neutral),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _confirm,
+                    obscureText: _obscure,
+                    autofillHints: const [AutofillHints.newPassword],
+                    onSubmitted: (_) => _creating ? null : _create(),
+                    decoration: const InputDecoration(labelText: 'Confirm password'),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _confirm,
-              obscureText: _obscure,
-              onSubmitted: (_) => _creating ? null : _create(),
-              decoration: const InputDecoration(labelText: 'Confirm password'),
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),
