@@ -217,6 +217,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final schoolCtrl = TextEditingController(text: auth.school);
     String title = auth.title;
 
+    // "Ms." + "Lee" → "Ms. Lee". Never doubles a title the teacher already
+    // typed; "Teacher" acts as a plain role with no prefix.
+    String composeName(String t, String raw) {
+      final r = raw.trim();
+      if (r.isEmpty || t.isEmpty || t == 'Teacher') return r;
+      const honorifics = ['Mr.', 'Ms.', 'Mrs.', 'Mx.', 'Dr.', 'Teacher'];
+      final lower = r.toLowerCase();
+      for (final h in honorifics) {
+        final base = h.toLowerCase();
+        if (lower.startsWith(base) || lower.startsWith(base.replaceAll('.', ' ')) || lower.startsWith('${base.replaceAll('.', '')} ')) return r;
+      }
+      return '$t $r';
+    }
+
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -247,6 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 DropdownMenuItem(value: 'Ms.', child: Text('Ms.')),
                                 DropdownMenuItem(value: 'Mr.', child: Text('Mr.')),
                                 DropdownMenuItem(value: 'Mrs.', child: Text('Mrs.')),
+                                DropdownMenuItem(value: 'Mx.', child: Text('Mx.')),
                                 DropdownMenuItem(value: 'Dr.', child: Text('Dr.')),
                               ],
                               onChanged: (v) => setModalState(() => title = (v ?? 'Teacher')),
@@ -255,7 +270,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             TextField(
                               controller: nameCtrl,
                               textInputAction: TextInputAction.next,
-                              decoration: const InputDecoration(labelText: 'Display name'),
+                              onChanged: (_) => setModalState(() {}),
+                              decoration: InputDecoration(
+                                labelText: 'Display name',
+                                hintText: 'e.g. Lee',
+                                helperText: composeName(title, nameCtrl.text).isEmpty ? null : 'Shown as: ${composeName(title, nameCtrl.text)}',
+                              ),
                             ),
                             const SizedBox(height: 12),
                             TextField(
@@ -306,7 +326,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (saved != true) return;
 
-    final nextName = nameCtrl.text.trim();
+    final nextName = composeName(title, nameCtrl.text);
     final nextSchool = schoolCtrl.text.trim();
     await context.read<AuthService>().updateProfile(name: nextName, school: nextSchool, title: title);
 

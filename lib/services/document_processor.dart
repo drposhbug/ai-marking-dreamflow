@@ -163,7 +163,7 @@ img.Image _deskewSmallAngle(img.Image src) {
     if (base < 0) return src;
     var bestAngle = 0.0;
     var bestScore = base;
-    for (var a = -4.0; a <= 4.01; a += 0.5) {
+    for (var a = -6.0; a <= 6.01; a += 0.5) {
       if (a == 0) continue;
       final rot = img.copyRotate(small, angle: a, interpolation: img.Interpolation.linear);
       final score = rowVariance(rot);
@@ -172,16 +172,27 @@ img.Image _deskewSmallAngle(img.Image src) {
         bestAngle = a;
       }
     }
-    // Only act on a clear win — resampling the page isn't free.
-    if (bestAngle == 0 || bestScore < base * 1.08) return src;
+    if (bestAngle == 0 || bestScore < base * 1.04) return src;
 
-    var out = img.copyRotate(src, angle: bestAngle, interpolation: img.Interpolation.cubic);
-    // Crop the dark wedges the rotation adds at the edges.
+    // Pad with white margin BEFORE rotating so the rotation wedges land in
+    // padding, never on page content — straightening must not cut off edge
+    // text (it used to crop the page to hide the wedges).
     final s = math.sin(bestAngle.abs() * math.pi / 180);
-    final insetX = (src.height * s).ceil();
-    final insetY = (src.width * s).ceil();
-    if (out.width > insetX * 2 + 40 && out.height > insetY * 2 + 40) {
-      out = img.copyCrop(out, x: insetX, y: insetY, width: out.width - insetX * 2, height: out.height - insetY * 2);
+    final padX = (src.height * s).ceil() + 8;
+    final padY = (src.width * s).ceil() + 8;
+    final padded = img.Image(width: src.width + padX * 2, height: src.height + padY * 2);
+    img.fill(padded, color: img.ColorRgb8(255, 255, 255));
+    img.compositeImage(padded, src, dstX: padX, dstY: padY);
+    var out = img.copyRotate(padded, angle: bestAngle, interpolation: img.Interpolation.cubic);
+    // Rotation grows the canvas — crop the center back to the page size.
+    if (out.width >= src.width && out.height >= src.height) {
+      out = img.copyCrop(
+        out,
+        x: (out.width - src.width) ~/ 2,
+        y: (out.height - src.height) ~/ 2,
+        width: src.width,
+        height: src.height,
+      );
     }
     return out;
   } catch (e) {
@@ -308,7 +319,18 @@ List<img.Point>? _findPageCorners(img.Image src) {
   final area = _quadArea(quad);
   if (area < src.width * src.height * 0.20) return null;
 
-  return quad;
+  // Push the corners slightly outward: extreme-point detection on the
+  // thumbnail can land a few (full-res) pixels inside the sheet, and
+  // rectifying to corners inside the page slices off edge text.
+  final cx = (quad[0].x + quad[1].x + quad[2].x + quad[3].x) / 4;
+  final cy = (quad[0].y + quad[1].y + quad[2].y + quad[3].y) / 4;
+  return [
+    for (final p in quad)
+      img.Point(
+        (cx + (p.x - cx) * 1.03).clamp(0, src.width - 1),
+        (cy + (p.y - cy) * 1.03).clamp(0, src.height - 1),
+      ),
+  ];
 }
 
 int _otsuThreshold(List<int> hist, int total) {
