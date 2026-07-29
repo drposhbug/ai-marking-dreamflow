@@ -14,6 +14,19 @@ class TeacherTopbar extends StatelessWidget {
 
   const TeacherTopbar({super.key, required this.title, this.leadingIcon, this.onLeading, this.trailingIcon = Icons.notifications_none_rounded, this.onBell});
 
+  /// Avatar initial from the teacher's actual name — honorifics are
+  /// skipped so "Mr. Lee" shows "L", not "M".
+  static String _initialOf(String? name) {
+    var n = (name ?? '').trim();
+    for (final h in const ['Mr.', 'Ms.', 'Mrs.', 'Mx.', 'Dr.', 'Teacher']) {
+      if (n.toLowerCase().startsWith(h.toLowerCase()) && n.length > h.length) {
+        n = n.substring(h.length).trim();
+        break;
+      }
+    }
+    return n.isEmpty ? 'T' : n.substring(0, 1).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -30,7 +43,7 @@ class TeacherTopbar extends StatelessWidget {
             child: CircleAvatar(
               radius: 18,
               backgroundColor: cs.primary.withValues(alpha: 0.12),
-              child: Text((user?.name ?? 'T').substring(0, 1), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800)),
+              child: Text(_initialOf(user?.name), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800)),
             ),
           ),
         const SizedBox(width: 10),

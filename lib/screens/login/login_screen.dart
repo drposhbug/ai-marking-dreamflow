@@ -89,8 +89,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final p = await AiGradingService().getProfile(teacherId: user.id);
       if (p == null || !mounted) return false;
       final app = context.read<AppState>();
+      final cloudName = AuthService.normalizeAutoName(p.name, user.email);
       await auth.updateProfile(
-        name: p.name.isEmpty ? null : p.name,
+        name: cloudName.isEmpty ? null : cloudName,
         school: p.school.isEmpty ? null : p.school,
       );
       if (!mounted) return false;

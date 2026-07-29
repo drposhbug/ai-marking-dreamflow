@@ -28,11 +28,28 @@ class AuthService extends ChangeNotifier {
       if (raw == null || raw.isEmpty) return;
       final map = (await compute(_decode, raw)).cast<String, dynamic>();
       if (map.isEmpty) return;
-      _currentUser = AiMarkerUser.fromJson(map);
+      var user = AiMarkerUser.fromJson(map);
+      // Migration: older builds auto-derived the full email name ("Oscar Cs
+      // Lee"); teachers go by their last name, so shorten it to "Lee".
+      final normalized = normalizeAutoName(user.name, user.email);
+      if (normalized != user.name) {
+        user = user.copyWith(name: normalized, updatedAt: DateTime.now());
+        await _store.setString(_kCurrentUserKey, jsonEncode(user.toJson()));
+      }
+      _currentUser = user;
       notifyListeners();
     } catch (e) {
       debugPrint('AuthService.init failed: $e');
     }
+  }
+
+  /// Collapses an auto-derived full name ("Oscar Cs Lee" from the email)
+  /// down to the last name teachers actually go by. Names the teacher
+  /// typed themselves pass through untouched.
+  static String normalizeAutoName(String name, String email) {
+    final n = name.trim();
+    if (n.isNotEmpty && n == defaultNameFor(email) && n.contains(' ')) return lastNameOf(n);
+    return n;
   }
 
   static Map<String, dynamic> _decode(String raw) => raw.isEmpty ? <String, dynamic>{} : (jsonDecode(raw) as Map).cast<String, dynamic>();
@@ -231,7 +248,9 @@ class AuthService extends ChangeNotifier {
     _currentUser = AiMarkerUser(
       id: id,
       email: email,
-      name: samePerson ? prior.name : defaultNameFor(email),
+      // New accounts start with just the last name — from the OAuth
+      // provider's real name when available, else derived from the email.
+      name: samePerson ? normalizeAutoName(prior.name, email) : lastNameOf(oauthFullName ?? defaultNameFor(email)),
       school: samePerson ? prior.school : '',
       title: samePerson ? prior.title : 'Teacher',
       avatarUrl: samePerson ? prior.avatarUrl : null,
