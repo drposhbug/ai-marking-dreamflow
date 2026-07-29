@@ -117,7 +117,11 @@ class _LoginScreenState extends State<LoginScreen> {
     final user = auth.currentUser;
     final done = user == null ? '1' : await const LocalStore().getString(OnboardingScreen.doneKey(user.id));
     if (!mounted) return;
-    context.go((done == '1' || restoredDone) ? AppRoutes.grading : AppRoutes.onboarding);
+    // Even a "done" account must have the basics: the school picks the
+    // curriculum, the name goes on feedback. Any sign-in (email, Google,
+    // Apple) with those missing runs the short setup first.
+    final needsInfo = user != null && (user.school.trim().isEmpty || user.name.trim().isEmpty);
+    context.go(((done == '1' || restoredDone) && !needsInfo) ? AppRoutes.grading : AppRoutes.onboarding);
   }
 
   /// Sign-in requires an existing account with the right password. On
