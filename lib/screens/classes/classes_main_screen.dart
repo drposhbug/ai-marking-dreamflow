@@ -340,7 +340,7 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
                       value: _gradeLevel,
                       items: [
                         const DropdownMenuItem<int?>(value: null, child: Text('Not set')),
-                        for (var g = 1; g <= 12; g++) DropdownMenuItem<int?>(value: g, child: Text('Grade $g')),
+                        for (var g = 1; g <= 13; g++) DropdownMenuItem<int?>(value: g, child: Text('Grade $g')),
                       ],
                       onChanged: (v) => setState(() => _gradeLevel = v),
                       decoration: const InputDecoration(labelText: 'Grade level'),

@@ -28,7 +28,7 @@ class AiGradeRequest {
   // to the grader; otherwise only [imageBytes] is sent.
   final List<Uint8List>? pageImages;
 
-  // If stored in your DB, pass the student's grade level (1–12).
+  // If stored in your DB, pass the student's grade level (1–13).
   // If null, the edge function will try to detect it from the image.
   final int? studentGrade;
 

@@ -50,10 +50,10 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
     final baseCriteria = preset?.criteria ?? {for (final l in labels) l: true};
     _criteria = {for (final l in labels) l: (baseCriteria[l] == true)};
     _harshness = (preset?.harshness ?? draft.harshness).clamp(1, 10).toDouble();
-    _gradeLevel = draft.gradeLevel.clamp(1, 12).toDouble();
+    _gradeLevel = draft.gradeLevel.clamp(1, 13).toDouble();
     // A selected class carries its own grade level — use it automatically.
     final klass = (draft.classId == null || draft.classId!.isEmpty) ? null : context.read<ClassesService>().getById(draft.classId!);
-    if (klass?.gradeLevel != null) _gradeLevel = klass!.gradeLevel!.clamp(1, 12).toDouble();
+    if (klass?.gradeLevel != null) _gradeLevel = klass!.gradeLevel!.clamp(1, 13).toDouble();
     _notes.text = (preset?.notes ?? draft.notes);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppState>().setMode(mode, criteria: _criteria, harshness: _harshness.round());
@@ -541,8 +541,8 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                     Slider(
                       value: _gradeLevel,
                       min: 1,
-                      max: 12,
-                      divisions: 11,
+                      max: 13,
+                      divisions: 12,
                       label: 'Grade ${_gradeLevel.round()}',
                       onChanged: (v) {
                         setState(() => _gradeLevel = v);

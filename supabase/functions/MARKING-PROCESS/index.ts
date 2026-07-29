@@ -124,7 +124,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 7;
+const CACHE_VERSION = 8;
 
 // Shown instead of an unknown code that has no detail text — a teacher must
 // never see a raw "#37" on screen.
@@ -523,7 +523,7 @@ function strictnessWord(h: number): string {
 const STATIC_SYSTEM = `You are an expert teacher marking scanned pages of ONE student's work. The images arrive in page order, labeled "Page 1", "Page 2", and so on. After the images comes a CONTEXT section with this submission's settings. When an OFFICIAL ANSWER KEY section is present, mark STRICTLY against it — marks per question come from the key, an answer is correct if it matches the key's answer or is mathematically/scientifically equivalent, and you must not re-derive your own answers when the key provides one. Grade the ENTIRE piece of work as one submission, based ONLY on what is visible in the images.
 
 Do all of the following:
-1. Detect the subject, and the student's school grade level 1-12 (null if unclear). Also read the student's name if it is written on the paper into studentNameOnPaper (null if none visible).
+1. Detect the subject, and the student's school grade level 1-13 (null if unclear). Also read the student's name if it is written on the paper into studentNameOnPaper (null if none visible).
 2. Identify the assignment itself: set assignmentKind to a short label ("test", "quiz", "homework", "worksheet", "lab report", "essay", ...) based on what the pages look like, and choose markingStyle:
    - "completion" — practice work that should be checked for being DONE, not for correctness (typical homework and practice worksheets with no printed marks and no answer key). Then rawScore = the number of questions with a genuine attempt, maxScore = the number of questions assigned; do NOT deduct for wrong answers, but still flag wrong answers with annotation codes so the teacher sees them.
    - "graded" — correctness marking (tests, quizzes, essays, lab reports, anything with printed marks, or whenever an OFFICIAL ANSWER KEY is present).
@@ -547,7 +547,7 @@ Do all of the following:
    - Put one entry per visible category FIRST in criteriaBreakdown, named exactly "Knowledge", "Thinking", "Communication", or "Application" (only the categories actually visible), with that category's marks and a feedback code. Any requested criteria follow after as feedback-only entries.
    - The overall percentage = the AVERAGE of the visible category percentages, each category weighted equally (this is how KTCA works — NOT total marks divided by total marks). rawScore and maxScore still report the total visible marks earned and available.
    - If the paper's sections are not labeled with KTCA categories, skip this rule and use percentage = rawScore / maxScore * 100.
-7. Choose gradingFormat: "levels" for work at Grades 1-8 (see GRADE-LEVEL EXPECTATIONS below) and for essays, lab reports, and rubric-style work; "percentage" for Grades 9-12 tests, quizzes, and homework.
+7. Choose gradingFormat: "levels" for work at Grades 1-8 (see GRADE-LEVEL EXPECTATIONS below) and for essays, lab reports, and rubric-style work; "percentage" for Grades 9-13 tests, quizzes, and homework.
 8. Write summary as AT MOST 2 short sentences addressed to the teacher about this student's overall performance. Do not repeat per-question details, and do NOT list KTCA category scores — those are appended automatically. Give 2-4 strengths and 2-4 improvements, each as a feedback code.
 
 GRADE-LEVEL EXPECTATIONS — mark at the grade level given in CONTEXT when present; otherwise mark at the grade level you detected from the work itself. For work at Grades 1-8, report on the elementary Level scale by choosing gradingFormat "levels": Level 3 = meeting grade expectations, Level 4 = exceeding them, Level 4+ = outstanding. Percentages still back the levels, so compute rawScore/maxScore/percentage as usual.
@@ -913,7 +913,7 @@ Deno.serve(async (req) => {
     if (!topic) return json({ error: "topic is required" }, 400);
     const kind = String(payload?.kind ?? "lesson plan").trim().slice(0, 40);
     const planGrade = Number.isFinite(Number(payload?.gradeLevel))
-      ? Math.round(clamp(payload.gradeLevel, 1, 12, 6))
+      ? Math.round(clamp(payload.gradeLevel, 1, 13, 6))
       : null;
     const subject = String(payload?.subject ?? "").trim().slice(0, 80);
     const planRegion = CURRICULA[String(payload?.region ?? "").trim()];
@@ -1090,7 +1090,7 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
   const studentGrade = Number.isFinite(Number(payload?.studentGrade)) ? Number(payload.studentGrade) : null;
   // Grade level (1–12) whose curriculum expectations the work is marked against.
   const expectationGrade = Number.isFinite(Number(payload?.expectationGrade))
-    ? Math.round(clamp(payload.expectationGrade, 1, 12, 6))
+    ? Math.round(clamp(payload.expectationGrade, 1, 13, 6))
     : null;
   // Curriculum region (e.g. "ca-on", "us-fl") — anchors expectations to the
   // teacher's provincial/state curriculum.

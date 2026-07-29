@@ -32,7 +32,7 @@ class GradingDraft {
   final Map<String, bool> criteria;
   final int harshness;
 
-  /// Grade level (1–12) whose expectations the AI marks against.
+  /// Grade level (1–13) whose expectations the AI marks against.
   final int gradeLevel;
   final String notes;
   final bool oneTimeOverride;
@@ -331,7 +331,7 @@ class AppState extends ChangeNotifier {
   }
 
   void setGradeLevel(int gradeLevel) {
-    _draft = _draft.copyWith(gradeLevel: gradeLevel.clamp(1, 12));
+    _draft = _draft.copyWith(gradeLevel: gradeLevel.clamp(1, 13));
     notifyListeners();
   }
 
