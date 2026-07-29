@@ -1,4 +1,9 @@
 ﻿<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Cloud marking, sign-in, and font loading all need network access.
+         Release builds do NOT inherit this from debug — removing it breaks
+         every cloud feature with "Failed host lookup" errors. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Camera + gallery access for scanning assignments -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />

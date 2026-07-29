@@ -175,7 +175,9 @@ class _CreateClassSheet extends StatefulWidget {
 class _CreateClassSheetState extends State<_CreateClassSheet> {
   final _room = TextEditingController();
   final _studentName = TextEditingController();
-  String _subject = 'Physics';
+  // No preselected subject — a single stray tap on Create used to make an
+  // accidental "Physics P1" class that looked like a built-in template.
+  String? _subject;
   String _period = 'P1';
   int? _gradeLevel;
 
@@ -185,7 +187,7 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
   bool _creating = false;
 
   /// Classes name themselves — "Physics P1" — no typing needed.
-  String get _autoName => '$_subject $_period';
+  String get _autoName => '${_subject ?? 'Class'} $_period';
 
   @override
   void dispose() {
@@ -252,15 +254,16 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
 
   Future<void> _create() async {
     final teacherId = context.read<AuthService>().currentUser?.id;
+    final subject = _subject;
     final name = _autoName;
-    if (teacherId == null) return;
+    if (teacherId == null || subject == null) return;
 
     setState(() => _creating = true);
     try {
       final created = await context.read<ClassesService>().create(
         teacherId: teacherId,
         name: name,
-        subject: _subject,
+        subject: subject,
         period: _period,
         room: _room.text.trim().isEmpty ? null : _room.text.trim(),
         gradeLevel: _gradeLevel,
@@ -305,19 +308,20 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Named automatically: $_autoName',
+                _subject == null ? 'Pick a subject — the class names itself, like "Physics P1"' : 'Named automatically: $_autoName',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField(
+                    child: DropdownButtonFormField<String>(
                       value: _subject,
+                      hint: const Text('Subject'),
                       items: const ['Physics', 'Chemistry', 'Biology', 'Science', 'Math', 'English', 'History', 'Geography', 'French', 'Art', 'Music', 'General']
                           .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                           .toList(),
-                      onChanged: (v) => setState(() => _subject = v.toString()),
+                      onChanged: (v) => setState(() => _subject = v),
                       decoration: const InputDecoration(labelText: 'Subject'),
                     ),
                   ),
@@ -400,11 +404,15 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
               ],
               const SizedBox(height: 14),
               FilledButton(
-                onPressed: _creating ? null : _create,
+                onPressed: (_creating || _subject == null) ? null : _create,
                 style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
                 child: _creating
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : Text(_students.isEmpty ? 'Create $_autoName' : 'Create $_autoName with ${_students.length} student${_students.length == 1 ? '' : 's'}'),
+                    : Text(_subject == null
+                        ? 'Pick a subject first'
+                        : _students.isEmpty
+                            ? 'Create $_autoName'
+                            : 'Create $_autoName with ${_students.length} student${_students.length == 1 ? '' : 's'}'),
               ),
             ],
           ),

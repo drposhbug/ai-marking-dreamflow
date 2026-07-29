@@ -67,6 +67,9 @@ class AuthService extends ChangeNotifier {
       await _setUser(id: u.id, email: email.trim());
     } on AuthException catch (e) {
       throw Exception(_friendlyAuthError(e));
+    } catch (e) {
+      if (_looksOffline(e)) throw Exception('Can\'t reach the server — check your internet connection and try again.');
+      rethrow;
     }
   }
 
@@ -91,7 +94,17 @@ class AuthService extends ChangeNotifier {
       await _setUser(id: u.id, email: email.trim());
     } on AuthException catch (e) {
       throw Exception(_friendlyAuthError(e));
+    } catch (e) {
+      if (_looksOffline(e)) throw Exception('Can\'t reach the server — check your internet connection and try again.');
+      rethrow;
     }
+  }
+
+  /// Network-level failures (no connection, DNS blocked) rather than a
+  /// wrong password — surfaced as a connection message, not an auth one.
+  static bool _looksOffline(Object e) {
+    final s = e.toString();
+    return s.contains('SocketException') || s.contains('Failed host lookup') || s.contains('ClientException') || s.contains('Connection refused') || s.contains('Connection timed out');
   }
 
   /// Developer mode / no-cloud fallback: local account, no password checks.
