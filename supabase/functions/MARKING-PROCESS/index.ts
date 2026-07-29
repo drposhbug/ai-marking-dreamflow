@@ -907,6 +907,42 @@ Deno.serve(async (req) => {
     return json({ keys: data ?? [] });
   }
 
+  // ── Account profile: saved from onboarding/settings, restored on sign-in
+  //    so the same account gets its name/school/region/preferences back on
+  //    any device. Upsert only touches the columns present in the payload. ──
+  if (action === "save_profile") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const row: Record<string, unknown> = {
+      teacher_id: teacherId,
+      updated_at: new Date().toISOString(),
+    };
+    if (payload?.email != null) row.email = String(payload.email).slice(0, 200);
+    if (payload?.name != null) row.name = String(payload.name).slice(0, 120);
+    if (payload?.school != null) row.school = String(payload.school).slice(0, 200);
+    if (payload?.region != null) row.region = String(payload.region).slice(0, 40);
+    if (Array.isArray(payload?.markingFeedback)) {
+      row.marking_feedback = payload.markingFeedback
+        .map((f: unknown) => String(f).slice(0, 300))
+        .slice(0, 20);
+    }
+    const { error } = await serviceDb().from("profiles").upsert(row, { onConflict: "teacher_id" });
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
+  if (action === "get_profile") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const { data, error } = await serviceDb()
+      .from("profiles")
+      .select("teacher_id, email, name, school, region, marking_feedback, updated_at")
+      .eq("teacher_id", teacherId)
+      .maybeSingle();
+    if (error) return json({ error: error.message }, 500);
+    return json({ profile: data });
+  }
+
   // ── Planning assistant: generate a lesson plan / assignment / quiz ──────
   if (action === "plan") {
     const topic = String(payload?.topic ?? "").trim().slice(0, 600);

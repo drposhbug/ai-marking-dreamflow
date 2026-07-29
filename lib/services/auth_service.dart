@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -107,11 +108,45 @@ class AuthService extends ChangeNotifier {
     return s.contains('SocketException') || s.contains('Failed host lookup') || s.contains('ClientException') || s.contains('Connection refused') || s.contains('Connection timed out');
   }
 
+  /// OAuth sign-in (Google / Apple) via the system browser. The redirect
+  /// deep link (com.markless.app://login-callback) is caught by
+  /// supabase_flutter, which completes the session; we wait for it here.
+  /// Requires the provider to be enabled in the Supabase dashboard.
+  Future<void> signInWithProvider(OAuthProvider provider) async {
+    final client = _supabase;
+    if (client == null) throw Exception('Cloud sign-in isn\'t available in this build.');
+    final completer = Completer<void>();
+    late final StreamSubscription<AuthState> sub;
+    sub = client.auth.onAuthStateChange.listen((state) {
+      if (state.session != null && !completer.isCompleted) completer.complete();
+    });
+    try {
+      await client.auth.signInWithOAuth(provider, redirectTo: 'com.markless.app://login-callback');
+      await completer.future.timeout(
+        const Duration(minutes: 3),
+        onTimeout: () => throw Exception('Sign-in wasn\'t completed — try again.'),
+      );
+      final u = client.auth.currentUser;
+      if (u == null) throw Exception('Sign in failed — try again.');
+      await _setUser(id: u.id, email: u.email ?? '');
+    } on AuthException catch (e) {
+      throw Exception(_friendlyAuthError(e));
+    } catch (e) {
+      if (_looksOffline(e)) throw Exception('Can\'t reach the server — check your internet connection and try again.');
+      rethrow;
+    } finally {
+      await sub.cancel();
+    }
+  }
+
   /// Developer mode / no-cloud fallback: local account, no password checks.
   Future<void> signInLocal({required String email}) => _localSignIn(email);
 
   static String _friendlyAuthError(AuthException e) {
     final m = e.message.toLowerCase();
+    if (m.contains('provider') && (m.contains('not enabled') || m.contains('disabled'))) {
+      return 'That sign-in provider isn\'t switched on for the server yet — use email and password for now.';
+    }
     if (m.contains('invalid login')) return 'Wrong password — or no account with that email yet. Use Create Account first.';
     if (m.contains('already registered') || m.contains('already been registered')) {
       return 'That email already has an account — use Sign In instead.';

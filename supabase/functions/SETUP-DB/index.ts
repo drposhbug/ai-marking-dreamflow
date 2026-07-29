@@ -40,6 +40,18 @@ Deno.serve(async (req) => {
       )`;
     await sql`alter table public.feedback_code_usage enable row level security`;
     await sql`create index if not exists feedback_code_usage_bank_code_idx on public.feedback_code_usage (bank, code)`;
+    await sql`
+      create table if not exists public.profiles (
+        teacher_id text primary key,
+        email text,
+        name text,
+        school text,
+        region text,
+        marking_feedback jsonb,
+        updated_at timestamptz not null default now()
+      )`;
+    await sql`alter table public.profiles enable row level security`;
+    await sql`create index if not exists profiles_email_idx on public.profiles (email)`;
     await sql.end();
     return Response.json({ ok: true });
   } catch (e) {

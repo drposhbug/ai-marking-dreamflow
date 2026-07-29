@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
@@ -353,6 +355,23 @@ class AppState extends ChangeNotifier {
     _markingFeedback = List.unmodifiable([..._markingFeedback, text]);
     notifyListeners();
     await _store.setString(_markingFeedbackKey(teacherId), jsonEncode(_markingFeedback));
+    _syncFeedbackCloud(teacherId);
+  }
+
+  /// Marking preferences ride with the account: fire-and-forget cloud save
+  /// so a returning sign-in on any device restores what Mark was taught.
+  void _syncFeedbackCloud(String teacherId) {
+    AiGradingService()
+        .saveProfile(teacherId: teacherId, markingFeedback: _markingFeedback.toList())
+        .catchError((Object e) => debugPrint('Marking feedback cloud sync failed: $e'));
+  }
+
+  /// Replaces the whole preference list — used when restoring a signed-in
+  /// account's saved profile from the cloud.
+  Future<void> setMarkingFeedbackAll({required String teacherId, required List<String> feedback}) async {
+    _markingFeedback = List.unmodifiable(feedback.map((f) => f.trim()).where((f) => f.isNotEmpty).take(20));
+    notifyListeners();
+    await _store.setString(_markingFeedbackKey(teacherId), jsonEncode(_markingFeedback));
   }
 
   Future<void> removeMarkingFeedbackAt({required String teacherId, required int index}) async {
@@ -361,6 +380,7 @@ class AppState extends ChangeNotifier {
     _markingFeedback = List.unmodifiable(next);
     notifyListeners();
     await _store.setString(_markingFeedbackKey(teacherId), jsonEncode(_markingFeedback));
+    _syncFeedbackCloud(teacherId);
   }
 
   void setNotes(String notes) {

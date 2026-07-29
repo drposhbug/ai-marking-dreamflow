@@ -112,6 +112,20 @@ class RegionCandidate {
   const RegionCandidate({required this.regionId, required this.label, required this.place});
 }
 
+// ---------- Account profile (cloud-saved, restored on sign-in) ----------
+
+class CloudProfile {
+  final String name;
+  final String school;
+  final String region;
+  final List<String> markingFeedback;
+
+  const CloudProfile({required this.name, required this.school, required this.region, required this.markingFeedback});
+
+  /// A completed profile means onboarding already ran on some device.
+  bool get isComplete => name.isNotEmpty && school.isNotEmpty;
+}
+
 // ---------- Answer key summary (cloud-saved) ----------
 
 class AnswerKeySummary {
@@ -405,6 +419,50 @@ class AiGradingService {
           .toList(growable: false);
     }
     throw Exception('Region inference failed: $data');
+  }
+
+  /// Saves the teacher's account profile (name, school, region, marking
+  /// preferences) to the cloud so signing in on any device restores it.
+  Future<void> saveProfile({
+    required String teacherId,
+    String? email,
+    String? name,
+    String? school,
+    String? region,
+    List<String>? markingFeedback,
+  }) async {
+    final client = Supabase.instance.client;
+    await client.functions.invoke('MARKING-PROCESS', body: {
+      'action': 'save_profile',
+      'teacherId': teacherId,
+      if (email != null) 'email': email,
+      if (name != null) 'name': name,
+      if (school != null) 'school': school,
+      if (region != null) 'region': region,
+      if (markingFeedback != null) 'markingFeedback': markingFeedback,
+    });
+  }
+
+  /// The account's saved profile, or null when it has never been saved.
+  Future<CloudProfile?> getProfile({required String teacherId}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'get_profile', 'teacherId': teacherId},
+    );
+    final data = res.data;
+    if (data is Map && data['profile'] is Map) {
+      final p = data['profile'] as Map;
+      return CloudProfile(
+        name: (p['name'] ?? '').toString().trim(),
+        school: (p['school'] ?? '').toString().trim(),
+        region: (p['region'] ?? '').toString().trim(),
+        markingFeedback: p['marking_feedback'] is List
+            ? (p['marking_feedback'] as List).map((e) => e.toString()).where((s) => s.trim().isNotEmpty).toList(growable: false)
+            : const [],
+      );
+    }
+    return null;
   }
 
   /// Reads student names (and IDs when shown) off photos of an attendance
