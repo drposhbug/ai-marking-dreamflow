@@ -29,6 +29,16 @@ class AppRouter {
   static final GoRouter router = GoRouter(
     navigatorKey: _rootKey,
     initialLocation: AppRoutes.login,
+    redirect: (context, state) {
+      // OAuth deep-link callback (com.markless.app://login-callback?code=...):
+      // supabase_flutter exchanges the code itself — the router just needs
+      // to stay on the login screen, which finishes sign-in once the
+      // session lands, instead of showing "Page Not Found".
+      if (state.uri.host == 'login-callback' || state.uri.path.contains('login-callback')) {
+        return AppRoutes.login;
+      }
+      return null;
+    },
     routes: [
       GoRoute(path: AppRoutes.login, name: 'login', pageBuilder: (context, state) => const NoTransitionPage(child: LoginScreen())),
       GoRoute(path: AppRoutes.onboarding, name: 'onboarding', pageBuilder: (context, state) => const NoTransitionPage(child: OnboardingScreen())),

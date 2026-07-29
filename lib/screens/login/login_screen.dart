@@ -9,7 +9,9 @@ import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show OAuthProvider;
+import 'dart:async';
+
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthState, OAuthProvider;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,16 +30,46 @@ class _LoginScreenState extends State<LoginScreen> {
   /// render for these, so a disabled provider can't dead-end the teacher.
   Set<String> _providers = const {};
 
+  StreamSubscription<AuthState>? _authSub;
+  bool _adopting = false;
+
   @override
   void initState() {
     super.initState();
-    context.read<AuthService>().enabledOAuthProviders().then((p) {
+    final auth = context.read<AuthService>();
+    auth.enabledOAuthProviders().then((p) {
       if (mounted) setState(() => _providers = p);
     });
+    // A session may already exist (stay signed in from a previous run) or
+    // land mid-frame (OAuth deep link the router bounced back here) —
+    // adopt it and continue instead of asking for the password again.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _adoptSessionIfAny());
+    _authSub = auth.authStateChanges?.listen((s) {
+      if (s.session != null) _adoptSessionIfAny();
+    });
+  }
+
+  /// Completes sign-in from an already-established Supabase session.
+  Future<void> _adoptSessionIfAny() async {
+    if (_adopting || _loading || !mounted) return;
+    _adopting = true;
+    try {
+      final auth = context.read<AuthService>();
+      if (!await auth.adoptSupabaseSession()) return;
+      if (!mounted) return;
+      final restoredDone = await _restoreProfile(auth);
+      if (!mounted) return;
+      await _routeAfterSignIn(auth, restoredDone: restoredDone);
+    } catch (e) {
+      debugPrint('Session adopt failed: $e');
+    } finally {
+      _adopting = false;
+    }
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _email.dispose();
     _password.dispose();
     super.dispose();

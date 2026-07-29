@@ -175,6 +175,21 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Auth events from Supabase (null when no cloud is configured).
+  Stream<AuthState>? get authStateChanges => _supabase?.auth.onAuthStateChange;
+
+  /// True when a Supabase session already exists — a persisted "stay signed
+  /// in" from a previous run, or an OAuth callback that completed while the
+  /// router was busy elsewhere. Ensures the local user matches the session.
+  Future<bool> adoptSupabaseSession() async {
+    final u = _supabase?.auth.currentUser;
+    if (u == null) return false;
+    if (_currentUser?.id != u.id) {
+      await _setUser(id: u.id, email: u.email ?? '');
+    }
+    return true;
+  }
+
   /// Developer mode / no-cloud fallback: local account, no password checks.
   Future<void> signInLocal({required String email}) => _localSignIn(email);
 
