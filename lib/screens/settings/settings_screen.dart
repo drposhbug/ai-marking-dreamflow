@@ -4,6 +4,7 @@ import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/data/curriculum_regions.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
@@ -312,6 +313,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Best-effort Supabase sync (safe when not configured).
     try {
       await context.read<SupabaseHook>().updateUserProfileByEmail(email: auth.email, displayName: nextName, school: nextSchool, title: title);
+      await AiGradingService().saveProfile(teacherId: auth.id, name: nextName, school: nextSchool);
     } catch (e) {
       debugPrint('SettingsScreen._editProfile Supabase sync failed: $e');
     }

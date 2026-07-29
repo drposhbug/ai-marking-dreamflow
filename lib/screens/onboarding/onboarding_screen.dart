@@ -167,6 +167,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         }
       }
       await const LocalStore().setString(OnboardingScreen.doneKey(user.id), '1');
+      // Save the profile to the cloud so this account's setup follows the
+      // teacher onto any device they sign in from.
+      try {
+        await AiGradingService().saveProfile(
+          teacherId: user.id,
+          email: user.email,
+          name: user.name,
+          school: app.school.isEmpty ? null : app.school,
+          region: app.region.isEmpty ? null : app.region,
+        );
+      } catch (e) {
+        debugPrint('OnboardingScreen._finish cloud profile save failed: $e');
+      }
     }
     if (!mounted) return;
     context.go(AppRoutes.grading);
