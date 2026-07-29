@@ -44,12 +44,22 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Collapses an auto-derived full name ("Oscar Cs Lee" from the email)
-  /// down to the last name teachers actually go by. Names the teacher
-  /// typed themselves pass through untouched.
+  /// down to the last name teachers actually go by — also inside a titled
+  /// name ("Ms. Oscar Cs Lee" → "Ms. Lee"). Names the teacher typed
+  /// themselves pass through untouched.
   static String normalizeAutoName(String name, String email) {
-    final n = name.trim();
-    if (n.isNotEmpty && n == defaultNameFor(email) && n.contains(' ')) return lastNameOf(n);
-    return n;
+    var n = name.trim();
+    if (n.isEmpty) return n;
+    var prefix = '';
+    for (final h in const ['Mr.', 'Ms.', 'Mrs.', 'Mx.', 'Dr.', 'Teacher']) {
+      if (n.toLowerCase().startsWith(h.toLowerCase()) && n.length > h.length) {
+        prefix = n.substring(0, h.length);
+        n = n.substring(h.length).trim();
+        break;
+      }
+    }
+    if (n == defaultNameFor(email) && n.contains(' ')) n = lastNameOf(n);
+    return prefix.isEmpty ? n : '$prefix $n';
   }
 
   static Map<String, dynamic> _decode(String raw) => raw.isEmpty ? <String, dynamic>{} : (jsonDecode(raw) as Map).cast<String, dynamic>();
