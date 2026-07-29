@@ -213,7 +213,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final cs = Theme.of(context).colorScheme;
-    final nameCtrl = TextEditingController(text: auth.name);
+    // The field holds the bare name; the dropdown owns the honorific — so
+    // switching Ms. → Mr. actually switches instead of sticking.
+    final nameCtrl = TextEditingController(text: AuthService.stripHonorific(auth.name));
     final schoolCtrl = TextEditingController(text: auth.school);
     String title = auth.title;
 

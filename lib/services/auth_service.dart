@@ -220,6 +220,18 @@ class AuthService extends ChangeNotifier {
     return parts.isEmpty ? fullName.trim() : parts.last;
   }
 
+  /// "Ms. Lee" → "Lee": the bare name with any leading honorific removed,
+  /// so edit forms can hold the name and the title separately.
+  static String stripHonorific(String name) {
+    final n = name.trim();
+    for (final h in const ['Mr.', 'Ms.', 'Mrs.', 'Mx.', 'Dr.', 'Teacher']) {
+      if (n.toLowerCase().startsWith(h.toLowerCase()) && n.length > h.length) {
+        return n.substring(h.length).trim();
+      }
+    }
+    return n;
+  }
+
   /// True when a Supabase session already exists — a persisted "stay signed
   /// in" from a previous run, or an OAuth callback that completed while the
   /// router was busy elsewhere. Ensures the local user matches the session.
@@ -308,13 +320,14 @@ class AuthService extends ChangeNotifier {
 
       final firstName = (row['first_name'] ?? row['firstName'] ?? '').toString().trim();
       final lastName = (row['last_name'] ?? row['lastName'] ?? '').toString().trim();
-      final title = (row['title'] ?? '').toString().trim();
       final school = (row['school'] ?? '').toString().trim();
 
-      final displayName = [title, firstName, lastName].where((e) => e.trim().isNotEmpty).join(' ').trim();
+      // Gap-filler only: never overwrite a name the teacher already has,
+      // and NEVER apply a title from the legacy table — honorifics are
+      // gendered, so they come only from the teacher's own explicit pick.
+      final displayName = [firstName, lastName].where((e) => e.trim().isNotEmpty).join(' ').trim();
       final next = user.copyWith(
-        name: displayName.isEmpty ? user.name : displayName,
-        title: title.isEmpty ? user.title : title,
+        name: user.name.isEmpty ? (displayName.isEmpty ? user.name : displayName) : user.name,
         school: school.isEmpty ? user.school : school,
         updatedAt: DateTime.now(),
       );
