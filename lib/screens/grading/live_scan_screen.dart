@@ -437,40 +437,22 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
       final file = await controller.takePicture();
       final bytes = await file.readAsBytes();
 
-      // Straighten, boost contrast, sharpen, and verify it's really a page
-      // (runs off the UI thread).
-      if (mounted) setState(() => _processing = true);
-      final detail = await DocumentProcessor.processPageDetailed(bytes);
-      if (mounted) setState(() => _processing = false);
       if (!mounted) return;
 
-      // Auto-capture of something that isn't a document (desk, floor, lap):
-      // throw it away instead of saving junk. The manual shutter bypasses
-      // this so an unusual page can still be forced through.
-      if (!force && !detail.isDocument) {
-        setState(() {
-          _notAPage = true;
-          _state = _ScanState.cooldown;
-          _stillSince = null;
-          _lastBlocks = null;
-          if (signature != null) _lastCaptureBlocks = signature;
-        });
-        if (!_webFallback) {
-          await controller.startImageStream(_onFrame);
-        }
+      // Retake flow: the caller needs the finished page, so process inline.
+      if (widget.singleShot) {
+        final detail = await DocumentProcessor.processPageDetailed(bytes);
+        if (!mounted) return;
+        Navigator.of(context).pop(<ScannedPage>[
+          ScannedPage(bytes: detail.bytes, fileName: 'scan_${DateTime.now().millisecondsSinceEpoch}.jpg'),
+        ]);
         return;
       }
 
       final page = ScannedPage(
-        bytes: detail.bytes,
+        bytes: bytes, // raw for now — replaced when background processing finishes
         fileName: 'scan_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
-
-      if (!mounted) return;
-      if (widget.singleShot) {
-        Navigator.of(context).pop(<ScannedPage>[page]);
-        return;
-      }
 
       // Content-level duplicate check: compare what's actually on this
       // photo against the last saved page. Manual shutter (force) skips it.
@@ -503,6 +485,9 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
           _lastBlocks = null;
           if (signature != null) _lastCaptureBlocks = signature;
         });
+        // Straighten/sharpen/verify in the background — the teacher can
+        // already swap in the next page instead of holding the pose.
+        _startBackgroundProcessing(page, force: force);
         Future<void>.delayed(const Duration(milliseconds: 180), () {
           if (mounted) setState(() => _flash = false);
         });
@@ -524,7 +509,52 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
     }
   }
 
-  void _finish() {
+  /// Straightens, sharpens, and verifies a capture off the critical path.
+  /// Non-pages (desk, floor) are removed from the strip once detected.
+  void _startBackgroundProcessing(ScannedPage rawPage, {required bool force}) {
+    setState(() => _processingCount++);
+    final job = DocumentProcessor.processPageDetailed(rawPage.bytes).then((detail) {
+      if (!mounted) return;
+      setState(() {
+        _processingCount--;
+        final i = _pages.indexOf(rawPage);
+        if (i == -1) return;
+        if (!force && !detail.isDocument) {
+          _pages.removeAt(i);
+          _notAPage = true;
+        } else {
+          _pages[i] = ScannedPage(bytes: detail.bytes, fileName: rawPage.fileName);
+        }
+      });
+    }).catchError((Object e) {
+      debugPrint('Background page processing failed: $e');
+      if (mounted) setState(() => _processingCount--);
+    });
+    _processingJobs.add(job);
+  }
+
+  Future<void> _finish() async {
+    // Wait for any still-processing pages so the marker gets the cleaned-up
+    // versions — usually sub-second by the time the teacher taps Done.
+    if (_processingCount > 0) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 18),
+              Expanded(child: Text('Finishing the last pages…')),
+            ],
+          ),
+        ),
+      );
+      await Future.wait(_processingJobs);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+    if (!mounted) return;
     Navigator.of(context).pop(List<ScannedPage>.unmodifiable(_pages));
   }
 
@@ -541,12 +571,12 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
   String get _statusLabel {
     switch (_state) {
       case _ScanState.capturing:
-        return _processing ? 'Straightening & sharpening…' : 'Capturing...';
+        return 'Capturing...';
       case _ScanState.cooldown:
         if (_notAPage) return 'That didn\'t look like a page — nothing saved. Use the shutter to force it';
         return _dupSkipped
             ? 'Same page — not saved. Swap to the next page'
-            : 'Page ${_pages.length} captured ✓  Slide in the next page';
+            : 'Page ${_pages.length} captured ✓  Slide in the next page${_processingCount > 0 ? ' · straightening in background' : ''}';
       case _ScanState.idle:
       case _ScanState.waitingForStillness:
         if (_hint == _DistanceHint.tooFar) return 'Too far — move closer to the page';

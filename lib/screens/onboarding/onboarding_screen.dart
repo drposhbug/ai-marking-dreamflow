@@ -37,7 +37,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _school = TextEditingController();
   final _name = TextEditingController();
 
-  /// Grade level of the class currently being set up (1–12).
+  /// Grade level of the class currently being set up (1–13).
   int? _classGrade;
 
   final List<RosterEntry> _students = [];
@@ -553,7 +553,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 value: _classGrade,
                 items: [
                   const DropdownMenuItem<int?>(value: null, child: Text('Not set')),
-                  for (var g = 1; g <= 12; g++) DropdownMenuItem<int?>(value: g, child: Text('Grade $g')),
+                  for (var g = 1; g <= 13; g++) DropdownMenuItem<int?>(value: g, child: Text('Grade $g')),
                 ],
                 onChanged: (v) => setState(() => _classGrade = v),
                 decoration: const InputDecoration(

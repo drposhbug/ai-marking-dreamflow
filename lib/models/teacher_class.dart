@@ -8,7 +8,7 @@ class TeacherClass {
   final String period;
   final String? room;
 
-  /// Grade level (1–12) of the class — the AI marks at this grade's
+  /// Grade level (1–13) of the class — the AI marks at this grade's
   /// expectations automatically when the class is selected before scanning.
   final int? gradeLevel;
   final DateTime createdAt;
