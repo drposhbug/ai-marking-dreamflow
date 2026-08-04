@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -113,9 +114,39 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       return;
     }
 
-    final pages = await Navigator.of(context).push<List<ScannedPage>>(
-      MaterialPageRoute(builder: (_) => const LiveScanScreen()),
+    // Camera scan, or pull the key document from Files / Google Drive.
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded),
+              title: const Text('Scan with camera'),
+              onTap: () => Navigator.pop(context, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_to_drive_rounded),
+              title: const Text('Files or Google Drive'),
+              subtitle: const Text('Pick images of the key from Drive or any storage'),
+              onTap: () => Navigator.pop(context, 'files'),
+            ),
+          ],
+        ),
+      ),
     );
+    if (source == null || !mounted) return;
+
+    List<ScannedPage>? pages;
+    if (source == 'files') {
+      pages = await _pickPagesFromFiles();
+    } else {
+      pages = await Navigator.of(context).push<List<ScannedPage>>(
+        MaterialPageRoute(builder: (_) => const LiveScanScreen()),
+      );
+    }
     if (pages == null || pages.isEmpty || !mounted) return;
 
     showDialog(
@@ -149,6 +180,47 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     }
   }
 
+  /// Photo library or the system Files UI — the latter includes Google
+  /// Drive as a source, so teachers can pull test photos straight from
+  /// their Drive. Returns null when dismissed.
+  Future<String?> _pickImportSource() => showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library_rounded),
+                title: const Text('Photo library'),
+                onTap: () => Navigator.pop(context, 'gallery'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.add_to_drive_rounded),
+                title: const Text('Files or Google Drive'),
+                subtitle: const Text('Pick images from Drive, Downloads, or any storage'),
+                onTap: () => Navigator.pop(context, 'files'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  /// Multi-select images via the system document picker (Drive included);
+  /// each one gets the full scanner treatment.
+  Future<List<ScannedPage>> _pickPagesFromFiles() async {
+    final res = await FilePicker.pickFiles(type: FileType.image, allowMultiple: true, withData: true);
+    if (res == null || res.files.isEmpty) return const [];
+    final pages = <ScannedPage>[];
+    for (final f in res.files) {
+      final bytes = f.bytes;
+      if (bytes == null) continue;
+      final processed = await DocumentProcessor.processPage(bytes);
+      pages.add(ScannedPage(bytes: processed, fileName: f.name));
+    }
+    return pages;
+  }
+
   Future<void> _pickFromGallery() async {
     final ok = await _askWhichClass();
     if (!ok || !mounted) return;
@@ -160,6 +232,16 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         if (!mounted) return;
         context.read<AppState>().setImageBytes(bytes: processed, fileName: picked.name);
         context.push(AppRoutes.gradingContext, extra: {'imageBytes': processed, 'fileName': picked.name});
+        return;
+      }
+
+      final source = await _pickImportSource();
+      if (source == null || !mounted) return;
+      if (source == 'files') {
+        final pages = await _pickPagesFromFiles();
+        if (pages.isEmpty || !mounted) return;
+        context.read<AppState>().setPages(pages);
+        context.push(AppRoutes.gradingContext);
         return;
       }
 

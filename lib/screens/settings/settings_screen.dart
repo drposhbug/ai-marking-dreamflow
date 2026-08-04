@@ -7,7 +7,6 @@ import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
-import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/region_picker.dart';
@@ -24,7 +23,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _alertsNew = true;
   bool _alertsTriage = true;
   bool _weekly = false;
-  bool _share = false;
   String _modeLabel(GradingMode m) => switch (m) {
     GradingMode.homework => 'Homework',
     GradingMode.testQuiz => 'Test / Quiz',
@@ -490,7 +488,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _ToggleRow(title: 'New submission alerts', value: _alertsNew, onChanged: (v) => setState(() => _alertsNew = v)),
                   _ToggleRow(title: 'Triage flag alerts', value: _alertsTriage, onChanged: (v) => setState(() => _alertsTriage = v)),
                   _ToggleRow(title: 'Weekly summary', value: _weekly, onChanged: (v) => setState(() => _weekly = v)),
-                  _ToggleRow(title: 'Share results with students', value: _share, onChanged: (v) => setState(() => _share = v)),
                 ],
               ),
             ),
