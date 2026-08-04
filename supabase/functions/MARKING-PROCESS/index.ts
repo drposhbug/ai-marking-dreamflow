@@ -795,7 +795,11 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
 
   const anthropic = new Anthropic({ apiKey });
   const response = await anthropic.messages.create({
-    model: "claude-opus-4-8",
+    // Sonnet-class: ~5x cheaper than Opus with near-equal marking quality
+    // against an answer key — this single choice is what makes the $19.99
+    // pricing profitable. Revisit routing (cheaper objective tier, premium
+    // essay tier) when more provider keys are configured.
+    model: "claude-sonnet-5",
     max_tokens: 16000,
     thinking: { type: "adaptive" },
     // "medium" keeps grading well inside the edge-function time limit;
@@ -831,9 +835,12 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
 // any single account inside a hard monthly budget with daily/weekly pacing
 // so one teacher can't quietly blow the API bill. Cache hits are free and
 // never gated. Checks fail OPEN: an error in metering never blocks marking.
-const PRICE_IN_PER_M = 15; // USD per 1M input tokens
-const PRICE_OUT_PER_M = 75; // USD per 1M output tokens
-const LIMIT_DAILY_USD = 2.5; // pacing: about one class set per day
+// Sonnet-class standard pricing (post-Sep 2026 rates, so the meter doesn't
+// under-count once the intro pricing ends). At ~$0.02-0.04/test this cap is
+// roughly 250-400 marked tests a month with a ~60+/day pace.
+const PRICE_IN_PER_M = 3; // USD per 1M input tokens
+const PRICE_OUT_PER_M = 15; // USD per 1M output tokens
+const LIMIT_DAILY_USD = 2.5; // pacing: multiple class sets per day
 const LIMIT_WEEKLY_USD = 6.0; // pacing across a week
 const LIMIT_MONTHLY_USD = 10.0; // the hard cap
 
