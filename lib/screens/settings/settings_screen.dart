@@ -59,16 +59,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Markless Pro', style: Theme.of(context).textTheme.titleLarge),
+              Text('Markless plans', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 4),
-              Text('\$19.99 / month  ·  \$179.99 / year (≈ \$15/mo)', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w800)),
+              Text('Start with a 7-day free trial', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
-              const Text('•  15% of your subscription funds a classroom — you pick whose'),
-              const Text('•  Hundreds of marked tests every month'),
-              const Text('•  Planning, Drive auto-save, priority marking'),
+              const Text('•  Starter — \$6.99/mo · 120 marks a month'),
+              const Text('•  Pro ⭐ — \$14.99/mo · 400 marks (best value)'),
+              const Text('•  Pro Annual — \$119.99/yr (≈ \$10/mo) · 400 marks'),
+              const Text('•  School — \$24.99/mo · 900 marks'),
+              const SizedBox(height: 10),
+              const Text('Every paid plan sends 15% to a classroom — you pick whose.'),
               const SizedBox(height: 12),
               Text(
-                'Pro launches with the app-store release. During the preview you\'re on the standard allowance.',
+                'Plans launch with the app-store release. During the preview you\'re on the Pro allowance.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
               ),
             ],
@@ -590,9 +593,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: Text('Marking allowance', style: Theme.of(context).textTheme.titleSmall)),
+                        Expanded(child: Text(_usage == null ? 'Marking allowance' : 'Marking allowance · ${_usage!.planLabel}', style: Theme.of(context).textTheme.titleSmall)),
                         Text(
-                          _usage == null ? '—' : '${_usage!.monthPct}% used',
+                          _usage == null ? '—' : '${_usage!.marksMonth} / ${_usage!.capMonthly}',
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
                         ),
                       ],
@@ -605,15 +608,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 8),
                     Text(
                       _usage == null
-                          ? 'This month\'s included marking. Cache hits and repeats are always free.'
-                          : 'This month: ${_usage!.monthPct}% · today\'s pace: ${_usage!.dayPct}% · this week: ${_usage!.weekPct}%. Daily and weekly pacing keeps the allowance lasting all month; cache hits are always free.',
+                          ? 'Marks used this month. Cache hits and repeats are always free.'
+                          : '${_usage!.marksMonth} of ${_usage!.capMonthly} marks used this month · today\'s pace ${_usage!.dayPct}% · this week ${_usage!.weekPct}%. Daily and weekly pacing keeps the allowance lasting all month; repeats are always free.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                     ),
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
                       onPressed: _showUpgradeSheet,
                       icon: const Icon(Icons.workspace_premium_rounded, size: 18),
-                      label: const Text('Markless Plus — more marking'),
+                      label: const Text('See plans'),
                     ),
                   ],
                 ),

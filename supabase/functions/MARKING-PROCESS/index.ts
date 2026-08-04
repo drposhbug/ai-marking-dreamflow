@@ -836,13 +836,33 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
 // so one teacher can't quietly blow the API bill. Cache hits are free and
 // never gated. Checks fail OPEN: an error in metering never blocks marking.
 // Sonnet-class standard pricing (post-Sep 2026 rates, so the meter doesn't
-// under-count once the intro pricing ends). At ~$0.02-0.04/test this cap is
-// roughly 250-400 marked tests a month with a ~60+/day pace.
+// under-count once the intro pricing ends).
 const PRICE_IN_PER_M = 3; // USD per 1M input tokens
 const PRICE_OUT_PER_M = 15; // USD per 1M output tokens
-const LIMIT_DAILY_USD = 2.5; // pacing: multiple class sets per day
-const LIMIT_WEEKLY_USD = 6.0; // pacing across a week
-const LIMIT_MONTHLY_USD = 10.0; // the hard cap
+
+// ---------- Plans & mark caps ----------
+// Caps are counted in fresh marks (cache hits are free). Daily/weekly
+// pacing lets a full test day through while keeping the month intact.
+// The usd backstop (~$0.05/mark headroom) only exists to catch
+// pathological many-page scans; normal use never touches it.
+const PLAN_CAPS: Record<string, { monthly: number; daily: number; weekly: number; plans: number; label: string }> = {
+  trial: { monthly: 30, daily: 15, weekly: 30, plans: 5, label: "Free Trial" },
+  starter: { monthly: 120, daily: 30, weekly: 60, plans: 10, label: "Starter" },
+  pro: { monthly: 400, daily: 100, weekly: 200, plans: 30, label: "Pro" },
+  school: { monthly: 900, daily: 225, weekly: 450, plans: 60, label: "School" },
+  // Pre-launch preview accounts get Pro-level room.
+  preview: { monthly: 400, daily: 100, weekly: 200, plans: 30, label: "Preview" },
+};
+
+async function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
+  try {
+    const { data } = await serviceDb().from("profiles").select("plan").eq("teacher_id", teacherId).maybeSingle();
+    const p = String(data?.plan ?? "").trim().toLowerCase();
+    return (p in PLAN_CAPS ? p : "preview") as keyof typeof PLAN_CAPS;
+  } catch {
+    return "preview";
+  }
+}
 
 function usdFor(inputTokens: number, outputTokens: number): number {
   return (inputTokens * PRICE_IN_PER_M) / 1e6 + (outputTokens * PRICE_OUT_PER_M) / 1e6;
@@ -864,6 +884,26 @@ async function logUsage(teacherId: string, action: string, inputTokens: number, 
   }
 }
 
+function periodStarts(): { day: string; week: string; month: string } {
+  const now = new Date();
+  return {
+    day: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString(),
+    week: new Date(now.getTime() - 7 * 86400_000).toISOString(),
+    month: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
+  };
+}
+
+async function countSince(teacherId: string, action: string, sinceIso: string): Promise<number> {
+  const { count, error } = await serviceDb()
+    .from("usage_log")
+    .select("id", { count: "exact", head: true })
+    .eq("teacher_id", teacherId)
+    .eq("action", action)
+    .gte("created_at", sinceIso);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 async function spendSince(teacherId: string, sinceIso: string): Promise<number> {
   const { data, error } = await serviceDb()
     .from("usage_log")
@@ -875,34 +915,29 @@ async function spendSince(teacherId: string, sinceIso: string): Promise<number> 
   return (data ?? []).reduce((s: number, r: any) => s + Number(r.cost_usd ?? 0), 0);
 }
 
-async function getSpend(teacherId: string): Promise<{ day: number; week: number; month: number }> {
-  const now = new Date();
-  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-  const weekStart = new Date(now.getTime() - 7 * 86400_000).toISOString();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-  const [day, week, month] = await Promise.all([
-    spendSince(teacherId, dayStart),
-    spendSince(teacherId, weekStart),
-    spendSince(teacherId, monthStart),
-  ]);
-  return { day, week, month };
-}
-
-/// Null when within budget; otherwise the 429 response to return.
+/// Null when within the plan's caps; otherwise the 429 response to return.
 async function budgetGate(teacherId: string, pacing: boolean): Promise<Response | null> {
   if (!teacherId) return null;
   try {
-    const s = await getSpend(teacherId);
+    const plan = await planFor(teacherId);
+    const caps = PLAN_CAPS[plan];
+    const p = periodStarts();
+    const [day, week, month, monthUsd] = await Promise.all([
+      countSince(teacherId, "grade", p.day),
+      countSince(teacherId, "grade", p.week),
+      countSince(teacherId, "grade", p.month),
+      spendSince(teacherId, p.month),
+    ]);
     const block = (scope: string, message: string): Response =>
-      json({ error: "usage_limit", scope, message }, 429);
-    if (s.month >= LIMIT_MONTHLY_USD) {
-      return block("monthly", "You've used this month's included marking. It resets on the 1st — or upgrade to Markless Plus for about 2.5× more.");
+      json({ error: "usage_limit", scope, plan, message }, 429);
+    if (month >= caps.monthly || monthUsd >= caps.monthly * 0.05) {
+      return block("monthly", `You've used all ${caps.monthly} marks in your ${caps.label} plan this month. It resets on the 1st — or upgrade for more.`);
     }
-    if (pacing && s.week >= LIMIT_WEEKLY_USD) {
-      return block("weekly", "You've hit this week's marking pace. It frees up as the week rolls on — or upgrade to Markless Plus for more headroom.");
+    if (pacing && week >= caps.weekly) {
+      return block("weekly", `You've hit this week's pace (${caps.weekly} marks). It frees up as the week rolls on — or upgrade for more headroom.`);
     }
-    if (pacing && s.day >= LIMIT_DAILY_USD) {
-      return block("daily", "You've hit today's marking pace. It resets tomorrow — or upgrade to Markless Plus for more headroom.");
+    if (pacing && day >= caps.daily) {
+      return block("daily", `You've hit today's pace (${caps.daily} marks). It resets tomorrow — or upgrade for more headroom.`);
     }
     return null;
   } catch (e) {
@@ -1064,11 +1099,26 @@ Deno.serve(async (req) => {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
     try {
-      const s = await getSpend(teacherId);
+      const plan = await planFor(teacherId);
+      const caps = PLAN_CAPS[plan];
+      const p = periodStarts();
+      const [day, week, month] = await Promise.all([
+        countSince(teacherId, "grade", p.day),
+        countSince(teacherId, "grade", p.week),
+        countSince(teacherId, "grade", p.month),
+      ]);
       return json({
-        dayPct: Math.min(100, Math.round((s.day / LIMIT_DAILY_USD) * 100)),
-        weekPct: Math.min(100, Math.round((s.week / LIMIT_WEEKLY_USD) * 100)),
-        monthPct: Math.min(100, Math.round((s.month / LIMIT_MONTHLY_USD) * 100)),
+        plan,
+        planLabel: caps.label,
+        marksMonth: month,
+        capMonthly: caps.monthly,
+        marksDay: day,
+        capDaily: caps.daily,
+        marksWeek: week,
+        capWeekly: caps.weekly,
+        dayPct: Math.min(100, Math.round((day / caps.daily) * 100)),
+        weekPct: Math.min(100, Math.round((week / caps.weekly) * 100)),
+        monthPct: Math.min(100, Math.round((month / caps.monthly) * 100)),
       });
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, 500);
@@ -1167,11 +1217,26 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fresh plans count toward the monthly budget (no daily pacing — plans
-    // are cheap and often cached).
+    // Fresh plans have their own monthly count per plan tier (cache hits
+    // above are free and unlimited).
     const planTeacherId = String(payload?.teacherId ?? "").trim();
-    const planGate = await budgetGate(planTeacherId, false);
-    if (planGate) return planGate;
+    if (planTeacherId) {
+      try {
+        const tier = await planFor(planTeacherId);
+        const caps = PLAN_CAPS[tier];
+        const made = await countSince(planTeacherId, "plan", periodStarts().month);
+        if (made >= caps.plans) {
+          return json({
+            error: "usage_limit",
+            scope: "monthly",
+            plan: tier,
+            message: `You've used all ${caps.plans} fresh drafts in your ${caps.label} plan this month — popular topics still come back free from the cache. Upgrade for more.`,
+          }, 429);
+        }
+      } catch (e) {
+        console.error("plan gate failed:", e instanceof Error ? e.message : e);
+      }
+    }
 
     const prompt = `You are an expert teacher's planning assistant. Create a ${kind} for the request below — complete and classroom-ready, so the teacher can use it as-is.
 ${planGrade ? `Grade level: ${planGrade} — target that grade's expectations and difficulty.` : ""}
