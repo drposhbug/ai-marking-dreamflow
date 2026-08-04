@@ -6,6 +6,7 @@ import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
@@ -47,11 +48,78 @@ class _ResultScreenState extends State<ResultScreen> {
     return single == null ? const [] : [single];
   }
 
+  bool _exportingToDrive = false;
+
   @override
   void initState() {
     super.initState();
     _result = widget.gradeResult;
     _displayFormat = _result?.gradingFormat ?? 'percentage';
+  }
+
+  static String _esc(String s) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+  /// The marked result as a Google Doc in the teacher's Drive ("Markless"
+  /// folder): score, feedback, per-question notes, and the transcription.
+  Future<void> _saveToDrive(AiGradeResult result, String? studentName) async {
+    setState(() => _exportingToDrive = true);
+    try {
+      final name = (studentName != null && studentName.trim().isNotEmpty)
+          ? studentName.trim()
+          : (result.studentNameOnPaper ?? 'Unnamed student');
+      final now = DateTime.now();
+      final date = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final score = result.gradingFormat == 'levels' && result.levelDisplay != null
+          ? '${result.levelDisplay} · ${result.percentageDisplay}'
+          : '${result.percentageDisplay} (${result.rawScore.toStringAsFixed(result.rawScore % 1 == 0 ? 0 : 1)}/${result.maxScore.toStringAsFixed(result.maxScore % 1 == 0 ? 0 : 1)})';
+
+      final b = StringBuffer()
+        ..write('<h1>${_esc(name)} — ${_esc(result.detectedSubject)}</h1>')
+        ..write('<p><b>Marked:</b> $date &nbsp; <b>Score:</b> ${_esc(score)}</p>')
+        ..write('<h2>Summary</h2><p>${_esc(result.summary)}</p>');
+      if (result.strengths.isNotEmpty) {
+        b.write('<h2>Strengths</h2><ul>${result.strengths.map((s) => '<li>${_esc(s)}</li>').join()}</ul>');
+      }
+      if (result.improvements.isNotEmpty) {
+        b.write('<h2>Areas to improve</h2><ul>${result.improvements.map((s) => '<li>${_esc(s)}</li>').join()}</ul>');
+      }
+      if (result.criteriaBreakdown.isNotEmpty) {
+        b.write('<h2>Criteria</h2><ul>');
+        for (final c in result.criteriaBreakdown) {
+          b.write('<li><b>${_esc(c.name)}:</b> ${c.score.toStringAsFixed(c.score % 1 == 0 ? 0 : 1)}/${c.maxScore.toStringAsFixed(c.maxScore % 1 == 0 ? 0 : 1)} — ${_esc(c.feedback)}</li>');
+        }
+        b.write('</ul>');
+      }
+      if (result.annotations.isNotEmpty) {
+        b.write('<h2>Question notes</h2><ul>');
+        for (final a in result.annotations) {
+          b.write('<li><b>${_esc(a.questionLabel)}</b> ${_esc(a.earnedMark)}${_esc(a.outOfMark)} (${a.correct ? 'correct' : 'needs work'}): ${_esc(a.feedback)}</li>');
+        }
+        b.write('</ul>');
+      }
+      if (result.rawText.trim().isNotEmpty) {
+        b.write('<h2>Transcription</h2><p>${_esc(result.rawText).replaceAll('\n', '<br>')}</p>');
+      }
+
+      final link = await DriveService().uploadDoc(title: 'Marked — $name — $date', html: b.toString());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(link == null || link.isEmpty
+            ? 'Saved to Google Drive → Markless folder.'
+            : 'Saved to Google Drive → Markless folder ✓'),
+      ));
+    } on DriveAuthException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Google Drive isn\'t connected — sign out, then sign in with Google to link Drive.'),
+      ));
+    } catch (e) {
+      debugPrint('Drive export failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Drive export failed: $e')));
+    } finally {
+      if (mounted) setState(() => _exportingToDrive = false);
+    }
   }
 
   void _toggleFormat() {
@@ -268,8 +336,11 @@ class _ResultScreenState extends State<ResultScreen> {
         title: const Text('Result'),
         actions: [
           IconButton(
-            onPressed: () {},
-            icon: Icon(Icons.ios_share_rounded, color: AiMarkerColors.neutral),
+            onPressed: (_exportingToDrive || result == null) ? null : () => _saveToDrive(result, student?.name),
+            tooltip: 'Save to Google Drive',
+            icon: _exportingToDrive
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(Icons.add_to_drive_rounded, color: AiMarkerColors.neutral),
           ),
         ],
       ),

@@ -184,7 +184,13 @@ class AuthService extends ChangeNotifier {
       if (state.session != null && !completer.isCompleted) completer.complete();
     });
     try {
-      await client.auth.signInWithOAuth(provider, redirectTo: 'com.markless.app://login-callback');
+      await client.auth.signInWithOAuth(
+        provider,
+        redirectTo: 'com.markless.app://login-callback',
+        // Google sign-ins also connect Drive (drive.file = only files this
+        // app creates), so marked tests can be exported to a Drive folder.
+        scopes: provider == OAuthProvider.google ? 'https://www.googleapis.com/auth/drive.file' : null,
+      );
       await completer.future.timeout(
         const Duration(minutes: 3),
         onTimeout: () => throw Exception('Sign-in wasn\'t completed — try again.'),
