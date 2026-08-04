@@ -983,7 +983,27 @@ Deno.serve(async (req) => {
       ? Math.round(clamp(payload.gradeLevel, 1, 13, 6))
       : null;
     const subject = String(payload?.subject ?? "").trim().slice(0, 80);
-    const planRegion = CURRICULA[String(payload?.region ?? "").trim()];
+    const regionId = String(payload?.region ?? "").trim();
+    const planRegion = CURRICULA[regionId];
+
+    // Cross-teacher cache: the same request (normalized) from any teacher
+    // is served instantly and costs nothing.
+    const planKey = "plan:" + (await sha256Hex(JSON.stringify({
+      v: CACHE_VERSION,
+      topic: topic.toLowerCase().replace(/\s+/g, " "),
+      kind: kind.toLowerCase(),
+      grade: planGrade,
+      subject: subject.toLowerCase(),
+      region: regionId,
+    })));
+    const hit = await cacheRead(planKey);
+    if (hit) {
+      return json({
+        title: String(hit.raw?.title ?? "Untitled plan"),
+        content: String(hit.raw?.content ?? ""),
+        cached: true,
+      });
+    }
 
     const prompt = `You are an expert teacher's planning assistant. Create a ${kind} for the request below — complete and classroom-ready, so the teacher can use it as-is.
 ${planGrade ? `Grade level: ${planGrade} — target that grade's expectations and difficulty.` : ""}
@@ -997,10 +1017,17 @@ Rules:
 - content: the full ${kind} with clear section headings.
 - Lesson plans include: learning goals, materials, a timed flow (minds-on, action, consolidation), differentiation, and a quick check for understanding.
 - Assignments, quizzes, and worksheets include: numbered questions with marks per question, the total marks, and a complete ANSWER KEY section at the end.
-- Match everything to the grade level; keep it practical, no filler.`;
+- Match everything to the grade level; keep it practical, no filler.
+
+FORMATTING (strict — the app renders plain text, so markdown reads as clutter):
+- NO markdown syntax at all: no ** or *, no ## headings, no --- or ___ dividers, no backticks, no | tables.
+- Section headings go on their own line in Title Case ending with a colon, e.g. "Learning Goals:".
+- Bullet points start with "• "; questions are numbered "1.", "2.", ...
+- Never write underscore subscripts like v_i or v_f. Use Unicode where it exists (v₀, v₁, t₂, x², m/s²) and otherwise plain compact form (vi, vf, Ek).`;
 
     // deno-lint-ignore no-explicit-any
     let raw: any = null;
+    let provider = "claude";
     const errs: string[] = [];
     try {
       raw = await callClaude([], "image/jpeg", { userText: prompt, schema: PLAN_SCHEMA });
@@ -1008,15 +1035,18 @@ Rules:
       errs.push(`claude: ${e instanceof Error ? e.message : e}`);
       try {
         raw = await callGemini([], "image/jpeg", prompt, PLAN_SHAPE);
+        provider = "gemini";
       } catch (e2) {
         errs.push(`gemini: ${e2 instanceof Error ? e2.message : e2}`);
         return json({ error: "Planning failed", details: errs }, 502);
       }
     }
-    return json({
+    const out = {
       title: String(raw?.title ?? "Untitled plan"),
       content: String(raw?.content ?? ""),
-    });
+    };
+    await cacheWrite(planKey, provider, out, []);
+    return json(out);
   }
 
   // ── School-name autocomplete while typing (text-only, no images) ───────

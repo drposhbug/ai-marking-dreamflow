@@ -37,7 +37,107 @@ class _SavedPlan {
       );
 }
 
-class _PlanningScreenState extends State<PlanningScreen> {
+/// Unicode subscript glyphs for tidying v_i / t_0 style notation.
+const _subscriptMap = {
+  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+  'a': 'ₐ', 'e': 'ₑ', 'h': 'ₕ', 'i': 'ᵢ', 'j': 'ⱼ', 'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ',
+  'o': 'ₒ', 'p': 'ₚ', 'r': 'ᵣ', 's': 'ₛ', 't': 'ₜ', 'u': 'ᵤ', 'v': 'ᵥ', 'x': 'ₓ',
+};
+
+/// v_i → vᵢ, t_0 → t₀; when a letter has no Unicode subscript (like f) the
+/// underscore is simply dropped: v_f → vf. Handles v_{max} braces too.
+String tidyPlanText(String s) {
+  return s.replaceAllMapped(RegExp(r'([A-Za-zΔθω])_\{?([A-Za-z0-9]{1,4})\}?'), (m) {
+    final sub = m.group(2)!;
+    final mapped = sub.split('').map((c) => _subscriptMap[c.toLowerCase()]).toList();
+    if (mapped.every((c) => c != null)) return m.group(1)! + mapped.join();
+    return m.group(1)! + sub;
+  });
+}
+
+bool _isDividerLine(String l) {
+  final t = l.trim();
+  return t.length >= 3 && RegExp(r'^[-=_*·—–\s]+$').hasMatch(t);
+}
+
+/// Plain text for the clipboard: subscripts tidied, markdown markers and
+/// divider lines stripped.
+String planCopyText(String s) {
+  final lines = tidyPlanText(s).split('\n').where((l) => !_isDividerLine(l));
+  return lines.join('\n').replaceAll('**', '').replaceAll(RegExp(r'^#+\s*', multiLine: true), '');
+}
+
+/// Renders a plan neatly: bold section headings, clean bullets, tidied
+/// subscripts — markdown clutter (**, ##, ---) is converted or dropped
+/// instead of shown raw.
+class _PlanContent extends StatelessWidget {
+  final String content;
+  const _PlanContent({required this.content});
+
+  List<InlineSpan> _inline(String text, TextStyle base) {
+    final spans = <InlineSpan>[];
+    var idx = 0;
+    for (final m in RegExp(r'\*\*(.+?)\*\*').allMatches(text)) {
+      if (m.start > idx) spans.add(TextSpan(text: text.substring(idx, m.start)));
+      spans.add(TextSpan(text: m.group(1), style: base.copyWith(fontWeight: FontWeight.w800)));
+      idx = m.end;
+    }
+    if (idx < text.length) spans.add(TextSpan(text: text.substring(idx)));
+    return spans;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final body = theme.textTheme.bodyMedium!.copyWith(height: 1.45);
+    final heading = theme.textTheme.titleSmall!.copyWith(fontWeight: FontWeight.w800);
+
+    final children = <Widget>[];
+    for (final rawLine in tidyPlanText(content).split('\n')) {
+      final line = rawLine.trimRight();
+      final t = line.trim();
+      if (t.isEmpty) {
+        children.add(const SizedBox(height: 8));
+        continue;
+      }
+      if (_isDividerLine(t)) continue;
+
+      // Headings: "## Title", "**Title**" alone, or short "Title:" lines.
+      var h = t.replaceFirst(RegExp(r'^#+\s*'), '');
+      final wrappedBold = RegExp(r'^\*\*(.+)\*\*:?$').firstMatch(h);
+      if (wrappedBold != null) h = '${wrappedBold.group(1)!}${h.endsWith(':') ? ':' : ''}';
+      final looksLikeHeading = h != t || (h.endsWith(':') && h.length <= 60 && !RegExp(r'^\d').hasMatch(h));
+      if (looksLikeHeading && !h.startsWith('•') && !h.startsWith('-')) {
+        children.add(Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 2),
+          child: Text(h.replaceAll('**', ''), style: heading),
+        ));
+        continue;
+      }
+
+      // Bullets: •, -, or * markers.
+      final bullet = RegExp(r'^[•\-\*]\s+(.*)$').firstMatch(t);
+      if (bullet != null) {
+        children.add(Padding(
+          padding: const EdgeInsets.only(left: 6, bottom: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('•  ', style: body.copyWith(fontWeight: FontWeight.w700)),
+              Expanded(child: Text.rich(TextSpan(style: body, children: _inline(bullet.group(1)!, body)))),
+            ],
+          ),
+        ));
+        continue;
+      }
+
+      children.add(Text.rich(TextSpan(style: body, children: _inline(t, body))));
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+  }
+}
+
+class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProviderStateMixin {
   static const _kinds = ['Lesson plan', 'Test', 'Quiz', 'Assignment', 'Worksheet'];
 
   final _topic = TextEditingController();
@@ -46,6 +146,11 @@ class _PlanningScreenState extends State<PlanningScreen> {
   bool _generating = false;
   GeneratedPlan? _result;
   List<_SavedPlan> _history = const [];
+
+  /// Drives the "generating… N%" display. Progress isn't knowable for a
+  /// single API call, so it eases toward ~92% over the typical duration
+  /// and snaps to done when the draft arrives.
+  late final AnimationController _progress = AnimationController(vsync: this, duration: const Duration(seconds: 28));
 
   String _plansKey(String teacherId) => 'ai_marker.plans.v1.$teacherId';
 
@@ -57,6 +162,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
 
   @override
   void dispose() {
+    _progress.dispose();
     _topic.dispose();
     super.dispose();
   }
@@ -91,6 +197,9 @@ class _PlanningScreenState extends State<PlanningScreen> {
       _generating = true;
       _result = null;
     });
+    _progress
+      ..reset()
+      ..forward();
     try {
       final app = context.read<AppState>();
       final klass = _classId == null ? null : context.read<ClassesService>().getById(_classId!);
@@ -112,12 +221,13 @@ class _PlanningScreenState extends State<PlanningScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not create that — try again in a moment.')));
     } finally {
+      _progress.stop();
       if (mounted) setState(() => _generating = false);
     }
   }
 
   Future<void> _copy(String content) async {
-    await Clipboard.setData(ClipboardData(text: content));
+    await Clipboard.setData(ClipboardData(text: planCopyText(content)));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied — paste it anywhere.')));
   }
@@ -196,6 +306,38 @@ class _PlanningScreenState extends State<PlanningScreen> {
                   : const Icon(Icons.auto_awesome_rounded),
               label: Text(_generating ? 'Drafting…' : 'Create $_kind'),
             ),
+            if (_generating) ...[
+              const SizedBox(height: 14),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: AnimatedBuilder(
+                    animation: _progress,
+                    builder: (context, _) {
+                      final pct = (Curves.easeOutCubic.transform(_progress.value) * 92).clamp(3.0, 92.0).round();
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: Text('Mark is drafting your ${_kind.toLowerCase()}…', style: Theme.of(context).textTheme.titleSmall)),
+                              Text('$pct%', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: LinearProgressIndicator(value: pct / 100, minHeight: 8),
+                          ),
+                          const SizedBox(height: 8),
+                          Text('Usually 15–30 seconds. Popular topics come back instantly.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
             if (_result != null) ...[
               const SizedBox(height: 18),
               Card(
@@ -215,7 +357,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      SelectableText(_result!.content, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.45)),
+                      SelectionArea(child: _PlanContent(content: _result!.content)),
                     ],
                   ),
                 ),
