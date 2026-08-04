@@ -125,10 +125,20 @@ class UsageLimitException implements Exception {
 }
 
 class UsageSummary {
+  final String planLabel;
+  final int marksMonth;
+  final int capMonthly;
   final int dayPct;
   final int weekPct;
   final int monthPct;
-  const UsageSummary({required this.dayPct, required this.weekPct, required this.monthPct});
+  const UsageSummary({
+    required this.planLabel,
+    required this.marksMonth,
+    required this.capMonthly,
+    required this.dayPct,
+    required this.weekPct,
+    required this.monthPct,
+  });
 }
 
 class ReferralStatus {
@@ -426,6 +436,9 @@ class AiGradingService {
     final data = res.data;
     if (data is Map) {
       return UsageSummary(
+        planLabel: (data['planLabel'] ?? 'Preview').toString(),
+        marksMonth: (data['marksMonth'] as num?)?.toInt() ?? 0,
+        capMonthly: (data['capMonthly'] as num?)?.toInt() ?? 0,
         dayPct: (data['dayPct'] as num?)?.toInt() ?? 0,
         weekPct: (data['weekPct'] as num?)?.toInt() ?? 0,
         monthPct: (data['monthPct'] as num?)?.toInt() ?? 0,

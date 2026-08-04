@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
       )`;
     await sql`alter table public.usage_log enable row level security`;
     await sql`create index if not exists usage_log_teacher_time_idx on public.usage_log (teacher_id, created_at desc)`;
+    await sql`alter table public.profiles add column if not exists plan text`;
     await sql`alter table public.profiles add column if not exists referral_code text`;
     await sql`alter table public.profiles add column if not exists referred_by text`;
     await sql`alter table public.profiles add column if not exists referral_count int not null default 0`;
