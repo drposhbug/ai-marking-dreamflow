@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
@@ -120,6 +121,7 @@ class GradingQueueService extends ChangeNotifier {
       messengerKey?.currentState?.showSnackBar(
         SnackBar(content: Text('${job.label} is marked (${res.primaryDisplay}) — open it from the Marking tray.')),
       );
+      _maybeAutoSaveToDrive(job, res); // deliberately not awaited
     } catch (e) {
       debugPrint('GradingQueueService job failed: $e');
       job.status = GradingJobStatus.error;
@@ -127,6 +129,27 @@ class GradingQueueService extends ChangeNotifier {
       notifyListeners();
       messengerKey?.currentState?.showSnackBar(
         SnackBar(content: Text('Marking failed for ${job.label} — tap it in the tray to retry.')),
+      );
+    }
+  }
+
+  /// Opt-in (Settings → Auto-save to Google Drive): every marked result is
+  /// exported to the teacher's Drive automatically, with a notification so
+  /// they always know a copy went there.
+  Future<void> _maybeAutoSaveToDrive(GradingJob job, AiGradeResult res) async {
+    try {
+      final drive = DriveService();
+      if (!await drive.autoSaveEnabled(job.req.teacherId)) return;
+      if (!drive.isConnected) return;
+      final paperName = res.studentNameOnPaper?.trim() ?? '';
+      await drive.uploadMarkedResult(result: res, studentName: paperName.isNotEmpty ? paperName : job.label);
+      messengerKey?.currentState?.showSnackBar(
+        SnackBar(content: Text('${job.label}: marked copy saved to Google Drive → Markless folder.')),
+      );
+    } catch (e) {
+      debugPrint('Drive auto-save failed: $e');
+      messengerKey?.currentState?.showSnackBar(
+        SnackBar(content: Text('${job.label}: couldn\'t auto-save to Google Drive — you can retry from the result screen.')),
       );
     }
   }

@@ -7,6 +7,7 @@ import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
+import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/region_picker.dart';
@@ -23,6 +24,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _alertsNew = true;
   bool _alertsTriage = true;
   bool _weekly = false;
+  bool _driveAutoSave = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() async {
+      if (!mounted) return;
+      final auth = context.read<AuthService>().currentUser;
+      if (auth == null) return;
+      final v = await DriveService().autoSaveEnabled(auth.id);
+      if (mounted) setState(() => _driveAutoSave = v);
+    });
+  }
+
+  /// Opt-in consent for automatic Drive export — requires a Google session
+  /// so the export can actually happen.
+  Future<void> _setDriveAutoSave(bool v) async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    if (v && !DriveService().isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Connect Google first: sign out, then sign in with Google to link Drive.')),
+      );
+      return;
+    }
+    setState(() => _driveAutoSave = v);
+    await DriveService().setAutoSave(auth.id, v);
+    if (!mounted || !v) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Every marked test will now also be saved to your Drive\'s Markless folder — you\'ll see a note each time.')),
+    );
+  }
   String _modeLabel(GradingMode m) => switch (m) {
     GradingMode.homework => 'Homework',
     GradingMode.testQuiz => 'Test / Quiz',
@@ -475,6 +508,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: 'Answer Keys',
                     subtitle: 'Scan or manage saved answer keys',
                     onTap: () => context.go(AppRoutes.library),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text('GOOGLE DRIVE', style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
+            const SizedBox(height: 10),
+            Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ToggleRow(title: 'Auto-save marked tests to Drive', value: _driveAutoSave, onChanged: _setDriveAutoSave),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text(
+                      'With your consent, every marked test is saved as a Google Doc in your Drive\'s "Markless" folder the moment marking finishes — and you get a notification each time. Requires signing in with Google.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                    ),
                   ),
                 ],
               ),
