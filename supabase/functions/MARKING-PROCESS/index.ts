@@ -1094,6 +1094,45 @@ Deno.serve(async (req) => {
     return json({ schools: names });
   }
 
+  // ── Margin smoke alarm: aggregate unit economics (avg $/mark). Gated by
+  //    the ADMIN_STATS_KEY secret — for the founder, not the app. ─────────
+  if (action === "admin_stats") {
+    const expected = Deno.env.get("ADMIN_STATS_KEY") ?? "";
+    if (!expected || String(payload?.adminKey ?? "") !== expected) {
+      return json({ error: "Not authorized" }, 403);
+    }
+    // deno-lint-ignore no-explicit-any
+    const summarize = (rows: any[]) => {
+      const by: Record<string, { count: number; usd: number }> = {};
+      for (const r of rows) {
+        const a = String(r.action);
+        by[a] = by[a] ?? { count: 0, usd: 0 };
+        by[a].count++;
+        by[a].usd += Number(r.cost_usd ?? 0);
+      }
+      const grade = by["grade"] ?? { count: 0, usd: 0 };
+      return {
+        byAction: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, { count: v.count, usd: Number(v.usd.toFixed(4)) }])),
+        avgUsdPerMark: grade.count ? Number((grade.usd / grade.count).toFixed(4)) : null,
+        totalUsd: Number(Object.values(by).reduce((s, v) => s + v.usd, 0).toFixed(4)),
+      };
+    };
+    const fetchRows = async (since: string) => {
+      const { data, error } = await serviceDb().from("usage_log").select("action, cost_usd").gte("created_at", since);
+      if (error) throw error;
+      return data ?? [];
+    };
+    try {
+      const [r7, r30] = await Promise.all([
+        fetchRows(new Date(Date.now() - 7 * 86400_000).toISOString()),
+        fetchRows(new Date(Date.now() - 30 * 86400_000).toISOString()),
+      ]);
+      return json({ last7Days: summarize(r7), last30Days: summarize(r30) });
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  }
+
   // ── Usage meter for the app's Settings screen ─────────────────────────
   if (action === "get_usage") {
     const teacherId = String(payload?.teacherId ?? "").trim();
