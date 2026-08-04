@@ -384,8 +384,24 @@ class AiGradingService {
   }
 
   /// Autocomplete suggestions while the teacher types their school's name.
+  /// Checks the shared school directory first (fast, alphabetical, grown
+  /// from every saved profile); falls back to AI suggestions while the
+  /// directory is still filling in.
   Future<List<String>> suggestSchools({required String query}) async {
     final client = Supabase.instance.client;
+    try {
+      final res = await client.functions.invoke(
+        'MARKING-PROCESS',
+        body: {'action': 'search_schools', 'query': query},
+      );
+      final data = res.data;
+      if (data is Map && data['schools'] is List) {
+        final names = (data['schools'] as List).whereType<String>().where((s) => s.trim().isNotEmpty).toList(growable: false);
+        if (names.isNotEmpty) return names;
+      }
+    } catch (e) {
+      debugPrint('search_schools failed: $e');
+    }
     final res = await client.functions.invoke(
       'MARKING-PROCESS',
       body: {'action': 'suggest_schools', 'query': query},

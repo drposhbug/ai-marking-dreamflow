@@ -350,7 +350,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final user = context.watch<AuthService>().currentUser;
     final appState = context.watch<AppState>();
     final classCount = context.watch<ClassesService>().classes.length;
-    final presetCount = context.watch<PresetsService>().presets.length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Grading Assistant')),
@@ -470,11 +469,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 children: [
                   _RowItem(icon: Icons.groups_2_rounded, title: 'My Classes', subtitle: null, badge: '$classCount', onTap: () => context.go(AppRoutes.classes)),
+                  // Marking schemes were removed from the UI — Mark detects
+                  // the assignment style itself. Answers (keys) live in the
+                  // bottom tab, so no stale scheme count is shown here.
                   _RowItem(
-                    icon: Icons.library_books_rounded,
-                    title: 'My Marking Schemes',
-                    subtitle: 'Your saved marking schemes',
-                    badge: '$presetCount',
+                    icon: Icons.key_rounded,
+                    title: 'Answer Keys',
+                    subtitle: 'Scan or manage saved answer keys',
                     onTap: () => context.go(AppRoutes.library),
                   ),
                 ],

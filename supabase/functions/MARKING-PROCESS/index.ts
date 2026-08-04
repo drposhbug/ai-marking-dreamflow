@@ -928,7 +928,38 @@ Deno.serve(async (req) => {
     }
     const { error } = await serviceDb().from("profiles").upsert(row, { onConflict: "teacher_id" });
     if (error) return json({ error: error.message }, 500);
+    // Grow the shared school directory: every school a teacher saves
+    // becomes an autocomplete suggestion for the next teacher.
+    if (typeof row.school === "string" && row.school.length >= 3) {
+      await serviceDb()
+        .from("schools")
+        .upsert({ name: row.school, region: row.region ?? null }, { onConflict: "name", ignoreDuplicates: true });
+    }
     return json({ ok: true });
+  }
+
+  // ── School directory search: alphabetical, prefix matches first. The
+  //    directory is crowd-grown from saved profiles; the AI-based
+  //    suggest_schools remains the fallback while it fills in. ──
+  if (action === "search_schools") {
+    const q = String(payload?.query ?? "").trim().replace(/[%_]/g, "");
+    if (q.length < 2) return json({ schools: [] });
+    const { data, error } = await serviceDb()
+      .from("schools")
+      .select("name")
+      .ilike("name", `%${q}%`)
+      .order("name", { ascending: true })
+      .limit(12);
+    if (error) return json({ error: error.message }, 500);
+    const ql = q.toLowerCase();
+    // deno-lint-ignore no-explicit-any
+    const names = (data ?? []).map((r: any) => String(r.name));
+    names.sort((a, b) => {
+      const ap = a.toLowerCase().startsWith(ql) ? 0 : 1;
+      const bp = b.toLowerCase().startsWith(ql) ? 0 : 1;
+      return ap !== bp ? ap - bp : a.localeCompare(b);
+    });
+    return json({ schools: names });
   }
 
   if (action === "get_profile") {
