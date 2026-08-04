@@ -112,6 +112,32 @@ class RegionCandidate {
   const RegionCandidate({required this.regionId, required this.label, required this.place});
 }
 
+// ---------- Usage limits & referrals ----------
+
+/// A spending limit was hit (scope: daily | weekly | monthly). The message
+/// is teacher-friendly and already suggests the upgrade.
+class UsageLimitException implements Exception {
+  final String scope;
+  final String message;
+  const UsageLimitException(this.scope, this.message);
+  @override
+  String toString() => message;
+}
+
+class UsageSummary {
+  final int dayPct;
+  final int weekPct;
+  final int monthPct;
+  const UsageSummary({required this.dayPct, required this.weekPct, required this.monthPct});
+}
+
+class ReferralStatus {
+  final String code;
+  final int count;
+  final bool planningUnlocked;
+  const ReferralStatus({required this.code, required this.count, required this.planningUnlocked});
+}
+
 // ---------- Account profile (cloud-saved, restored on sign-in) ----------
 
 class CloudProfile {
@@ -357,30 +383,104 @@ class AiGradingService {
   Future<GeneratedPlan> generatePlan({
     required String topic,
     required String kind,
+    String? teacherId,
     int? gradeLevel,
     String? subject,
     String? region,
   }) async {
     final client = Supabase.instance.client;
+    try {
+      final res = await client.functions.invoke(
+        'MARKING-PROCESS',
+        body: {
+          'action': 'plan',
+          'topic': topic,
+          'kind': kind,
+          if (teacherId != null && teacherId.isNotEmpty) 'teacherId': teacherId,
+          if (gradeLevel != null) 'gradeLevel': gradeLevel,
+          if (subject != null && subject.isNotEmpty) 'subject': subject,
+          if (region != null && region.isNotEmpty) 'region': region,
+        },
+      );
+      final data = res.data;
+      if (data is Map && data['content'] != null) {
+        return GeneratedPlan(
+          title: (data['title'] ?? 'Untitled plan').toString(),
+          content: (data['content'] ?? '').toString(),
+        );
+      }
+      throw Exception('Planning failed: $data');
+    } catch (e) {
+      _maybeThrowUsageLimit(e);
+      rethrow;
+    }
+  }
+
+  /// Usage meter (percent of the daily/weekly/monthly allowance used).
+  Future<UsageSummary> getUsage({required String teacherId}) async {
+    final client = Supabase.instance.client;
     final res = await client.functions.invoke(
       'MARKING-PROCESS',
-      body: {
-        'action': 'plan',
-        'topic': topic,
-        'kind': kind,
-        if (gradeLevel != null) 'gradeLevel': gradeLevel,
-        if (subject != null && subject.isNotEmpty) 'subject': subject,
-        if (region != null && region.isNotEmpty) 'region': region,
-      },
+      body: {'action': 'get_usage', 'teacherId': teacherId},
     );
     final data = res.data;
-    if (data is Map && data['content'] != null) {
-      return GeneratedPlan(
-        title: (data['title'] ?? 'Untitled plan').toString(),
-        content: (data['content'] ?? '').toString(),
+    if (data is Map) {
+      return UsageSummary(
+        dayPct: (data['dayPct'] as num?)?.toInt() ?? 0,
+        weekPct: (data['weekPct'] as num?)?.toInt() ?? 0,
+        monthPct: (data['monthPct'] as num?)?.toInt() ?? 0,
       );
     }
-    throw Exception('Planning failed: $data');
+    throw Exception('Usage lookup failed: $data');
+  }
+
+  /// The teacher's referral code + how many colleagues joined with it.
+  Future<ReferralStatus> getReferral({required String teacherId}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'get_referral', 'teacherId': teacherId},
+    );
+    final data = res.data;
+    if (data is Map && data['code'] != null) {
+      return ReferralStatus(
+        code: (data['code'] ?? '').toString(),
+        count: (data['count'] as num?)?.toInt() ?? 0,
+        planningUnlocked: data['planningUnlocked'] == true,
+      );
+    }
+    throw Exception('Referral lookup failed: $data');
+  }
+
+  /// Redeems a colleague's code — this unlocks Planning for THEM.
+  Future<void> redeemReferral({required String teacherId, required String code}) async {
+    final client = Supabase.instance.client;
+    try {
+      final res = await client.functions.invoke(
+        'MARKING-PROCESS',
+        body: {'action': 'redeem_referral', 'teacherId': teacherId, 'code': code},
+      );
+      final data = res.data;
+      if (data is Map && data['ok'] == true) return;
+      throw Exception((data is Map ? data['error'] : null)?.toString() ?? 'Could not redeem that code.');
+    } on FunctionException catch (e) {
+      final d = e.details;
+      throw Exception((d is Map ? d['error'] : null)?.toString() ?? 'Could not redeem that code.');
+    }
+  }
+
+  /// Converts a 429 usage_limit edge response into a typed exception so the
+  /// UI can show the friendly pacing/upgrade message.
+  static void _maybeThrowUsageLimit(Object e) {
+    if (e is FunctionException) {
+      final d = e.details;
+      if (d is Map && d['error'] == 'usage_limit') {
+        throw UsageLimitException(
+          (d['scope'] ?? '').toString(),
+          (d['message'] ?? 'Marking limit reached — upgrade for more.').toString(),
+        );
+      }
+    }
   }
 
   /// Autocomplete suggestions while the teacher types their school's name.
@@ -575,6 +675,7 @@ class AiGradingService {
       final res = await client.functions.invoke(
       'MARKING-PROCESS',
         body: {
+          'teacherId': req.teacherId,
           'imagesBase64': pages.map(base64Encode).toList(growable: false),
           'mediaType': 'image/jpeg',
           'mode': req.mode.name,
@@ -599,6 +700,7 @@ class AiGradingService {
       throw Exception('Unexpected response shape: $data');
     } catch (e) {
       debugPrint('AiGradingService.grade error: $e');
+      _maybeThrowUsageLimit(e);
       rethrow;
     }
   }

@@ -128,7 +128,12 @@ class GradingQueueService extends ChangeNotifier {
       job.error = e.toString();
       notifyListeners();
       messengerKey?.currentState?.showSnackBar(
-        SnackBar(content: Text('Marking failed for ${job.label} — tap it in the tray to retry.')),
+        SnackBar(
+          duration: e is UsageLimitException ? const Duration(seconds: 7) : const Duration(seconds: 4),
+          content: Text(e is UsageLimitException
+              ? e.message
+              : 'Marking failed for ${job.label} — tap it in the tray to retry.'),
+        ),
       );
     }
   }

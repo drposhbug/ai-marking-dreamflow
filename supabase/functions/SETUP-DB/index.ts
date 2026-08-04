@@ -60,6 +60,22 @@ Deno.serve(async (req) => {
       )`;
     await sql`alter table public.schools enable row level security`;
     await sql`create index if not exists schools_name_lower_idx on public.schools (lower(name) text_pattern_ops)`;
+    await sql`
+      create table if not exists public.usage_log (
+        id bigint generated always as identity primary key,
+        teacher_id text not null,
+        action text not null,
+        input_tokens int not null default 0,
+        output_tokens int not null default 0,
+        cost_usd numeric not null default 0,
+        created_at timestamptz not null default now()
+      )`;
+    await sql`alter table public.usage_log enable row level security`;
+    await sql`create index if not exists usage_log_teacher_time_idx on public.usage_log (teacher_id, created_at desc)`;
+    await sql`alter table public.profiles add column if not exists referral_code text`;
+    await sql`alter table public.profiles add column if not exists referred_by text`;
+    await sql`alter table public.profiles add column if not exists referral_count int not null default 0`;
+    await sql`create unique index if not exists profiles_referral_code_idx on public.profiles (referral_code)`;
     await sql.end();
     return Response.json({ ok: true });
   } catch (e) {

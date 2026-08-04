@@ -152,17 +152,110 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   /// and snaps to done when the draft arrives.
   late final AnimationController _progress = AnimationController(vsync: this, duration: const Duration(seconds: 28));
 
+  /// Planning is a thank-you feature: unlocked by referring one teacher.
+  /// null = still checking; fail-open so a network hiccup never locks it.
+  bool? _planningUnlocked;
+  String _refCode = '';
+  final _redeemCtrl = TextEditingController();
+  bool _redeeming = false;
+
   String _plansKey(String teacherId) => 'ai_marker.plans.v1.$teacherId';
+  String _unlockKey(String teacherId) => 'ai_marker.planning_unlocked.v1.$teacherId';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadHistory());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadHistory();
+      _loadReferral();
+    });
+  }
+
+  Future<void> _loadReferral() async {
+    final user = context.read<AuthService>().currentUser;
+    if (user == null) {
+      setState(() => _planningUnlocked = true);
+      return;
+    }
+    // Once unlocked, stay unlocked — no network round-trip on later opens.
+    final cached = await const LocalStore().getString(_unlockKey(user.id));
+    if (cached == '1') {
+      if (mounted) setState(() => _planningUnlocked = true);
+      return;
+    }
+    try {
+      final status = await AiGradingService().getReferral(teacherId: user.id);
+      if (!mounted) return;
+      setState(() {
+        _planningUnlocked = status.planningUnlocked;
+        _refCode = status.code;
+      });
+      if (status.planningUnlocked) {
+        await const LocalStore().setString(_unlockKey(user.id), '1');
+      }
+    } catch (e) {
+      debugPrint('PlanningScreen._loadReferral failed: $e');
+      if (mounted) setState(() => _planningUnlocked = true); // fail open
+    }
+  }
+
+  Future<void> _redeem() async {
+    final code = _redeemCtrl.text.trim();
+    final user = context.read<AuthService>().currentUser;
+    if (code.isEmpty || user == null || _redeeming) return;
+    setState(() => _redeeming = true);
+    try {
+      await AiGradingService().redeemReferral(teacherId: user.id, code: code);
+      if (!mounted) return;
+      _redeemCtrl.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Code redeemed 🎉 — Planning is now unlocked for your colleague.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _redeeming = false);
+    }
+  }
+
+  void _showUpgradeSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Markless Plus', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 4),
+              Text('\$34.99 / month', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              const Text('•  About 2.5× the monthly marking allowance'),
+              const Text('•  Higher daily pace — mark whole test days at once'),
+              const Text('•  Priority marking queue'),
+              const SizedBox(height: 12),
+              Text(
+                'Plans launch with the app-store release. During the preview you\'re on the standard allowance.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _progress.dispose();
+    _redeemCtrl.dispose();
     _topic.dispose();
     super.dispose();
   }
@@ -206,6 +299,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       final plan = await AiGradingService().generatePlan(
         topic: topic,
         kind: _kind.toLowerCase(),
+        teacherId: context.read<AuthService>().currentUser?.id,
         gradeLevel: klass?.gradeLevel ?? app.draft.gradeLevel,
         subject: klass?.subject,
         region: app.region,
@@ -216,6 +310,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         _history = [_SavedPlan(title: plan.title, content: plan.content, createdAt: DateTime.now()), ..._history].take(25).toList();
       });
       await _persistHistory();
+    } on UsageLimitException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), duration: const Duration(seconds: 6)));
+      _showUpgradeSheet();
     } catch (e) {
       debugPrint('PlanningScreen._generate failed: $e');
       if (!mounted) return;
@@ -245,6 +343,120 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final classes = context.watch<ClassesService>().classes;
+
+    if (_planningUnlocked == null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(onPressed: () => context.pop(), icon: Icon(Icons.arrow_back_rounded, color: cs.primary)),
+          title: const Text('Planning'),
+        ),
+        body: const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+      );
+    }
+
+    if (_planningUnlocked == false) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(onPressed: () => context.pop(), icon: Icon(Icons.arrow_back_rounded, color: cs.primary)),
+          title: const Text('Planning'),
+        ),
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.card_giftcard_rounded, color: cs.primary),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text('Unlock Plan with Mark — free', style: Theme.of(context).textTheme.titleMedium)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Planning is a thank-you feature: invite one teacher and it\'s yours for good. Share your code below — the moment a colleague enters it in their app, Planning unlocks for you.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.45),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
+                        ),
+                        child: Text(
+                          _refCode.isEmpty ? '——————' : _refCode,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w900, letterSpacing: 4),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: _refCode.isEmpty
+                            ? null
+                            : () => _copy('Try Markless — the marking assistant that gives teachers their evenings back. '
+                                'Create an account, then enter my referral code $_refCode under Planning.'),
+                        icon: const Icon(Icons.share_rounded, size: 18),
+                        label: const Text('Copy invite message'),
+                      ),
+                      const SizedBox(height: 6),
+                      OutlinedButton.icon(
+                        onPressed: _loadReferral,
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('A colleague joined — check again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Have a code from a colleague?', style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Entering it unlocks Planning for them.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _redeemCtrl,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: const InputDecoration(labelText: 'Referral code', hintText: 'e.g. 4A7C2F'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          FilledButton(
+                            onPressed: _redeeming ? null : _redeem,
+                            child: _redeeming
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Text('Redeem'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(

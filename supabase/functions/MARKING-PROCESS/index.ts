@@ -778,6 +778,9 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
   userText: string;
   // deno-lint-ignore no-explicit-any
   schema: any;
+  // Out-param: billable token equivalents for this call (cache reads count
+  // at 10%, cache writes at 125%) so the caller can meter spend.
+  usage?: { inputTokens: number; outputTokens: number };
 }) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY secret");
@@ -809,9 +812,96 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
   if (response.stop_reason === "refusal") {
     throw new Error("Claude declined to grade this image");
   }
+  if (o.usage) {
+    // deno-lint-ignore no-explicit-any
+    const u = (response as any).usage ?? {};
+    o.usage.inputTokens = (u.input_tokens ?? 0) +
+      (u.cache_read_input_tokens ?? 0) * 0.1 +
+      (u.cache_creation_input_tokens ?? 0) * 1.25;
+    o.usage.outputTokens = u.output_tokens ?? 0;
+  }
   const text = response.content.find((b) => b.type === "text")?.text ?? "";
   if (!text) throw new Error(`Claude returned no text (stop_reason: ${response.stop_reason})`);
   return JSON.parse(text);
+}
+
+// ---------- Usage metering & per-teacher spend caps ----------
+//
+// Every model call is logged with its billable tokens; the gates below keep
+// any single account inside a hard monthly budget with daily/weekly pacing
+// so one teacher can't quietly blow the API bill. Cache hits are free and
+// never gated. Checks fail OPEN: an error in metering never blocks marking.
+const PRICE_IN_PER_M = 15; // USD per 1M input tokens
+const PRICE_OUT_PER_M = 75; // USD per 1M output tokens
+const LIMIT_DAILY_USD = 2.5; // pacing: about one class set per day
+const LIMIT_WEEKLY_USD = 6.0; // pacing across a week
+const LIMIT_MONTHLY_USD = 10.0; // the hard cap
+
+function usdFor(inputTokens: number, outputTokens: number): number {
+  return (inputTokens * PRICE_IN_PER_M) / 1e6 + (outputTokens * PRICE_OUT_PER_M) / 1e6;
+}
+
+async function logUsage(teacherId: string, action: string, inputTokens: number, outputTokens: number): Promise<void> {
+  if (!teacherId) return;
+  try {
+    const { error } = await serviceDb().from("usage_log").insert({
+      teacher_id: teacherId,
+      action,
+      input_tokens: Math.round(inputTokens),
+      output_tokens: Math.round(outputTokens),
+      cost_usd: usdFor(inputTokens, outputTokens),
+    });
+    if (error) throw error;
+  } catch (e) {
+    console.error("usage_log write failed (run SETUP-DB?):", e instanceof Error ? e.message : e);
+  }
+}
+
+async function spendSince(teacherId: string, sinceIso: string): Promise<number> {
+  const { data, error } = await serviceDb()
+    .from("usage_log")
+    .select("cost_usd")
+    .eq("teacher_id", teacherId)
+    .gte("created_at", sinceIso);
+  if (error) throw error;
+  // deno-lint-ignore no-explicit-any
+  return (data ?? []).reduce((s: number, r: any) => s + Number(r.cost_usd ?? 0), 0);
+}
+
+async function getSpend(teacherId: string): Promise<{ day: number; week: number; month: number }> {
+  const now = new Date();
+  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+  const weekStart = new Date(now.getTime() - 7 * 86400_000).toISOString();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const [day, week, month] = await Promise.all([
+    spendSince(teacherId, dayStart),
+    spendSince(teacherId, weekStart),
+    spendSince(teacherId, monthStart),
+  ]);
+  return { day, week, month };
+}
+
+/// Null when within budget; otherwise the 429 response to return.
+async function budgetGate(teacherId: string, pacing: boolean): Promise<Response | null> {
+  if (!teacherId) return null;
+  try {
+    const s = await getSpend(teacherId);
+    const block = (scope: string, message: string): Response =>
+      json({ error: "usage_limit", scope, message }, 429);
+    if (s.month >= LIMIT_MONTHLY_USD) {
+      return block("monthly", "You've used this month's included marking. It resets on the 1st — or upgrade to Markless Plus for about 2.5× more.");
+    }
+    if (pacing && s.week >= LIMIT_WEEKLY_USD) {
+      return block("weekly", "You've hit this week's marking pace. It frees up as the week rolls on — or upgrade to Markless Plus for more headroom.");
+    }
+    if (pacing && s.day >= LIMIT_DAILY_USD) {
+      return block("daily", "You've hit today's marking pace. It resets tomorrow — or upgrade to Markless Plus for more headroom.");
+    }
+    return null;
+  } catch (e) {
+    console.error("budget check failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 function gradeShape(includeTranscription: boolean): string {
@@ -962,6 +1052,71 @@ Deno.serve(async (req) => {
     return json({ schools: names });
   }
 
+  // ── Usage meter for the app's Settings screen ─────────────────────────
+  if (action === "get_usage") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    try {
+      const s = await getSpend(teacherId);
+      return json({
+        dayPct: Math.min(100, Math.round((s.day / LIMIT_DAILY_USD) * 100)),
+        weekPct: Math.min(100, Math.round((s.week / LIMIT_WEEKLY_USD) * 100)),
+        monthPct: Math.min(100, Math.round((s.month / LIMIT_MONTHLY_USD) * 100)),
+      });
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  }
+
+  // ── Referrals: each teacher has a share code; referring one teacher
+  //    unlocks the planning assistant for the referrer. ──────────────────
+  if (action === "get_referral") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const db = serviceDb();
+    const { data: prof } = await db
+      .from("profiles")
+      .select("referral_code, referral_count")
+      .eq("teacher_id", teacherId)
+      .maybeSingle();
+    let code = String(prof?.referral_code ?? "");
+    if (!code) {
+      code = (await sha256Hex("ref:" + teacherId)).slice(0, 6).toUpperCase();
+      await db.from("profiles").upsert(
+        { teacher_id: teacherId, referral_code: code, updated_at: new Date().toISOString() },
+        { onConflict: "teacher_id" },
+      );
+    }
+    const count = Number(prof?.referral_count ?? 0);
+    return json({ code, count, planningUnlocked: count >= 1 });
+  }
+
+  if (action === "redeem_referral") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    const code = String(payload?.code ?? "").trim().toUpperCase();
+    if (!teacherId || !code) return json({ error: "teacherId and code are required" }, 400);
+    const db = serviceDb();
+    const { data: owner } = await db
+      .from("profiles")
+      .select("teacher_id, referral_count")
+      .eq("referral_code", code)
+      .maybeSingle();
+    if (!owner) return json({ error: "That code doesn't exist — double-check it with your colleague." }, 404);
+    if (owner.teacher_id === teacherId) return json({ error: "You can't redeem your own code." }, 400);
+    const { data: me } = await db
+      .from("profiles")
+      .select("referred_by")
+      .eq("teacher_id", teacherId)
+      .maybeSingle();
+    if (me?.referred_by) return json({ error: "This account already used a referral code." }, 400);
+    await db.from("profiles").upsert(
+      { teacher_id: teacherId, referred_by: owner.teacher_id, updated_at: new Date().toISOString() },
+      { onConflict: "teacher_id" },
+    );
+    await db.from("profiles").update({ referral_count: Number(owner.referral_count ?? 0) + 1 }).eq("teacher_id", owner.teacher_id);
+    return json({ ok: true });
+  }
+
   if (action === "get_profile") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
@@ -1005,6 +1160,12 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Fresh plans count toward the monthly budget (no daily pacing — plans
+    // are cheap and often cached).
+    const planTeacherId = String(payload?.teacherId ?? "").trim();
+    const planGate = await budgetGate(planTeacherId, false);
+    if (planGate) return planGate;
+
     const prompt = `You are an expert teacher's planning assistant. Create a ${kind} for the request below — complete and classroom-ready, so the teacher can use it as-is.
 ${planGrade ? `Grade level: ${planGrade} — target that grade's expectations and difficulty.` : ""}
 ${subject ? `Subject: ${subject}.` : ""}
@@ -1028,19 +1189,23 @@ FORMATTING (strict — the app renders plain text, so markdown reads as clutter)
     // deno-lint-ignore no-explicit-any
     let raw: any = null;
     let provider = "claude";
+    const planUsage = { inputTokens: 0, outputTokens: 0 };
     const errs: string[] = [];
     try {
-      raw = await callClaude([], "image/jpeg", { userText: prompt, schema: PLAN_SCHEMA });
+      raw = await callClaude([], "image/jpeg", { userText: prompt, schema: PLAN_SCHEMA, usage: planUsage });
     } catch (e) {
       errs.push(`claude: ${e instanceof Error ? e.message : e}`);
       try {
         raw = await callGemini([], "image/jpeg", prompt, PLAN_SHAPE);
         provider = "gemini";
+        planUsage.inputTokens = 1000;
+        planUsage.outputTokens = 1200;
       } catch (e2) {
         errs.push(`gemini: ${e2 instanceof Error ? e2.message : e2}`);
         return json({ error: "Planning failed", details: errs }, 502);
       }
     }
+    await logUsage(planTeacherId, "plan", planUsage.inputTokens, planUsage.outputTokens);
     const out = {
       title: String(raw?.title ?? "Untitled plan"),
       content: String(raw?.content ?? ""),
@@ -1242,6 +1407,12 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     return json({ ...normalized, cached: true });
   }
 
+  // Fresh marking costs money — check the teacher's budget first. Cache
+  // hits above are free and never gated.
+  const gradeTeacherId = String(payload?.teacherId ?? "").trim();
+  const gateHit = await budgetGate(gradeTeacherId, true);
+  if (gateHit) return gateHit;
+
   // Pull the stored answer key when one was chosen — the key was analyzed
   // once at save time, so grading only pays for its compact text.
   // deno-lint-ignore no-explicit-any
@@ -1304,9 +1475,16 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
   const errors: string[] = [];
   for (const name of attempts) {
     try {
+      const usage = { inputTokens: 0, outputTokens: 0 };
       const raw = name === "claude"
-        ? await callClaude(imagesBase64, mediaType, { systemBlocks, userText: contextText, schema })
+        ? await callClaude(imagesBase64, mediaType, { systemBlocks, userText: contextText, schema, usage })
         : await callGemini(imagesBase64, mediaType, geminiPrompt, shape);
+      if (name === "gemini") {
+        // Gemini doesn't report through the same path — conservative estimate.
+        usage.inputTokens = imagesBase64.length * 1400 + 1200;
+        usage.outputTokens = 900;
+      }
+      await logUsage(gradeTeacherId, "grade", usage.inputTokens, usage.outputTokens);
       await cacheWrite(cacheKey, name, raw, imageHashes);
       const stats: CodeUse[] = [];
       const normalized = normalize(raw, name, maxScore, formatOverride, stats, expectationGrade);

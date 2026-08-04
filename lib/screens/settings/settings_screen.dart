@@ -26,6 +26,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _weekly = false;
   bool _driveAutoSave = false;
 
+  UsageSummary? _usage;
+
   @override
   void initState() {
     super.initState();
@@ -35,7 +37,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (auth == null) return;
       final v = await DriveService().autoSaveEnabled(auth.id);
       if (mounted) setState(() => _driveAutoSave = v);
+      try {
+        final u = await AiGradingService().getUsage(teacherId: auth.id);
+        if (mounted) setState(() => _usage = u);
+      } catch (e) {
+        debugPrint('SettingsScreen usage load failed: $e');
+      }
     });
+  }
+
+  void _showUpgradeSheet() {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: cs.surface,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Markless Plus', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 4),
+              Text('\$34.99 / month', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              const Text('•  About 2.5× the monthly marking allowance'),
+              const Text('•  Higher daily pace — mark whole test days at once'),
+              const Text('•  Priority marking queue'),
+              const SizedBox(height: 12),
+              Text(
+                'Plans launch with the app-store release. During the preview you\'re on the standard allowance.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Opt-in consent for automatic Drive export — requires a Google session
@@ -537,6 +577,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () => context.go(AppRoutes.library),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text('PLAN & USAGE', style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
+            const SizedBox(height: 10),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text('Marking allowance', style: Theme.of(context).textTheme.titleSmall)),
+                        Text(
+                          _usage == null ? '—' : '${_usage!.monthPct}% used',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(value: (_usage?.monthPct ?? 0) / 100, minHeight: 8),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _usage == null
+                          ? 'This month\'s included marking. Cache hits and repeats are always free.'
+                          : 'This month: ${_usage!.monthPct}% · today\'s pace: ${_usage!.dayPct}% · this week: ${_usage!.weekPct}%. Daily and weekly pacing keeps the allowance lasting all month; cache hits are always free.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _showUpgradeSheet,
+                      icon: const Icon(Icons.workspace_premium_rounded, size: 18),
+                      label: const Text('Markless Plus — more marking'),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 14),
