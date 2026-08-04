@@ -417,7 +417,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   CircleAvatar(
                     radius: 40,
                     backgroundColor: cs.primary.withValues(alpha: 0.12),
-                    child: Text((user?.name ?? 'T').substring(0, 1), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800, fontSize: 22)),
+                    // Skip the honorific so "Mr. Lee" shows "L", not "M".
+                    child: Text(
+                      AuthService.stripHonorific(user?.name ?? '').isEmpty ? 'T' : AuthService.stripHonorific(user!.name).substring(0, 1).toUpperCase(),
+                      style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800, fontSize: 22),
+                    ),
                   ),
                   Positioned(
                     right: 0,

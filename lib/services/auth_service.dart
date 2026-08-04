@@ -257,6 +257,13 @@ class AuthService extends ChangeNotifier {
     final client = _supabase;
     if (client == null) throw Exception('Cloud sign-in isn\'t available in this build.');
     if (client.auth.currentSession == null) throw Exception('Sign in first.');
+    // Google-linked accounts can't be "linked" again — and their Drive
+    // token simply expires over time. Re-running the normal Google sign-in
+    // gets a fresh token for the same account.
+    final identities = client.auth.currentUser?.identities ?? const [];
+    if (identities.any((i) => i.provider == 'google')) {
+      return signInWithProvider(OAuthProvider.google);
+    }
     final completer = Completer<void>();
     late final StreamSubscription<AuthState> sub;
     sub = client.auth.onAuthStateChange.listen((state) {
