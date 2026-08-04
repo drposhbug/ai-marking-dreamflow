@@ -153,15 +153,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Create Account opens its own sheet (email, password, confirm) so it
   /// never trips over half-filled sign-in fields; a new account always
-  /// walks through the full intro afterwards.
+  /// walks through the full intro afterwards. The sheet can also hand off
+  /// to Google sign-in ('google') for teachers nudged that way.
   Future<void> _openCreateAccount() async {
-    final created = await showModalBottomSheet<bool>(
+    final outcome = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (_) => _CreateAccountSheet(initialEmail: _email.text.trim()),
+      builder: (_) => _CreateAccountSheet(initialEmail: _email.text.trim(), googleAvailable: _providers.contains('google')),
     );
-    if (created != true || !mounted) return;
+    if (outcome == null || !mounted) return;
+    if (outcome == 'google') return _oauth(OAuthProvider.google);
     final auth = context.read<AuthService>();
     final user = auth.currentUser;
     if (user != null) {
@@ -359,7 +361,8 @@ class _LoginScreenState extends State<LoginScreen> {
 /// has its own clear validation instead of borrowing the sign-in fields.
 class _CreateAccountSheet extends StatefulWidget {
   final String initialEmail;
-  const _CreateAccountSheet({required this.initialEmail});
+  final bool googleAvailable;
+  const _CreateAccountSheet({required this.initialEmail, required this.googleAvailable});
 
   @override
   State<_CreateAccountSheet> createState() => _CreateAccountSheetState();
@@ -397,7 +400,7 @@ class _CreateAccountSheetState extends State<_CreateAccountSheet> {
       // Let Android's password manager offer to save the new credentials.
       TextInput.finishAutofillContext();
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop('created');
     } catch (e) {
       debugPrint('Create account failed: $e');
       if (!mounted) return;
@@ -421,7 +424,7 @@ class _CreateAccountSheetState extends State<_CreateAccountSheet> {
             Row(
               children: [
                 Expanded(child: Text('Create your account', style: Theme.of(context).textTheme.titleLarge)),
-                IconButton(onPressed: () => Navigator.of(context).pop(false), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral)),
+                IconButton(onPressed: () => Navigator.of(context).pop(), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral)),
               ],
             ),
             const SizedBox(height: 4),
@@ -429,6 +432,33 @@ class _CreateAccountSheetState extends State<_CreateAccountSheet> {
               'Your password is stored securely, and your name, school, and marking preferences stay with the account.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
             ),
+            if (widget.googleAvailable) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: cs.primary.withValues(alpha: 0.15)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.tips_and_updates_rounded, size: 18, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Tip: signing in with your school Google account also connects Google Drive automatically. You can link Google later in Settings too.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.35),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _creating ? null : () => Navigator.of(context).pop('google'),
+                      child: const Text('Use Google'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             AutofillGroup(
               child: Column(

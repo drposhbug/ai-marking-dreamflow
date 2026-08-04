@@ -250,6 +250,42 @@ class AuthService extends ChangeNotifier {
     return true;
   }
 
+  /// Links the teacher's Google account onto their EXISTING account (same
+  /// user, no re-registering) so Drive export works for email sign-ups.
+  /// Requires "manual linking" enabled in the Supabase dashboard.
+  Future<void> connectGoogleDrive() async {
+    final client = _supabase;
+    if (client == null) throw Exception('Cloud sign-in isn\'t available in this build.');
+    if (client.auth.currentSession == null) throw Exception('Sign in first.');
+    final completer = Completer<void>();
+    late final StreamSubscription<AuthState> sub;
+    sub = client.auth.onAuthStateChange.listen((state) {
+      if ((state.session?.providerToken ?? '').isNotEmpty && !completer.isCompleted) completer.complete();
+    });
+    try {
+      await client.auth.linkIdentity(
+        OAuthProvider.google,
+        redirectTo: 'com.markless.app://login-callback',
+        scopes: 'https://www.googleapis.com/auth/drive.file',
+      );
+      await completer.future.timeout(
+        const Duration(minutes: 3),
+        onTimeout: () => throw Exception('Google linking wasn\'t completed — try again.'),
+      );
+    } on AuthException catch (e) {
+      final m = e.message.toLowerCase();
+      if (m.contains('manual linking') || m.contains('identity linking')) {
+        throw Exception('Account linking isn\'t switched on for the server yet — enable "manual linking" in Supabase → Authentication.');
+      }
+      throw Exception(_friendlyAuthError(e));
+    } catch (e) {
+      if (_looksOffline(e)) throw Exception('Can\'t reach the server — check your internet connection and try again.');
+      rethrow;
+    } finally {
+      await sub.cancel();
+    }
+  }
+
   /// Developer mode / no-cloud fallback: local account, no password checks.
   Future<void> signInLocal({required String email}) => _localSignIn(email);
 

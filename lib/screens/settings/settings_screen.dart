@@ -45,7 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (auth == null) return;
     if (v && !DriveService().isConnected) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Connect Google first: sign out, then sign in with Google to link Drive.')),
+        const SnackBar(content: Text('Connect Google Drive first — use the button below.')),
       );
       return;
     }
@@ -55,6 +55,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Every marked test will now also be saved to your Drive\'s Markless folder — you\'ll see a note each time.')),
     );
+  }
+
+  bool _linkingDrive = false;
+
+  /// Email-account teachers link Google onto their existing account (same
+  /// account, no re-registering) to unlock Drive export.
+  Future<void> _connectDrive() async {
+    setState(() => _linkingDrive = true);
+    try {
+      await context.read<AuthService>().connectGoogleDrive();
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google Drive connected ✓ — you can now export and auto-save marked tests.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _linkingDrive = false);
+    }
   }
   String _modeLabel(GradingMode m) => switch (m) {
     GradingMode.homework => 'Homework',
@@ -523,10 +546,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     child: Text(
-                      'With your consent, every marked test is saved as a Google Doc in your Drive\'s "Markless" folder the moment marking finishes — and you get a notification each time. Requires signing in with Google.',
+                      'With your consent, every marked test is saved as a Google Doc in your Drive\'s "Markless" folder the moment marking finishes — and you get a notification each time.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                     ),
                   ),
+                  if (!DriveService().isConnected)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                      child: OutlinedButton.icon(
+                        onPressed: _linkingDrive ? null : _connectDrive,
+                        icon: _linkingDrive
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.add_to_drive_rounded, size: 18),
+                        label: const Text('Connect Google Drive'),
+                      ),
+                    ),
                 ],
               ),
             ),
