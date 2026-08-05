@@ -162,6 +162,27 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                             style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w900),
                           ),
                           onTap: () => context.push('${AppRoutes.result}?submissionId=${s.id}'),
+                          onLongPress: () async {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Delete this result?'),
+                                content: const Text('The mark, its pages, and the cloud copy are removed everywhere. This cannot be undone.'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                  FilledButton(
+                                    style: FilledButton.styleFrom(backgroundColor: AiMarkerColors.error),
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed != true || !context.mounted) return;
+                            await context.read<SubmissionsService>().delete(s.id);
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Result deleted')));
+                          },
                         ),
                     ],
                   ),

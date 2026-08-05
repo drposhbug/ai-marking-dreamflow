@@ -527,6 +527,14 @@ class AiGradingService {
     );
   }
 
+  Future<void> deleteSubmissionCloud({required String teacherId, required String id}) async {
+    final client = Supabase.instance.client;
+    await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'delete_submission', 'teacherId': teacherId, 'id': id},
+    );
+  }
+
   Future<List<Map<String, dynamic>>> listSubmissionsCloud({required String teacherId}) async {
     final client = Supabase.instance.client;
     final res = await client.functions.invoke(

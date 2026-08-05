@@ -415,6 +415,29 @@ class _ResultScreenState extends State<ResultScreen> {
     _applyOverride(result.copyWith(rawScore: newRaw, maxScore: newMax));
   }
 
+  Future<void> _deleteSubmission(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this result?'),
+        content: const Text('The mark, its pages, and the cloud copy are removed everywhere. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AiMarkerColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await context.read<SubmissionsService>().delete(id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Result deleted')));
+    context.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -438,6 +461,12 @@ class _ResultScreenState extends State<ResultScreen> {
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                 : Icon(Icons.add_to_drive_rounded, color: AiMarkerColors.neutral),
           ),
+          if (sub != null)
+            IconButton(
+              onPressed: () => _deleteSubmission(sub.id),
+              tooltip: 'Delete this result',
+              icon: Icon(Icons.delete_outline_rounded, color: AiMarkerColors.neutral),
+            ),
         ],
       ),
       body: SafeArea(

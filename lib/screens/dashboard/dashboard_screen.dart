@@ -363,6 +363,7 @@ class _SubmissionRow extends StatelessWidget {
     return InkWell(
       splashFactory: NoSplash.splashFactory,
       onTap: () => context.push('${AppRoutes.result}?submissionId=${submission.id}'),
+      onLongPress: () => _confirmDelete(context, student?.name),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
@@ -408,6 +409,28 @@ class _SubmissionRow extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, String? studentName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete ${studentName ?? 'this'} result?'),
+        content: const Text('The mark, its pages, and the cloud copy are removed everywhere. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AiMarkerColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await context.read<SubmissionsService>().delete(submission.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Result deleted')));
   }
 
   String _modeLabel(GradingMode m) => switch (m) {

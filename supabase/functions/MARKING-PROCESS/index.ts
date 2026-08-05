@@ -1298,6 +1298,20 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  if (action === "delete_submission") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    const id = String(payload?.id ?? "").trim();
+    if (!teacherId || !id) return json({ error: "teacherId and id are required" }, 400);
+    // teacher_id in the filter so one teacher can never delete another's work.
+    const { error } = await serviceDb()
+      .from("submissions_cloud")
+      .delete()
+      .eq("id", id)
+      .eq("teacher_id", teacherId);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
   if (action === "list_submissions") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
