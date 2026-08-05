@@ -21,6 +21,24 @@ class SubmissionsService extends ChangeNotifier {
         try {
           _submissions = Submission.decodeList(raw);
           debugPrint('SubmissionsService: loaded ${_submissions.length} result(s) from disk');
+          // Marks made on this device under another sign-in (dev mode, a
+          // test account) belong to the teacher holding the phone — adopt
+          // them so they show in the dashboard/classes instead of being
+          // silently filtered out.
+          final adopted = <Submission>[];
+          _submissions = _submissions.map((s) {
+            if (s.teacherId == teacherId) return s;
+            final a = s.copyWith(teacherId: teacherId, updatedAt: DateTime.now());
+            adopted.add(a);
+            return a;
+          }).toList(growable: false);
+          if (adopted.isNotEmpty) {
+            await _persist();
+            debugPrint('SubmissionsService: adopted ${adopted.length} result(s) from other sign-ins on this device');
+            for (final s in adopted) {
+              _pushCloud(s);
+            }
+          }
         } catch (e) {
           // NEVER lose data: park the unreadable raw for recovery instead
           // of overwriting it with an empty list later.
