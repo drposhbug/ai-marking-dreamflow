@@ -204,6 +204,17 @@ class QuestionAnnotation {
       positionLeft: (j['positionLeft'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'questionLabel': questionLabel,
+        'earnedMark': earnedMark,
+        'outOfMark': outOfMark,
+        'correct': correct,
+        'feedback': feedback,
+        'pageIndex': pageIndex,
+        'positionTop': positionTop,
+        'positionLeft': positionLeft,
+      };
 }
 
 // ---------- Criterion breakdown ----------
@@ -232,6 +243,14 @@ class CriterionResult {
       feedback: (j['feedback'] ?? '').toString(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'score': score,
+        'maxScore': maxScore,
+        'level': level,
+        'feedback': feedback,
+      };
 }
 
 // ---------- Full result ----------
@@ -305,6 +324,64 @@ class AiGradeResult {
 
   // Returns a copy with the format flipped (for the teacher toggle).
   AiGradeResult withFormat(String newFormat) => copyWith(gradingFormat: newFormat);
+
+  /// Full round-trip serialization so saved submissions can restore the
+  /// complete result screen (scoreboard, criteria, annotations) later.
+  Map<String, dynamic> toJson() => {
+        'detectedSubject': detectedSubject,
+        'detectedGrade': detectedGrade,
+        'provider': provider,
+        'studentNameOnPaper': studentNameOnPaper,
+        'gradingFormat': gradingFormat,
+        'percentage': percentage,
+        'percentageDisplay': percentageDisplay,
+        'level': level,
+        'levelDisplay': levelDisplay,
+        'rawScore': rawScore,
+        'maxScore': maxScore,
+        'summary': summary,
+        'strengths': strengths,
+        'improvements': improvements,
+        'criteriaBreakdown': criteriaBreakdown.map((c) => c.toJson()).toList(),
+        'annotations': annotations.map((a) => a.toJson()).toList(),
+        'rawText': rawText,
+        'confidence': confidence,
+        'flags': flags,
+        'triageStatus': triageStatus.name,
+      };
+
+  factory AiGradeResult.fromJson(Map<String, dynamic> j) => AiGradeResult(
+        detectedSubject: (j['detectedSubject'] ?? 'Subject').toString(),
+        detectedGrade: (j['detectedGrade'] as num?)?.toInt(),
+        provider: (j['provider'] ?? 'claude').toString(),
+        studentNameOnPaper: j['studentNameOnPaper']?.toString(),
+        gradingFormat: (j['gradingFormat'] ?? 'percentage').toString(),
+        percentage: (j['percentage'] as num?)?.toDouble() ?? 0,
+        percentageDisplay: (j['percentageDisplay'] ?? '0%').toString(),
+        level: (j['level'] as num?)?.toInt(),
+        levelDisplay: j['levelDisplay']?.toString(),
+        rawScore: (j['rawScore'] as num?)?.toDouble() ?? 0,
+        maxScore: (j['maxScore'] as num?)?.toDouble() ?? 0,
+        summary: (j['summary'] ?? '').toString(),
+        strengths: (j['strengths'] as List? ?? const []).map((e) => e.toString()).toList(),
+        improvements: (j['improvements'] as List? ?? const []).map((e) => e.toString()).toList(),
+        criteriaBreakdown: (j['criteriaBreakdown'] as List? ?? const [])
+            .whereType<Map>()
+            .map((m) => CriterionResult.fromJson(m.cast<String, dynamic>()))
+            .toList(),
+        annotations: (j['annotations'] as List? ?? const [])
+            .whereType<Map>()
+            .map((m) => QuestionAnnotation.fromJson(m.cast<String, dynamic>()))
+            .toList(),
+        rawText: (j['rawText'] ?? '').toString(),
+        confidence: (j['confidence'] as num?)?.toInt() ?? 85,
+        flags: (j['flags'] as List? ?? const []).map((e) => e.toString()).toList(),
+        triageStatus: TriageStatus.values.cast<TriageStatus?>().firstWhere(
+              (t) => t?.name == (j['triageStatus'] ?? '').toString(),
+              orElse: () => TriageStatus.graded,
+            ) ??
+            TriageStatus.graded,
+      );
 
   /// Copy with selected fields replaced — used for teacher overrides.
   AiGradeResult copyWith({
@@ -818,6 +895,9 @@ class AiGradingService {
       imageUrl: imageUrl,
       createdAt: now,
       updatedAt: now,
+      // Full result payload so the complete result screen (scoreboard,
+      // criteria, annotations) can be reopened later, on any device.
+      resultJson: res.toJson(),
     );
   }
 }

@@ -23,9 +23,14 @@ class Submission {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const Submission({required this.id, required this.teacherId, required this.studentId, required this.classId, required this.presetId, required this.subject, required this.gradingMode, required this.score, required this.maxScore, required this.feedback, required this.triageStatus, required this.overrideUsed, required this.triageFlags, required this.confidence, required this.createdAt, required this.updatedAt, this.imageUrl});
+  /// The complete marked result (questions, criteria, annotations) so the
+  /// full result screen can be reopened later — locally and cross-device.
+  final Map<String, dynamic>? resultJson;
 
-  Submission copyWith({String? id, String? teacherId, String? studentId, String? classId, String? presetId, String? subject, GradingMode? gradingMode, double? score, double? maxScore, String? feedback, TriageStatus? triageStatus, bool? overrideUsed, String? imageUrl, List<String>? triageFlags, int? confidence, DateTime? createdAt, DateTime? updatedAt}) => Submission(
+  const Submission({required this.id, required this.teacherId, required this.studentId, required this.classId, required this.presetId, required this.subject, required this.gradingMode, required this.score, required this.maxScore, required this.feedback, required this.triageStatus, required this.overrideUsed, required this.triageFlags, required this.confidence, required this.createdAt, required this.updatedAt, this.imageUrl, this.resultJson});
+
+  Submission copyWith({String? id, String? teacherId, String? studentId, String? classId, String? presetId, String? subject, GradingMode? gradingMode, double? score, double? maxScore, String? feedback, TriageStatus? triageStatus, bool? overrideUsed, String? imageUrl, List<String>? triageFlags, int? confidence, DateTime? createdAt, DateTime? updatedAt, Map<String, dynamic>? resultJson}) => Submission(
+    resultJson: resultJson ?? this.resultJson,
     id: id ?? this.id,
     teacherId: teacherId ?? this.teacherId,
     studentId: studentId ?? this.studentId,
@@ -63,6 +68,7 @@ class Submission {
     'confidence': confidence,
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
+    if (resultJson != null) 'result': resultJson,
   };
 
   factory Submission.fromJson(Map<String, dynamic> json) => Submission(
@@ -83,6 +89,7 @@ class Submission {
     confidence: (json['confidence'] as num?)?.toInt() ?? 90,
     createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()) ?? DateTime.now(),
     updatedAt: DateTime.tryParse((json['updated_at'] ?? '').toString()) ?? DateTime.now(),
+    resultJson: json['result'] is Map ? (json['result'] as Map).cast<String, dynamic>() : null,
   );
 
   static String encodeList(List<Submission> items) => jsonEncode(items.map((e) => e.toJson()).toList());

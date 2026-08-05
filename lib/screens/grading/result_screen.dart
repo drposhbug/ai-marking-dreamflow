@@ -64,6 +64,18 @@ class _ResultScreenState extends State<ResultScreen> {
   void initState() {
     super.initState();
     _result = widget.gradeResult;
+    // Reopened from the dashboard/history: rebuild the full result from
+    // the submission's saved payload so old marks get the complete UI.
+    if (_result == null && widget.submissionId != null) {
+      final sub = context.read<SubmissionsService>().getById(widget.submissionId!);
+      if (sub?.resultJson != null) {
+        try {
+          _result = AiGradeResult.fromJson(sub!.resultJson!);
+        } catch (e) {
+          debugPrint('Saved result restore failed: $e');
+        }
+      }
+    }
     _displayFormat = _result?.gradingFormat ?? 'percentage';
   }
 
@@ -176,9 +188,64 @@ class _ResultScreenState extends State<ResultScreen> {
     final sub = widget.submissionId == null ? null : context.read<SubmissionsService>().getById(widget.submissionId!);
     if (sub != null) {
       context.read<SubmissionsService>().update(
-            sub.copyWith(score: finalResult.rawScore, maxScore: finalResult.maxScore, updatedAt: DateTime.now()),
+            sub.copyWith(
+              score: finalResult.rawScore,
+              maxScore: finalResult.maxScore,
+              // Keep the saved payload in step so reopening shows the
+              // override, not the original AI marks.
+              resultJson: finalResult.toJson(),
+              updatedAt: DateTime.now(),
+            ),
           );
     }
+  }
+
+  /// No student matched at marking time — let the teacher link one now.
+  Future<void> _linkStudent(Submission sub) async {
+    final students = context.read<StudentsService>().students;
+    final inClass = sub.classId.isEmpty ? students : students.where((s) => s.classId == sub.classId).toList();
+    final pool = inClass.isEmpty ? students : inClass;
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: pool.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('No students yet — add them in Classes (or scan an attendance sheet) and link this result afterwards.'),
+              )
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                    child: Text('Whose test is this?', style: Theme.of(ctx).textTheme.titleMedium),
+                  ),
+                  for (final s in pool)
+                    ListTile(
+                      leading: CircleAvatar(
+                        radius: 16,
+                        child: Text(s.name.isEmpty ? '?' : s.name[0].toUpperCase()),
+                      ),
+                      title: Text(s.name),
+                      onTap: () => Navigator.pop(ctx, s.id),
+                    ),
+                ],
+              ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final student = context.read<StudentsService>().getById(picked);
+    await context.read<SubmissionsService>().update(sub.copyWith(
+          studentId: picked,
+          classId: sub.classId.isEmpty ? (student?.classId ?? '') : sub.classId,
+          updatedAt: DateTime.now(),
+        ));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Linked to ${student?.name ?? 'student'} — it now shows on their profile.')),
+    );
   }
 
   Future<void> _editAnnotation(QuestionAnnotation a) async {
@@ -462,6 +529,12 @@ class _ResultScreenState extends State<ResultScreen> {
                       _Tag(text: result.detectedSubject, color: cs.primary.withValues(alpha: 0.10), textColor: cs.primary),
                     if (student != null)
                       _Tag(text: 'Student: ${student.name}', color: cs.surfaceContainerHighest, textColor: AiMarkerColors.neutral),
+                    if (sub != null && sub.studentId.isEmpty)
+                      ActionChip(
+                        avatar: Icon(Icons.person_add_alt_1_rounded, size: 16, color: cs.primary),
+                        label: const Text('No student linked — tap to link'),
+                        onPressed: () => _linkStudent(sub),
+                      ),
                     if (sub?.overrideUsed == true)
                       _Tag(text: 'One-time override', color: Colors.orange.withValues(alpha: 0.14), textColor: Colors.orange),
                   ]),
