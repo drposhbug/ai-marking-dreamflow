@@ -102,6 +102,14 @@ class StudentsService extends ChangeNotifier {
     return created;
   }
 
+  /// Files a student into a class (e.g. right after linking a scanned
+  /// result to a newly created student).
+  Future<void> assignToClass({required String studentId, required String classId}) async {
+    _students = _students.map((s) => s.id == studentId ? s.copyWith(classId: classId, updatedAt: DateTime.now()) : s).toList();
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> updateNotes({required String studentId, required String notes}) async {
     _students = _students.map((s) => s.id == studentId ? s.copyWith(notes: notes, updatedAt: DateTime.now()) : s).toList();
     await _persist();

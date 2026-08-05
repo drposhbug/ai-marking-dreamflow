@@ -699,6 +699,7 @@ class AiGradingService {
     String? name,
     String? school,
     String? region,
+    String? plan,
     List<String>? markingFeedback,
   }) async {
     final client = Supabase.instance.client;
@@ -709,8 +710,18 @@ class AiGradingService {
       if (name != null) 'name': name,
       if (school != null) 'school': school,
       if (region != null) 'region': region,
+      if (plan != null) 'plan': plan,
       if (markingFeedback != null) 'markingFeedback': markingFeedback,
     });
+  }
+
+  /// Permanently removes a saved answer key.
+  Future<void> deleteAnswerKey({required String teacherId, required String id}) async {
+    final client = Supabase.instance.client;
+    await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'delete_key', 'teacherId': teacherId, 'id': id},
+    );
   }
 
   /// The account's saved profile, or null when it has never been saved.

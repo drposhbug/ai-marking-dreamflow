@@ -1207,6 +1207,19 @@ Deno.serve(async (req) => {
   const action = String(payload?.action ?? "grade");
 
   // ── List saved answer keys ─────────────────────────────────────────
+  if (action === "delete_key") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    const id = String(payload?.id ?? "").trim();
+    if (!teacherId || !id) return json({ error: "teacherId and id are required" }, 400);
+    const { error } = await serviceDb()
+      .from("answer_keys")
+      .delete()
+      .eq("id", id)
+      .eq("teacher_id", teacherId);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
   if (action === "list_keys") {
     const teacherId = String(payload?.teacherId ?? "");
     const { data, error } = await serviceDb()
@@ -1233,6 +1246,12 @@ Deno.serve(async (req) => {
     if (payload?.name != null) row.name = String(payload.name).slice(0, 120);
     if (payload?.school != null) row.school = String(payload.school).slice(0, 200);
     if (payload?.region != null) row.region = String(payload.region).slice(0, 40);
+    // Plan comes from the RevenueCat entitlement sync — whitelist so a
+    // crafted request can't invent a tier. (Server-side receipt validation
+    // via RevenueCat webhooks is the hardening step before launch.)
+    if (payload?.plan != null && ["trial", "starter", "pro", "school"].includes(String(payload.plan))) {
+      row.plan = String(payload.plan);
+    }
     if (Array.isArray(payload?.markingFeedback)) {
       row.marking_feedback = payload.markingFeedback
         .map((f: unknown) => String(f).slice(0, 300))

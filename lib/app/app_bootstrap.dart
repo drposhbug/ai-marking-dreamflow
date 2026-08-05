@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/student_class_links_service.dart';
@@ -37,6 +38,14 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
       final user = auth.currentUser;
       if (user == null) return;
+
+      // Tie RevenueCat purchases to the account so Pro follows the teacher
+      // across devices. Fire-and-forget — billing must never block startup.
+      try {
+        context.read<BillingService>().logIn(user.id);
+      } catch (e) {
+        debugPrint('AppBootstrap billing login failed: $e');
+      }
 
       // Pull Supabase user preferences if available (default_mode / harshness).
       try {

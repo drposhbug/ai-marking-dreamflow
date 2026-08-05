@@ -9,6 +9,7 @@ import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
@@ -289,9 +290,55 @@ class _ResultScreenState extends State<ResultScreen> {
           )
         : context.read<StudentsService>().getById(picked);
     if (student == null || !mounted) return;
+
+    // Recent-submission marks often have no class — offer to file the
+    // student (and this result) into a classroom right here.
+    var classId = sub.classId;
+    if (classId.isEmpty || student.classId.isEmpty) {
+      final classes = context.read<ClassesService>().classes;
+      if (classes.isNotEmpty) {
+        final pickedClass = await showModalBottomSheet<String>(
+          context: context,
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          showDragHandle: true,
+          builder: (ctx) => SafeArea(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                  child: Text('Add ${student.name} to a class?', style: Theme.of(ctx).textTheme.titleMedium),
+                ),
+                for (final c in classes)
+                  ListTile(
+                    leading: const Icon(Icons.school_rounded),
+                    title: Text(c.name),
+                    subtitle: c.period.isEmpty ? null : Text(c.period),
+                    onTap: () => Navigator.pop(ctx, c.id),
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.do_not_disturb_on_outlined),
+                  title: const Text('No class for now'),
+                  onTap: () => Navigator.pop(ctx, ''),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (!mounted) return;
+        if (pickedClass != null && pickedClass.isNotEmpty) {
+          if (student.classId.isEmpty) {
+            await context.read<StudentsService>().assignToClass(studentId: student.id, classId: pickedClass);
+          }
+          if (classId.isEmpty) classId = pickedClass;
+        }
+      }
+    }
+    if (!mounted) return;
+
     await context.read<SubmissionsService>().update(sub.copyWith(
           studentId: student.id,
-          classId: sub.classId.isEmpty ? student.classId : sub.classId,
+          classId: classId.isEmpty ? student.classId : classId,
           updatedAt: DateTime.now(),
         ));
     if (!mounted) return;

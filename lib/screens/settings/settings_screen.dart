@@ -4,6 +4,7 @@ import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/data/curriculum_regions.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
+import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
@@ -48,6 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showUpgradeSheet() {
     final cs = Theme.of(context).colorScheme;
+    final billing = context.read<BillingService>();
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: cs.surface,
@@ -61,7 +63,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               Text('Markless plans', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 4),
-              Text('Start with a 7-day free trial', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800)),
+              Text(billing.isPro ? 'Markless Pro is active ✓' : 'Start with a 7-day free trial',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
               const Text('•  Starter — \$6.99/mo · credits for ~120 typical tests'),
               const Text('•  Pro ⭐ — \$14.99/mo · ~3× the credits (best value)'),
@@ -69,11 +72,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Text('•  School — \$24.99/mo · ~7.5× the credits'),
               const SizedBox(height: 10),
               const Text('Every paid plan sends 15% to a classroom — you pick whose.'),
-              const SizedBox(height: 12),
-              Text(
-                'Plans launch with the app-store release. During the preview you\'re on the Pro allowance.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
-              ),
+              const SizedBox(height: 14),
+              if (billing.available && !billing.isPro)
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.workspace_premium_rounded),
+                    label: const Text('Upgrade to Pro'),
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      final ok = await billing.presentPaywall();
+                      if (!mounted) return;
+                      if (ok) {
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          const SnackBar(content: Text('Markless Pro is active — welcome aboard! Your credits have been upgraded.')),
+                        );
+                        setState(() {});
+                      }
+                    },
+                  ),
+                ),
+              if (billing.available)
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        final ok = await billing.restorePurchases();
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(
+                          content: Text(ok ? 'Purchases restored — Pro is active.' : 'No previous purchases found for this account.'),
+                        ));
+                      },
+                      child: const Text('Restore purchases'),
+                    ),
+                    if (billing.isPro)
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          billing.presentCustomerCenter();
+                        },
+                        child: const Text('Manage subscription'),
+                      ),
+                  ],
+                )
+              else
+                Text(
+                  'Purchases open with the app-store release. During the preview you\'re on the Pro allowance.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                ),
             ],
           ),
         ),
