@@ -124,7 +124,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 16;
+const CACHE_VERSION = 17;
 
 // A keyless graded mark works out every correct answer anyway — store that
 // as a real answer key so the REST of the class marks against it on the
@@ -459,13 +459,14 @@ function gradeSchema(includeTranscription: boolean): any {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["questionLabel", "earnedMark", "outOfMark", "correct", "feedback", "pageIndex", "positionTop", "positionLeft"],
+        required: ["questionLabel", "earnedMark", "outOfMark", "correct", "feedback", "methodNote", "pageIndex", "positionTop", "positionLeft"],
         properties: {
           questionLabel: { type: "string" },
           earnedMark: { type: "string" },
           outOfMark: { type: "string" },
           correct: { type: "boolean" },
           feedback: { type: "string" },
+          methodNote: { type: "string" },
           pageIndex: { type: "integer" },
           positionTop: { type: "number" },
           positionLeft: { type: "number" },
@@ -630,6 +631,7 @@ Do all of the following:
    - earnedMark may use QUARTER-STEP decimals ("0.25", "0.5", "1.75"): deduct fractions for minor slips — a missing unit, a sign error, sloppy rounding — instead of taking a whole mark.
    - correct = true only if fully correct
    - feedback: a TINY plain-words error label, 2-4 words max — "wrong formula", "addition mistake", "missing unit", "wrong number", "sign error", "sig figs", "left blank", "skipped a step". NEVER a sentence, never an explanation, never a summary of the question, never a #code here. Fully correct answers get feedback "".
+   - methodNote — METHOD CHECK when an OFFICIAL ANSWER KEY is present: if the student's final answer matches the key but their WORKING differs from the key's (a different technique, a more advanced shortcut, steps the key shows are skipped), AWARD the marks per the key and set methodNote to a tiny 2-3 word label — "different method", "advanced method", "steps skipped". Some teachers accept any valid method, others require the taught one — the note lets the teacher decide. methodNote is "" in every other case (no key, wrong answer, matching method). NEVER deduct for method alone unless the key explicitly requires that method.
    - check every numeric final answer for UNITS: if a required unit is missing or wrong, deduct part marks with label "missing unit"
    - QUESTIONS ONLY THE TEACHER CAN MARK: when you cannot reliably judge an answer from the pages alone, do NOT guess a mark. Set earnedMark "?", outOfMark from the printed marks, correct = false, and a tiny label saying why. EXCLUDE that question's printed marks from rawScore, maxScore, and its KTCA category totals — the teacher marks it by hand. This applies to:
      * drawings — free-body diagrams, ray diagrams, graphs the student drew, sketches, geometric constructions → feedback "check drawing". Simple diagram READING (taking numbers off a printed graph) is normal marking, not this rule.
@@ -786,6 +788,7 @@ function normalize(obj: any, provider: string, maxScoreDefault: number, formatOv
       outOfMark: String(a?.outOfMark ?? ""),
       correct: a?.correct === true,
       feedback: tinyLabel(String(a?.feedback ?? ""), stats),
+      methodNote: capWords(String(a?.methodNote ?? "").trim(), 4),
       pageIndex: Math.round(clamp(a?.pageIndex, 0, 999, 0)),
       positionTop: clamp(a?.positionTop, 0, 1, 0.1),
       positionLeft: clamp(a?.positionLeft, 0, 1, 0.1),
@@ -1098,7 +1101,7 @@ function gradeShape(includeTranscription: boolean): string {
   "strengths": string[],
   "improvements": string[],
   "criteriaBreakdown": [{"name": string, "score": number, "maxScore": number, "level": integer or null, "feedback": string}],
-  "annotations": [{"questionLabel": string, "earnedMark": string, "outOfMark": string, "correct": boolean, "feedback": string, "pageIndex": integer, "positionTop": number, "positionLeft": number}],
+  "annotations": [{"questionLabel": string, "earnedMark": string, "outOfMark": string, "correct": boolean, "feedback": string, "methodNote": string, "pageIndex": integer, "positionTop": number, "positionLeft": number}],
   "derivedKey": [{"label": string, "marks": number, "answer": string}]${includeTranscription ? `,
   "rawText": string` : ""}
 }`;

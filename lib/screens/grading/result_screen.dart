@@ -334,6 +334,7 @@ class _ResultScreenState extends State<ResultScreen> {
       outOfMark: _num(outOf.text) == null ? a.outOfMark : '/${_num(outOf.text)!.toString().replaceAll(RegExp(r'\.0$'), '')}',
       correct: correct,
       feedback: feedback.text.trim(),
+      methodNote: a.methodNote,
       pageIndex: a.pageIndex,
       positionTop: a.positionTop,
       positionLeft: a.positionLeft,
@@ -665,7 +666,10 @@ class _ResultScreenState extends State<ResultScreen> {
                                 subtitle: _isTeacherOnly(a)
                                     ? Text('Yours to mark — ${a.feedback.isEmpty ? "the AI can't check this" : a.feedback}',
                                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: _kFlagAmber, fontWeight: FontWeight.w700))
-                                    : null,
+                                    : (a.correct && a.methodNote.trim().isNotEmpty
+                                        ? Text('Right answer, ${a.methodNote.trim()} — awarded; adjust if you require the taught method',
+                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w700))
+                                        : null),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -711,7 +715,7 @@ class _ResultScreenState extends State<ResultScreen> {
 
                   if (sub != null && sub.triageFlags.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    _FeedbackCard(title: 'Triage flags', color: Colors.orange, body: sub.triageFlags.join('\n• '), prefixBullet: true),
+                    _FeedbackCard(title: 'For your review', color: Colors.orange, body: sub.triageFlags.join('\n• '), prefixBullet: true),
                   ],
 
                   const SizedBox(height: 18),
@@ -958,11 +962,14 @@ class _AnnotatedImage extends StatelessWidget {
       // laid out top-to-bottom with a minimum gap so close-together questions
       // never overlap each other's notes.
       final sorted = [...annotations]..sort((a, b) => a.positionTop.compareTo(b.positionTop));
+      // Wrong answers carry their error label; right-but-different-method
+      // answers carry the blue method note. Correct + matching method = no bubble.
+      String noteOf(QuestionAnnotation a) => a.correct ? a.methodNote.trim() : a.feedback.trim();
       const chipH = 26.0, bubbleH = 34.0, gap = 6.0;
       final slotTop = <QuestionAnnotation, double>{};
       var prevBottom = 0.0;
       for (final a in sorted) {
-        final hasBubble = !a.correct && a.feedback.trim().isNotEmpty;
+        final hasBubble = noteOf(a).isNotEmpty;
         final blockH = chipH + (hasBubble ? bubbleH + 2 : 0);
         var top = (a.positionTop * constraints.maxHeight - 12).clamp(0.0, constraints.maxHeight - blockH);
         if (top < prevBottom + gap && prevBottom > 0) top = (prevBottom + gap).clamp(0.0, constraints.maxHeight - blockH);
@@ -970,7 +977,9 @@ class _AnnotatedImage extends StatelessWidget {
         prevBottom = top + blockH;
       }
 
-      Color tone(QuestionAnnotation a) => _isTeacherOnly(a) ? _kFlagAmber : AiMarkerColors.error;
+      Color tone(QuestionAnnotation a) => a.correct
+          ? AiMarkerColors.primary
+          : (_isTeacherOnly(a) ? _kFlagAmber : AiMarkerColors.error);
 
       return Stack(
         fit: StackFit.passthrough,
@@ -996,7 +1005,7 @@ class _AnnotatedImage extends StatelessWidget {
               )),
           // One slot per question: mark chip, then the tiny label bubble.
           ...sorted.map((a) {
-            final hasBubble = !a.correct && a.feedback.trim().isNotEmpty;
+            final hasBubble = noteOf(a).isNotEmpty;
             return Positioned(
               right: 4,
               top: slotTop[a]!,
@@ -1020,13 +1029,15 @@ class _AnnotatedImage extends StatelessWidget {
                             border: Border.all(color: tone(a).withValues(alpha: 0.6)),
                           ),
                           child: Text(
-                            _bubbleLabel(a.feedback),
+                            _bubbleLabel(noteOf(a)),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 10,
                               height: 1.2,
-                              color: _isTeacherOnly(a) ? _kFlagAmber : const Color(0xFF8B1A1A),
+                              color: a.correct
+                                  ? AiMarkerColors.primary
+                                  : (_isTeacherOnly(a) ? _kFlagAmber : const Color(0xFF8B1A1A)),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
