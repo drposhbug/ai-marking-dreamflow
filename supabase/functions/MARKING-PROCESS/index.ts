@@ -124,7 +124,53 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 13;
+const CACHE_VERSION = 14;
+
+// Margin labels for annotation codes. Annotations render as tiny bubbles ON
+// the page, so a code must never expand into a bank sentence — it maps to a
+// 2-3 word label instead. Correct-answer codes map to "" (no bubble at all).
+const ANNOTATION_SHORT: Record<number, string> = {
+  1: "",
+  2: "",
+  3: "small slip",
+  4: "calculation error",
+  5: "missing unit",
+  6: "wrong formula",
+  7: "no working",
+  8: "incomplete",
+  9: "misread question",
+  10: "sign error",
+  11: "rounding error",
+  12: "missing label",
+  13: "imprecise definition",
+  14: "needs detail",
+  15: "left blank",
+  16: "wrong final answer",
+  17: "copying error",
+  18: "needs example",
+  19: "doesn't answer question",
+  20: "partly correct",
+};
+
+// Hard cap for free-text annotation labels — the prompt demands 2-4 words,
+// this makes sure a disobedient model can never put a sentence on the page.
+function capWords(s: string, n: number): string {
+  const words = s.replace(/[.,;!?]+$/, "").split(/\s+/).filter(Boolean);
+  return words.length <= n ? words.join(" ") : words.slice(0, n).join(" ");
+}
+
+function tinyLabel(value: string, stats?: CodeUse[]): string {
+  const m = /^#(\d+)(?:[\s:—-]+(.+))?$/.exec(value.trim());
+  if (!m) {
+    if (value.trim().length > 0) stats?.push({ bank: "annotation", code: "free_text", kind: "free_text" });
+    return capWords(value.trim(), 4);
+  }
+  const short = ANNOTATION_SHORT[Number(m[1])];
+  const detail = m[2]?.trim();
+  stats?.push({ bank: "annotation", code: `#${m[1]}`, kind: short !== undefined ? "bank" : "unknown" });
+  if (short !== undefined) return short;
+  return detail ? capWords(detail, 4) : "check this";
+}
 
 // Shown instead of an unknown code that has no detail text — a teacher must
 // never see a raw "#37" on screen.
@@ -533,8 +579,9 @@ Do all of the following:
    - questionLabel like "Q1", earnedMark like "2", outOfMark like "/4" — when the paper prints a question's marks (e.g. "(2 marks)"), use exactly those marks
    - earnedMark may use QUARTER-STEP decimals ("0.25", "0.5", "1.75"): deduct fractions for minor slips — a missing unit, a sign error, sloppy rounding — instead of taking a whole mark.
    - correct = true only if fully correct
-   - feedback: a TINY plain-words error label, 2-4 words max — "wrong formula", "addition mistake", "missing unit", "wrong number", "sign error", "left blank", "skipped a step". NEVER a sentence, never an explanation, never a #code here. Fully correct answers get feedback "".
+   - feedback: a TINY plain-words error label, 2-4 words max — "wrong formula", "addition mistake", "missing unit", "wrong number", "sign error", "sig figs", "left blank", "skipped a step". NEVER a sentence, never an explanation, never a summary of the question, never a #code here. Fully correct answers get feedback "".
    - check every numeric final answer for UNITS: if a required unit is missing or wrong, deduct part marks with label "missing unit"
+   - DRAWINGS THE TEACHER MUST MARK BY HAND: when a question is answered with a drawing whose correctness you cannot reliably judge — a free-body diagram, ray diagram, graph the student drew, sketch, geometric construction — do NOT guess a mark. Set earnedMark "?", outOfMark from the printed marks, correct = false, feedback "check drawing". EXCLUDE that question's printed marks from rawScore, maxScore, and its KTCA category totals — the teacher adds it by hand. Simple diagram READING (taking numbers off a printed graph) is normal marking, not this rule.
    - pageIndex: which page the answer is on, 0-based (Page 1 = 0, Page 2 = 1, ...)
    - positionTop and positionLeft: land ON the specific wrong number, expression, or step itself — never the question header, never a subtotal, never the general question area. When the answer is fully correct, point at the final answer. Fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
 4. criteriaBreakdown must normally be EMPTY — marking is right-or-wrong per question, nothing else. Include entries ONLY in exactly two cases:
@@ -543,14 +590,16 @@ Do all of the following:
    NEVER invent criteria ("Attempted all questions", "Effort", "Neatness", "Organization", "Working shown", ...). "Communication" is a criterion ONLY when a rubric or a KTCA section defines it — otherwise communication slips (missing units, missing sig figs, wrong rounding or decimal places) are PART-MARK DEDUCTIONS (quarter-steps, rule 3) on the question where they occur, never a separate criterion or comment section.
 5. Compute maxScore and rawScore for the whole submission:
    - When markingStyle is "completion", rawScore and maxScore count completed vs assigned questions (see rule 2) — the rules below apply to "graded" work.
-   - If the paper prints marks per question (e.g. "(2 marks)", "/4"), maxScore = the TOTAL of the printed marks of the questions VISIBLE in the images, and rawScore = the marks the student earned on those questions.
+   - If the paper prints marks per question (e.g. "(2 marks)", "/4"), maxScore = the TOTAL of the printed marks of the questions VISIBLE in the images, and rawScore = the marks the student earned on those questions. Questions marked "?" as teacher-marked drawings (rule 3) are excluded from BOTH totals.
    - Only if the paper shows no marks at all, use the fallback total marks from CONTEXT.
    - Grade ONLY what is visible. NEVER deduct for questions, sections, or pages that are not in the images — treat the visible pages as the entire submission. If everything visible is fully correct, the score must be full marks.
    - percentage must equal rawScore / maxScore * 100 (rounded is fine).
 6. Ontario/Canadian KTCA marking: many Canadian tests divide their sections into the Ontario achievement categories — Knowledge/Understanding, Thinking/Inquiry, Communication, Application (e.g. "Part A – Knowledge Questions (10 marks)", "Part D – Application Questions (10 marks)"). If the visible sections are labeled with these categories:
    - A question counts ONLY toward the category of the section it appears in.
+   - questionLabel for annotations in KTCA sections uses the CATEGORY name instead of "Q1": "Knowledge 1", "Thinking 2" — or just "Thinking" when that section has a single question. The teacher must see the category at a glance on every mark.
    - Score each visible category separately: marks earned on that section's visible questions out of that section's visible printed marks.
    - Put one entry per visible category FIRST in criteriaBreakdown, named exactly "Knowledge", "Thinking", "Communication", or "Application" (only the categories actually visible), with that category's marks and a feedback code. Any requested criteria follow after as feedback-only entries.
+   - The category entry's feedback must JUSTIFY lost marks concretely — name the questions and the reason ("#6 units missing K2, C1", or free text like "no justification shown C2; sig figs C3"). Never a generic comment: a teacher reading "Communication 6/8" must see exactly where the 2 marks went.
    - The overall percentage = the AVERAGE of the visible category percentages, each category weighted equally (this is how KTCA works — NOT total marks divided by total marks). rawScore and maxScore still report the total visible marks earned and available.
    - If the paper's sections are not labeled with KTCA categories, skip this rule and use percentage = rawScore / maxScore * 100.
 7. Choose gradingFormat: "levels" for work at Grades 1-8 (see GRADE-LEVEL EXPECTATIONS below) and for essays, lab reports, and rubric-style work; "percentage" for Grades 9-13 tests, quizzes, and homework.
@@ -681,7 +730,7 @@ function normalize(obj: any, provider: string, maxScoreDefault: number, formatOv
       earnedMark: String(a?.earnedMark ?? ""),
       outOfMark: String(a?.outOfMark ?? ""),
       correct: a?.correct === true,
-      feedback: expandFeedback(String(a?.feedback ?? ""), "annotation", ANNOTATION_BANK, stats),
+      feedback: tinyLabel(String(a?.feedback ?? ""), stats),
       pageIndex: Math.round(clamp(a?.pageIndex, 0, 999, 0)),
       positionTop: clamp(a?.positionTop, 0, 1, 0.1),
       positionLeft: clamp(a?.positionLeft, 0, 1, 0.1),
