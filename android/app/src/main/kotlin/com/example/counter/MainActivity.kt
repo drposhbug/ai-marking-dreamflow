@@ -50,7 +50,7 @@ class MainActivity : FlutterActivity() {
         pendingResult = null
 
         if (resultCode != RESULT_OK || data == null) {
-            res.success(emptyList<Any>())
+            res.success(mapOf("picked" to 0, "files" to emptyList<Any>()))
             return
         }
 
@@ -62,22 +62,26 @@ class MainActivity : FlutterActivity() {
             data.data?.let { uris.add(it) }
         }
 
-        val out = mutableListOf<Map<String, Any>>()
-        for (u in uris) {
-            try {
-                contentResolver.openInputStream(u)?.use { stream ->
-                    val bytes = stream.readBytes()
-                    var name = "drive_image.jpg"
-                    contentResolver.query(u, null, null, null, null)?.use { c ->
-                        val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        if (c.moveToFirst() && idx >= 0) name = c.getString(idx) ?: name
+        // Drive files may need a real download — never block the UI thread.
+        Thread {
+            val out = mutableListOf<Map<String, Any>>()
+            for (u in uris) {
+                try {
+                    contentResolver.openInputStream(u)?.use { stream ->
+                        val bytes = stream.readBytes()
+                        var name = "drive_image.jpg"
+                        contentResolver.query(u, null, null, null, null)?.use { c ->
+                            val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            if (c.moveToFirst() && idx >= 0) name = c.getString(idx) ?: name
+                        }
+                        val mime = contentResolver.getType(u) ?: ""
+                        out.add(mapOf("name" to name, "mime" to mime, "bytes" to bytes))
                     }
-                    out.add(mapOf("name" to name, "bytes" to bytes))
+                } catch (_: Exception) {
+                    // Unreadable entry — the Dart side reports the shortfall.
                 }
-            } catch (_: Exception) {
-                // Skip unreadable entries; the Dart side reports how many loaded.
             }
-        }
-        res.success(out)
+            runOnUiThread { res.success(mapOf("picked" to uris.size, "files" to out)) }
+        }.start()
     }
 }
