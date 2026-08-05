@@ -855,6 +855,13 @@ class _HeroChip extends StatelessWidget {
 
 // ── Annotated image with drawn marks ────────────────────────────────────────
 
+// Margin bubbles are labels, not sentences — results marked under older rules
+// carry verbose notes, so cap what lands on the page at a few words.
+String _bubbleLabel(String s) {
+  final words = s.replaceAll(RegExp(r'[.,;!?]+$'), '').split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+  return words.take(4).join(' ');
+}
+
 class _AnnotatedImage extends StatelessWidget {
   final Uint8List imageBytes;
   final List<QuestionAnnotation> annotations;
@@ -901,8 +908,8 @@ class _AnnotatedImage extends StatelessWidget {
                       border: Border.all(color: AiMarkerColors.error.withValues(alpha: 0.6)),
                     ),
                     child: Text(
-                      a.feedback,
-                      maxLines: 3,
+                      _bubbleLabel(a.feedback),
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10, height: 1.2, color: Color(0xFF8B1A1A), fontWeight: FontWeight.w600),
                     ),

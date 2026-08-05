@@ -818,14 +818,20 @@ class AiGradingService {
     final level = (map['level'] as num?)?.toInt();
     final gradingFormat = (map['gradingFormat'] ?? 'percentage').toString();
 
-    // Confidence: use percentage as a proxy if not provided
-    final confidence = (percentage.clamp(50, 99)).toInt();
-    final triageStatus = confidence >= 70 ? TriageStatus.graded : TriageStatus.needsReview;
-
     final annotations = (map['annotations'] as List? ?? [])
         .whereType<Map>()
         .map((a) => QuestionAnnotation.fromJson(a.cast<String, dynamic>()))
         .toList();
+
+    // "?" marks are drawings (FBDs, sketched graphs) the AI refuses to judge —
+    // they are excluded from the totals and the teacher marks them by hand.
+    final handMarked = annotations.where((a) => a.earnedMark.trim() == '?').toList();
+    final triageStatus = handMarked.isEmpty ? TriageStatus.graded : TriageStatus.needsReview;
+    final flags = [
+      for (final a in handMarked)
+        '${a.questionLabel.isEmpty ? 'Drawing' : a.questionLabel}: mark the drawing by hand, then tap its row to enter the marks',
+    ];
+    final confidence = handMarked.isEmpty ? 95 : 70;
 
     final criteriaBreakdown = (map['criteriaBreakdown'] as List? ?? [])
         .whereType<Map>()
@@ -853,7 +859,7 @@ class AiGradingService {
       annotations: annotations,
       rawText: (map['rawText'] ?? '').toString(),
       confidence: confidence,
-      flags: [],
+      flags: flags,
       triageStatus: triageStatus,
     );
   }
