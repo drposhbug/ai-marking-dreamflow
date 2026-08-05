@@ -27,10 +27,15 @@ class Submission {
   /// full result screen can be reopened later — locally and cross-device.
   final Map<String, dynamic>? resultJson;
 
-  const Submission({required this.id, required this.teacherId, required this.studentId, required this.classId, required this.presetId, required this.subject, required this.gradingMode, required this.score, required this.maxScore, required this.feedback, required this.triageStatus, required this.overrideUsed, required this.triageFlags, required this.confidence, required this.createdAt, required this.updatedAt, this.imageUrl, this.resultJson});
+  /// On-device file paths of the scanned pages (this phone only — images
+  /// are too heavy for the cloud copy).
+  final List<String> pageImagePaths;
 
-  Submission copyWith({String? id, String? teacherId, String? studentId, String? classId, String? presetId, String? subject, GradingMode? gradingMode, double? score, double? maxScore, String? feedback, TriageStatus? triageStatus, bool? overrideUsed, String? imageUrl, List<String>? triageFlags, int? confidence, DateTime? createdAt, DateTime? updatedAt, Map<String, dynamic>? resultJson}) => Submission(
+  const Submission({required this.id, required this.teacherId, required this.studentId, required this.classId, required this.presetId, required this.subject, required this.gradingMode, required this.score, required this.maxScore, required this.feedback, required this.triageStatus, required this.overrideUsed, required this.triageFlags, required this.confidence, required this.createdAt, required this.updatedAt, this.imageUrl, this.resultJson, this.pageImagePaths = const []});
+
+  Submission copyWith({String? id, String? teacherId, String? studentId, String? classId, String? presetId, String? subject, GradingMode? gradingMode, double? score, double? maxScore, String? feedback, TriageStatus? triageStatus, bool? overrideUsed, String? imageUrl, List<String>? triageFlags, int? confidence, DateTime? createdAt, DateTime? updatedAt, Map<String, dynamic>? resultJson, List<String>? pageImagePaths}) => Submission(
     resultJson: resultJson ?? this.resultJson,
+    pageImagePaths: pageImagePaths ?? this.pageImagePaths,
     id: id ?? this.id,
     teacherId: teacherId ?? this.teacherId,
     studentId: studentId ?? this.studentId,
@@ -69,6 +74,7 @@ class Submission {
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
     if (resultJson != null) 'result': resultJson,
+    if (pageImagePaths.isNotEmpty) 'page_image_paths': pageImagePaths,
   };
 
   factory Submission.fromJson(Map<String, dynamic> json) => Submission(
@@ -90,6 +96,7 @@ class Submission {
     createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()) ?? DateTime.now(),
     updatedAt: DateTime.tryParse((json['updated_at'] ?? '').toString()) ?? DateTime.now(),
     resultJson: json['result'] is Map ? (json['result'] as Map).cast<String, dynamic>() : null,
+    pageImagePaths: (json['page_image_paths'] as List?)?.map((e) => e.toString()).toList() ?? const [],
   );
 
   static String encodeList(List<Submission> items) => jsonEncode(items.map((e) => e.toJson()).toList());
