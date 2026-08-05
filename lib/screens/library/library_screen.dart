@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
+import 'package:marking_prokect_v2/services/drive_picker.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
@@ -79,14 +80,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     List<ScannedPage>? pages;
     if (source == 'files') {
-      final res = await FilePicker.pickFiles(type: FileType.image, allowMultiple: true, withData: true);
-      if (res == null || res.files.isEmpty) return;
       pages = <ScannedPage>[];
-      for (final f in res.files) {
-        final bytes = f.bytes;
-        if (bytes == null) continue;
-        final processed = await DocumentProcessor.processPage(bytes);
-        pages.add(ScannedPage(bytes: processed, fileName: f.name));
+      try {
+        // Drive app's own picker first; system picker as the fallback.
+        final picked = await DrivePicker.pickImages();
+        for (final f in picked) {
+          final processed = await DocumentProcessor.processPage(f.bytes);
+          pages.add(ScannedPage(bytes: processed, fileName: f.name));
+        }
+      } on DrivePickerUnavailable {
+        final res = await FilePicker.pickFiles(type: FileType.image, allowMultiple: true, withData: true);
+        if (res == null || res.files.isEmpty) return;
+        for (final f in res.files) {
+          final bytes = f.bytes;
+          if (bytes == null) continue;
+          final processed = await DocumentProcessor.processPage(bytes);
+          pages.add(ScannedPage(bytes: processed, fileName: f.name));
+        }
       }
     } else {
       pages = await Navigator.of(context).push<List<ScannedPage>>(
