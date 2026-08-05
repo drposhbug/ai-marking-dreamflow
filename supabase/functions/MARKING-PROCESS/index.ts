@@ -124,7 +124,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 12;
+const CACHE_VERSION = 13;
 
 // Shown instead of an unknown code that has no detail text — a teacher must
 // never see a raw "#37" on screen.
@@ -533,10 +533,10 @@ Do all of the following:
    - questionLabel like "Q1", earnedMark like "2", outOfMark like "/4" — when the paper prints a question's marks (e.g. "(2 marks)"), use exactly those marks
    - earnedMark may use QUARTER-STEP decimals ("0.25", "0.5", "1.75"): deduct fractions for minor slips — a missing unit, a sign error, sloppy rounding — instead of taking a whole mark.
    - correct = true only if fully correct
-   - feedback: one code from ANNOTATION CODES (see FEEDBACK CODES below)
-   - check every numeric final answer for UNITS: if a required unit is missing or wrong, deduct part marks and use code #5
+   - feedback: a TINY plain-words error label, 2-4 words max — "wrong formula", "addition mistake", "missing unit", "wrong number", "sign error", "left blank", "skipped a step". NEVER a sentence, never an explanation, never a #code here. Fully correct answers get feedback "".
+   - check every numeric final answer for UNITS: if a required unit is missing or wrong, deduct part marks with label "missing unit"
    - pageIndex: which page the answer is on, 0-based (Page 1 = 0, Page 2 = 1, ...)
-   - positionTop and positionLeft: point at the EXACT spot of the mistake when the answer is wrong (the erroneous line or step, so the app can highlight it), otherwise at the final answer — as fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
+   - positionTop and positionLeft: land ON the specific wrong number, expression, or step itself — never the question header, never a subtotal, never the general question area. When the answer is fully correct, point at the final answer. Fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
 4. criteriaBreakdown must normally be EMPTY — marking is right-or-wrong per question, nothing else. Include entries ONLY in exactly two cases:
    - KTCA sections: the paper's own sections are labeled with the Ontario categories (rule 6) — those category entries COUNT toward the mark.
    - Printed rubric: the pages (or the ANSWER KEY) include a rubric — mark each rubric criterion with a level 1-4 exactly as the rubric defines, choose gradingFormat "levels", overall level from the rubric average.
@@ -558,7 +558,7 @@ Do all of the following:
 
 GRADE-LEVEL EXPECTATIONS — mark at the grade level given in CONTEXT when present; otherwise mark at the grade level you detected from the work itself. For work at Grades 1-8, report on the elementary Level scale by choosing gradingFormat "levels": Level 3 = meeting grade expectations, Level 4 = exceeding them, Level 4+ = outstanding. Percentages still back the levels, so compute rawScore/maxScore/percentage as usual.
 
-FEEDBACK CODES — to keep responses compact, every feedback string (annotations.feedback, criteriaBreakdown.feedback, and each entry of strengths and improvements) MUST be a code: write "#N" or "#N detail", where detail is 1-4 words that fill the {X} slot or add specifics. Only write a free-text sentence when no code fits.
+FEEDBACK CODES — to keep responses compact, every feedback string in criteriaBreakdown.feedback and each entry of strengths and improvements MUST be a code: write "#N" or "#N detail", where detail is 1-4 words that fill the {X} slot or add specifics. Only write a free-text sentence when no code fits. (annotations.feedback is the exception — it uses tiny plain-words labels per rule 3, never codes.)
 ${bankLegend("ANNOTATION CODES", ANNOTATION_BANK)}
 ${bankLegend("CRITERIA CODES", CRITERIA_BANK)}
 ${bankLegend("STRENGTH CODES", STRENGTH_BANK)}

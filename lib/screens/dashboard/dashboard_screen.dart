@@ -81,8 +81,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
 
-      final selectedClass = (_selectedClassId == null) ? null : classesService.getById(_selectedClassId!);
-
       // Default view is ALL of the teacher's marks — including work marked
       // with "No class" — so nothing is ever invisible on the dashboard.
       final classSubmissions = teacherId == null
