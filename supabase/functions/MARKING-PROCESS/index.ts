@@ -864,11 +864,14 @@ async function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
   }
 }
 
-function usdFor(inputTokens: number, outputTokens: number): number {
-  return (inputTokens * PRICE_IN_PER_M) / 1e6 + (outputTokens * PRICE_OUT_PER_M) / 1e6;
-}
-
-async function logUsage(teacherId: string, action: string, inputTokens: number, outputTokens: number): Promise<void> {
+async function logUsage(
+  teacherId: string,
+  action: string,
+  inputTokens: number,
+  outputTokens: number,
+  priceInPerM: number = PRICE_IN_PER_M,
+  priceOutPerM: number = PRICE_OUT_PER_M,
+): Promise<void> {
   if (!teacherId) return;
   try {
     const { error } = await serviceDb().from("usage_log").insert({
@@ -876,7 +879,7 @@ async function logUsage(teacherId: string, action: string, inputTokens: number, 
       action,
       input_tokens: Math.round(inputTokens),
       output_tokens: Math.round(outputTokens),
-      cost_usd: usdFor(inputTokens, outputTokens),
+      cost_usd: (inputTokens * priceInPerM) / 1e6 + (outputTokens * priceOutPerM) / 1e6,
     });
     if (error) throw error;
   } catch (e) {
@@ -966,6 +969,46 @@ function gradeShape(includeTranscription: boolean): string {
   "rawText": string` : ""}
 }`;
 }
+
+// ---------- DeepSeek (cheap text-only grader for the objective route) ----------
+// OpenAI-compatible API. Text-only: it grades TRANSCRIPTS, never images —
+// a vision parse pass supplies what the student wrote.
+const DEEPSEEK_PRICE_IN = 0.14; // USD per 1M input tokens
+const DEEPSEEK_PRICE_OUT = 0.28; // USD per 1M output tokens
+const GEMINI_PARSE_PRICE_IN = 1.5;
+const GEMINI_PARSE_PRICE_OUT = 9.0;
+
+async function callDeepSeek(userText: string, usage?: { inputTokens: number; outputTokens: number }) {
+  const apiKey = Deno.env.get("DEEPSEEK_API_KEY");
+  if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY secret");
+  const res = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: "deepseek-chat",
+      messages: [{ role: "user", content: userText }],
+      temperature: 0,
+      max_tokens: 4000,
+      response_format: { type: "json_object" },
+    }),
+  });
+  if (!res.ok) throw new Error(`DeepSeek ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  if (usage) {
+    usage.inputTokens = data?.usage?.prompt_tokens ?? 0;
+    usage.outputTokens = data?.usage?.completion_tokens ?? 0;
+  }
+  const text = data?.choices?.[0]?.message?.content ?? "";
+  if (!text) throw new Error("DeepSeek returned no text");
+  const cleaned = text.trim().replace(/^```(?:json)?/, "").replace(/```$/, "").trim();
+  return JSON.parse(cleaned);
+}
+
+// Vision parse for the objective route: transcribe only, never judge.
+const PARSE_PROMPT =
+  `You are a precise transcription engine for photographed school work. Transcribe every question label and EXACTLY what the student wrote for it — do NOT grade, do NOT correct errors, keep the student's wording and numbers verbatim. Record where each answer sits on its page.`;
+const PARSE_SHAPE = `\n\nReturn ONLY a single JSON object:
+{"studentNameOnPaper": string or null, "detectedSubject": string, "questions": [{"label": string, "pageIndex": integer (0-based), "studentWork": string, "positionTop": number (0-1 fraction of page height), "positionLeft": number (0-1 fraction of page width)}]}`;
 
 async function callGemini(imagesBase64: string[], mediaType: string, prompt: string, jsonInstruction: string) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
@@ -1582,6 +1625,41 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
   // the request asks for it with "provider": "gemini").
   const preferGemini = String(payload?.provider ?? "").toLowerCase() === "gemini";
   const attempts: Array<"claude" | "gemini"> = preferGemini ? ["gemini", "claude"] : ["claude", "gemini"];
+
+  // ── Cheap objective route ───────────────────────────────────────────────
+  // With an official answer key on file, homework/quiz marking is mostly
+  // transcription + comparison: a vision pass (Gemini) transcribes what the
+  // student wrote, then a cheap text model (DeepSeek) does the comparing —
+  // ~10x cheaper per mark than the frontier path. Essays, lab reports, and
+  // keyless marking skip this. ANY failure falls through to the frontier
+  // single-call path below, so quality can only fall back, never dead-end.
+  const objectiveRoute = !!Deno.env.get("DEEPSEEK_API_KEY") && !!answerKey && !preferGemini &&
+    (mode === "homework" || mode === "testQuiz");
+  if (objectiveRoute) {
+    try {
+      const parsed = await callGemini(imagesBase64, mediaType, PARSE_PROMPT, PARSE_SHAPE);
+      await logUsage(
+        gradeTeacherId,
+        "parse",
+        imagesBase64.length * 1400 + 600,
+        800,
+        GEMINI_PARSE_PRICE_IN,
+        GEMINI_PARSE_PRICE_OUT,
+      );
+      const dsUsage = { inputTokens: 0, outputTokens: 0 };
+      const transcript =
+        `\n\nA vision pass has already transcribed the pages. Treat this transcript as exactly what the student wrote (do not invent or omit answers), and reuse its pageIndex, positionTop, and positionLeft values for your annotations:\n${JSON.stringify(parsed)}`;
+      const raw = await callDeepSeek(geminiPrompt + transcript + shape, dsUsage);
+      await logUsage(gradeTeacherId, "grade", dsUsage.inputTokens, dsUsage.outputTokens, DEEPSEEK_PRICE_IN, DEEPSEEK_PRICE_OUT);
+      await cacheWrite(cacheKey, "deepseek", raw, imageHashes);
+      const stats: CodeUse[] = [];
+      const normalized = normalize(raw, "deepseek", maxScore, formatOverride, stats, expectationGrade);
+      await logCodeUsage(stats);
+      return json({ ...normalized, cached: false });
+    } catch (e) {
+      console.error("objective route failed, falling back to frontier path:", e instanceof Error ? e.message : e);
+    }
+  }
 
   const errors: string[] = [];
   for (const name of attempts) {
