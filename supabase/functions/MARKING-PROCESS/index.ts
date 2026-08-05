@@ -124,7 +124,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 11;
+const CACHE_VERSION = 12;
 
 // Shown instead of an unknown code that has no detail text — a teacher must
 // never see a raw "#37" on screen.
@@ -537,9 +537,10 @@ Do all of the following:
    - check every numeric final answer for UNITS: if a required unit is missing or wrong, deduct part marks and use code #5
    - pageIndex: which page the answer is on, 0-based (Page 1 = 0, Page 2 = 1, ...)
    - positionTop and positionLeft: point at the EXACT spot of the mistake when the answer is wrong (the erroneous line or step, so the app can highlight it), otherwise at the final answer — as fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
-4. Score each grading criterion listed in CONTEXT in criteriaBreakdown with a per-criterion score and maxScore, a level 1-4 (or null), and a feedback code — considering all pages together. criteriaBreakdown is diagnostic feedback ONLY — it must NOT determine the overall score. If a criterion does not apply to this work (e.g. "Diagrams labeled" when no diagrams are required), give it full marks and use criteria code #5 — never deduct for inapplicable criteria.
-   - EXCEPTION for graded tests/quizzes: drop effort/attempt/completion-style criteria ("Attempted all questions", "Working shown", "Effort evident", ...) from criteriaBreakdown ENTIRELY — a test is scored on the questions, and the teacher doesn't want attempt commentary. Keep only KTCA categories (rule 6), rubric criteria, and academically meaningful criteria.
-   - RUBRICS: if the pages include a printed rubric (or the ANSWER KEY contains one), mark against it — one criteriaBreakdown entry per rubric criterion with a level 1-4 each — and choose gradingFormat "levels" with the overall level from the rubric average.
+4. criteriaBreakdown must normally be EMPTY — marking is right-or-wrong per question, nothing else. Include entries ONLY in exactly two cases:
+   - KTCA sections: the paper's own sections are labeled with the Ontario categories (rule 6) — those category entries COUNT toward the mark.
+   - Printed rubric: the pages (or the ANSWER KEY) include a rubric — mark each rubric criterion with a level 1-4 exactly as the rubric defines, choose gradingFormat "levels", overall level from the rubric average.
+   NEVER invent criteria ("Attempted all questions", "Effort", "Neatness", "Organization", "Working shown", ...). "Communication" is a criterion ONLY when a rubric or a KTCA section defines it — otherwise communication slips (missing units, missing sig figs, wrong rounding or decimal places) are PART-MARK DEDUCTIONS (quarter-steps, rule 3) on the question where they occur, never a separate criterion or comment section.
 5. Compute maxScore and rawScore for the whole submission:
    - When markingStyle is "completion", rawScore and maxScore count completed vs assigned questions (see rule 2) — the rules below apply to "graded" work.
    - If the paper prints marks per question (e.g. "(2 marks)", "/4"), maxScore = the TOTAL of the printed marks of the questions VISIBLE in the images, and rawScore = the marks the student earned on those questions.
@@ -553,7 +554,7 @@ Do all of the following:
    - The overall percentage = the AVERAGE of the visible category percentages, each category weighted equally (this is how KTCA works — NOT total marks divided by total marks). rawScore and maxScore still report the total visible marks earned and available.
    - If the paper's sections are not labeled with KTCA categories, skip this rule and use percentage = rawScore / maxScore * 100.
 7. Choose gradingFormat: "levels" for work at Grades 1-8 (see GRADE-LEVEL EXPECTATIONS below) and for essays, lab reports, and rubric-style work; "percentage" for Grades 9-13 tests, quizzes, and homework.
-8. Write summary as AT MOST 2 short sentences addressed to the teacher about this student's overall performance. Do not repeat per-question details, and do NOT list KTCA category scores — those are appended automatically. Give 2-4 strengths and 2-4 improvements, each as a feedback code.
+8. For graded tests/quizzes: summary is AT MOST 1 short sentence, and strengths and improvements are EMPTY arrays — the per-question marks ARE the feedback. For all other work: summary at most 2 short sentences addressed to the teacher (no per-question details, no KTCA scores — those are appended automatically), with 2-4 strengths and 2-4 improvements as feedback codes.
 
 GRADE-LEVEL EXPECTATIONS — mark at the grade level given in CONTEXT when present; otherwise mark at the grade level you detected from the work itself. For work at Grades 1-8, report on the elementary Level scale by choosing gradingFormat "levels": Level 3 = meeting grade expectations, Level 4 = exceeding them, Level 4+ = outstanding. Percentages still back the levels, so compute rawScore/maxScore/percentage as usual.
 

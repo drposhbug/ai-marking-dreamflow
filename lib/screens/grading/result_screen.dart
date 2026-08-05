@@ -668,15 +668,21 @@ class _ResultScreenState extends State<ResultScreen> {
                       const SizedBox(height: 14),
                     ],
 
-                    // Criteria breakdown (KTCA categories, rubric criteria).
-                    if (result.criteriaBreakdown.isNotEmpty) ...[
-                      Text('Criteria Breakdown', style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 10),
-                      ...result.criteriaBreakdown.map((c) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _CriterionCard(criterion: c, displayFormat: _displayFormat),
-                          )),
-                    ],
+    // Criteria show only when they carry marks: KTCA categories (always)
+                    // and, for non-tests, rubric criteria. Tests never show
+                    // invented commentary criteria.
+                    ...(() {
+                      final crits = sub?.gradingMode == GradingMode.testQuiz ? _ktcaOf(result) : result.criteriaBreakdown;
+                      if (crits.isEmpty) return const <Widget>[];
+                      return <Widget>[
+                        Text('Criteria Breakdown', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 10),
+                        ...crits.map((c) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _CriterionCard(criterion: c, displayFormat: _displayFormat),
+                            )),
+                      ];
+                    })(),
                     const SizedBox(height: 6),
                     OutlinedButton.icon(
                       onPressed: _teachTheAi,
