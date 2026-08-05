@@ -180,32 +180,6 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     }
   }
 
-  /// Photo library or the system Files UI — the latter includes Google
-  /// Drive as a source, so teachers can pull test photos straight from
-  /// their Drive. Returns null when dismissed.
-  Future<String?> _pickImportSource() => showModalBottomSheet<String>(
-        context: context,
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        builder: (context) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library_rounded),
-                title: const Text('Photo library'),
-                onTap: () => Navigator.pop(context, 'gallery'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.add_to_drive_rounded),
-                title: const Text('Files or Google Drive'),
-                subtitle: const Text('Pick images from Drive, Downloads, or any storage'),
-                onTap: () => Navigator.pop(context, 'files'),
-              ),
-            ],
-          ),
-        ),
-      );
-
   /// Multi-select images via the system document picker (Drive included);
   /// each one gets the full scanner treatment.
   Future<List<ScannedPage>> _pickPagesFromFiles() async {
@@ -235,22 +209,29 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         return;
       }
 
-      final source = await _pickImportSource();
-      if (source == null || !mounted) return;
-      if (source == 'files') {
-        final pages = await _pickPagesFromFiles();
-        if (pages.isEmpty || !mounted) return;
-        context.read<AppState>().setPages(pages);
-        context.push(AppRoutes.gradingContext);
-        return;
-      }
-
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
       await _handlePickedFile(image);
     } catch (e) {
       debugPrint('Pick from gallery failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open gallery.')));
+    }
+  }
+
+  /// Assignment pages straight from Google Drive (or any storage the
+  /// system Files picker offers). Multi-select supported.
+  Future<void> _pickFromDrive() async {
+    final ok = await _askWhichClass();
+    if (!ok || !mounted) return;
+    try {
+      final pages = await _pickPagesFromFiles();
+      if (pages.isEmpty || !mounted) return;
+      context.read<AppState>().setPages(pages);
+      context.push(AppRoutes.gradingContext);
+    } catch (e) {
+      debugPrint('Pick from Drive failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open the file picker.')));
     }
   }
 
@@ -326,8 +307,10 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                     const SizedBox(height: 4),
                     Text('Take a photo to start grading', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.9))),
                     const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 10,
+                      runSpacing: 8,
                       children: [
                         PillButton(
                           label: 'From Gallery',
@@ -336,7 +319,13 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                           foreground: Colors.white,
                           onTap: _pickFromGallery,
                         ),
-                        const SizedBox(width: 10),
+                        PillButton(
+                          label: 'From Drive',
+                          icon: Icons.add_to_drive_rounded,
+                          background: Colors.white.withValues(alpha: 0.16),
+                          foreground: Colors.white,
+                          onTap: _pickFromDrive,
+                        ),
                         PillButton(
                           label: state.draft.answerKeyId.isEmpty ? 'Scan Answer Key' : 'Key: ${state.draft.answerKeyName}',
                           icon: Icons.key_rounded,
