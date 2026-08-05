@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
@@ -43,9 +45,15 @@ class _ResultScreenState extends State<ResultScreen> {
   late String _displayFormat;
   AiGradeResult? _result;
 
+  /// Page images restored from disk when this result was reopened later
+  /// (live grading passes them via the route instead).
+  List<Uint8List>? _restoredPages;
+
   List<Uint8List> get _pages {
     final p = widget.pageImages;
     if (p != null && p.isNotEmpty) return p;
+    final r = _restoredPages;
+    if (r != null && r.isNotEmpty) return r;
     final single = widget.imageBytes;
     return single == null ? const [] : [single];
   }
@@ -74,6 +82,21 @@ class _ResultScreenState extends State<ResultScreen> {
         } catch (e) {
           debugPrint('Saved result restore failed: $e');
         }
+      }
+      // Page photos are kept on-device per submission — load them so the
+      // Original/Annotated tabs work on reopen too.
+      final paths = sub?.pageImagePaths ?? const [];
+      if (!kIsWeb && paths.isNotEmpty && (widget.pageImages == null || widget.pageImages!.isEmpty)) {
+        Future(() async {
+          final loaded = <Uint8List>[];
+          for (final p in paths) {
+            try {
+              final f = File(p);
+              if (await f.exists()) loaded.add(await f.readAsBytes());
+            } catch (_) {}
+          }
+          if (mounted && loaded.isNotEmpty) setState(() => _restoredPages = loaded);
+        });
       }
     }
     _displayFormat = _result?.gradingFormat ?? 'percentage';
@@ -306,6 +329,14 @@ class _ResultScreenState extends State<ResultScreen> {
     final anns = [...result.annotations];
     anns[idx] = newAnn;
 
+    // Teacher turned a part mark (0.5) into a whole number — that's a
+    // marking-style signal worth remembering, with their consent.
+    final oldEarned = _num(a.earnedMark);
+    final newEarned = _num(earned.text);
+    if (oldEarned != null && newEarned != null && oldEarned != newEarned && oldEarned % 1 != 0 && newEarned % 1 == 0) {
+      _offerWholeMarkPreference();
+    }
+
     // Recompute the total from the per-question marks when they all parse.
     double earnedSum = 0, outOfSum = 0;
     var parseable = anns.isNotEmpty;
@@ -325,6 +356,41 @@ class _ResultScreenState extends State<ResultScreen> {
       rawScore: parseable ? earnedSum : null,
       maxScore: parseable ? outOfSum : null,
     ));
+  }
+
+  /// One-time ask: should Mark stop giving part marks entirely? Saves as a
+  /// standing Teach-Mark instruction that rides with every future grade.
+  Future<void> _offerWholeMarkPreference() async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    final app = context.read<AppState>();
+    final already = app.markingFeedback.any((f) {
+      final l = f.toLowerCase();
+      return l.contains('part mark') || l.contains('whole mark') || l.contains('fractional');
+    });
+    if (already) return;
+
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('No part marks?'),
+        content: const Text(
+            'You changed a part mark to a whole number. Should Mark stop giving part marks (0.25 / 0.5 / 0.75) and always score questions in whole marks?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep part marks')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Always whole marks')),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    await app.addMarkingFeedback(
+      teacherId: auth.id,
+      feedback: 'Never award fractional part marks (0.25, 0.5, 0.75) — score every question in whole marks only.',
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Saved — Mark will use whole marks on every future grade. Change it any time in Settings → Give feedback.')),
+    );
   }
 
   Future<void> _editScore() async {
@@ -395,6 +461,7 @@ class _ResultScreenState extends State<ResultScreen> {
                     sub: sub,
                     displayFormat: _displayFormat,
                     useCategoryAverage: _useCategoryAverage,
+                    isTest: sub?.gradingMode == GradingMode.testQuiz,
                     ktca: result == null ? const [] : _ktcaOf(result),
                     onToggleAverage: result != null && _ktcaOf(result).length >= 2
                         ? (v) => setState(() => _useCategoryAverage = v)
@@ -562,9 +629,16 @@ class _ResultScreenState extends State<ResultScreen> {
                                   size: 20,
                                 ),
                                 title: Text(a.questionLabel.isEmpty ? 'Question' : a.questionLabel, style: Theme.of(context).textTheme.bodyMedium),
-                                trailing: Text(
-                                  '${a.earnedMark}${a.outOfMark}',
-                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '${a.earnedMark}${a.outOfMark}',
+                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Icon(Icons.edit_rounded, size: 15, color: AiMarkerColors.neutral),
+                                  ],
                                 ),
                               ),
                           ],
@@ -610,8 +684,11 @@ class _ResultScreenState extends State<ResultScreen> {
                       label: const Text('Teach Mark — correct how it marks'),
                     ),
                   ] else ...[
-                    // No live result in memory — show the stored summary.
-                    if ((sub?.feedback ?? '').trim().isNotEmpty)
+                    // No live result in memory — show the stored summary
+                    // (tests skip the written feedback entirely).
+                    if (sub?.gradingMode == GradingMode.testQuiz)
+                      const SizedBox.shrink()
+                    else if ((sub?.feedback ?? '').trim().isNotEmpty)
                       _FeedbackCard(title: 'Summary', color: cs.primary, body: sub!.feedback.trim())
                     else
                       _FeedbackCard(
@@ -705,6 +782,7 @@ class _HeroGrade extends StatelessWidget {
   final Submission? sub;
   final String displayFormat;
   final bool useCategoryAverage;
+  final bool isTest;
   final List<CriterionResult> ktca;
   final ValueChanged<bool>? onToggleAverage;
 
@@ -713,6 +791,7 @@ class _HeroGrade extends StatelessWidget {
     required this.sub,
     required this.displayFormat,
     required this.useCategoryAverage,
+    required this.isTest,
     required this.ktca,
     required this.onToggleAverage,
   });
@@ -747,9 +826,14 @@ class _HeroGrade extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final big = displayFormat == 'levels' ? _levelFor(pct) : '${pct.round()}%';
-    final sub2 = '${_num(raw)} / ${_num(max)}'
-        '${displayFormat == 'levels' ? ' · ${pct.round()}%' : ''}';
+    // Tests lead with the marks themselves ("30 / 40"); other work leads
+    // with the level or percentage.
+    final big = isTest
+        ? '${_num(raw)} / ${_num(max)}'
+        : (displayFormat == 'levels' ? _levelFor(pct) : '${pct.round()}%');
+    final sub2 = isTest
+        ? '${pct.round()}%${displayFormat == 'levels' ? ' · ${_levelFor(pct)}' : ''}'
+        : '${_num(raw)} / ${_num(max)}${displayFormat == 'levels' ? ' · ${pct.round()}%' : ''}';
 
     return Container(
       width: double.infinity,

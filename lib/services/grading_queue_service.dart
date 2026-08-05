@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
@@ -111,7 +113,11 @@ class GradingQueueService extends ChangeNotifier {
         gradeLevel: req.gradeLevel,
         region: req.region,
       );
-      final submission = ai.toSubmission(req: saveReq, res: res);
+      var submission = ai.toSubmission(req: saveReq, res: res);
+      // Keep the scanned pages on-device so the teacher can reopen the
+      // original and annotated views later (too heavy for the cloud copy).
+      final imagePaths = await _savePagesLocally(submission.id, job.pages);
+      if (imagePaths.isNotEmpty) submission = submission.copyWith(pageImagePaths: imagePaths);
       await submissions.create(submission);
 
       job.status = GradingJobStatus.done;
@@ -135,6 +141,27 @@ class GradingQueueService extends ChangeNotifier {
               : 'Marking failed for ${job.label} — tap it in the tray to retry.'),
         ),
       );
+    }
+  }
+
+  /// Writes the scanned pages to the app's documents folder so reopened
+  /// results can show the original/annotated views.
+  Future<List<String>> _savePagesLocally(String submissionId, List<Uint8List> pages) async {
+    if (kIsWeb) return const [];
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final folder = Directory('${dir.path}/marked');
+      if (!await folder.exists()) await folder.create(recursive: true);
+      final paths = <String>[];
+      for (var i = 0; i < pages.length; i++) {
+        final f = File('${folder.path}/${submissionId}_$i.jpg');
+        await f.writeAsBytes(pages[i]);
+        paths.add(f.path);
+      }
+      return paths;
+    } catch (e) {
+      debugPrint('Saving marked pages locally failed: $e');
+      return const [];
     }
   }
 
