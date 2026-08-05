@@ -17,9 +17,17 @@ class SubmissionsService extends ChangeNotifier {
       final raw = await _store.getString(_kKey);
       if (raw == null || raw.isEmpty) {
         _submissions = const [];
-        await _persist();
       } else {
-        _submissions = Submission.decodeList(raw);
+        try {
+          _submissions = Submission.decodeList(raw);
+          debugPrint('SubmissionsService: loaded ${_submissions.length} result(s) from disk');
+        } catch (e) {
+          // NEVER lose data: park the unreadable raw for recovery instead
+          // of overwriting it with an empty list later.
+          debugPrint('SubmissionsService decode failed — raw backed up: $e');
+          await _store.setString('$_kKey.backup', raw);
+          _submissions = const [];
+        }
       }
     } catch (e) {
       debugPrint('SubmissionsService.init failed: $e');
