@@ -129,15 +129,6 @@ class _ResultScreenState extends State<ResultScreen> {
     }
   }
 
-  void _toggleFormat() {
-    setState(() {
-      _displayFormat = _displayFormat == 'levels' ? 'percentage' : 'levels';
-      if (_result != null) {
-        _result = _result!.withFormat(_displayFormat);
-      }
-    });
-  }
-
   /// "Teach the AI" — the teacher tells the AI what to do differently
   /// (e.g. "don't deduct for spelling in science"). Saved as a standing
   /// instruction that is sent with every future grade.
@@ -558,34 +549,8 @@ class _ResultScreenState extends State<ResultScreen> {
                       ),
                     ),
 
-                  // ── Score row (non-tests; the hero already leads tests) ──
-                  if (sub?.gradingMode != GradingMode.testQuiz) ...[
-                    _ScoreRow(
-                      result: result,
-                      sub: sub,
-                      displayFormat: _displayFormat,
-                      onToggleFormat: _toggleFormat,
-                      onEditScore: result == null ? null : _editScore,
-                    ),
-                    const SizedBox(height: 6),
-                    if (result != null) ...[
-                      Row(
-                        children: [
-                          Icon(Icons.auto_awesome_rounded, size: 14, color: AiMarkerColors.neutral),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Graded by ${_providerLabel(result.provider)} · ${result.detectedSubject} · ${result.detectedGrade != null ? 'Grade ${result.detectedGrade}' : 'Grade unknown'}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-                  ],
-
-                  // ── Triage badge (tests: only when something's wrong) ──
-                  if (sub?.gradingMode != GradingMode.testQuiz ||
-                      (sub?.triageStatus ?? result?.triageStatus ?? TriageStatus.graded) != TriageStatus.graded) ...[
+                  // ── Triage badge — only when something needs attention ──
+                  if ((sub?.triageStatus ?? result?.triageStatus ?? TriageStatus.graded) != TriageStatus.graded) ...[
                     _TriageBadge(
                       triageStatus: sub?.triageStatus ?? (result != null ? result.triageStatus : TriageStatus.graded),
                       confidence: sub?.confidence ?? result?.confidence ?? 85,
@@ -618,17 +583,10 @@ class _ResultScreenState extends State<ResultScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // ── Marks & feedback ──────────────────────────────────
-                  // Tests read as a scoreboard: per-question marks + the
-                  // final grade, no headers, no essay-style commentary.
-                  if (sub?.gradingMode != GradingMode.testQuiz) ...[
-                    Text('Feedback', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 10),
-                  ],
-
+                  // ── Marks — scoreboard only, for every kind of work ────
                   if (result != null) ...[
                     // Per-question scoreboard (tap a row to change the mark).
-                    if (sub?.gradingMode == GradingMode.testQuiz && result.annotations.isNotEmpty) ...[
+                    if (result.annotations.isNotEmpty) ...[
                       Card(
                         child: Column(
                           children: [
@@ -660,35 +618,13 @@ class _ResultScreenState extends State<ResultScreen> {
                       const SizedBox(height: 10),
                     ],
 
-                    // Written feedback stays for non-test work only.
-                    if (sub?.gradingMode != GradingMode.testQuiz) ...[
-                      if (result.summary.isNotEmpty)
-                        _FeedbackCard(title: 'Summary', color: cs.primary, body: result.summary),
-                      const SizedBox(height: 10),
-                      if (result.strengths.isNotEmpty)
-                        _FeedbackCard(
-                          title: 'What was done well',
-                          color: AiMarkerColors.secondary,
-                          body: result.strengths.map((s) => '• $s').join('\n'),
-                        ),
-                      const SizedBox(height: 10),
-                      if (result.improvements.isNotEmpty)
-                        _FeedbackCard(
-                          title: 'What to improve',
-                          color: AiMarkerColors.error,
-                          body: result.improvements.map((s) => '• $s').join('\n'),
-                        ),
-                      const SizedBox(height: 14),
-                    ],
-
-    // Criteria show only when they carry marks: KTCA categories (always)
-                    // and, for non-tests, rubric criteria. Tests never show
-                    // invented commentary criteria.
+                    // Criteria appear ONLY when they carry marks: KTCA
+                    // categories or a printed rubric. Never commentary.
                     ...(() {
-                      final crits = sub?.gradingMode == GradingMode.testQuiz ? _ktcaOf(result) : result.criteriaBreakdown;
+                      final crits = _ktcaOf(result);
                       if (crits.isEmpty) return const <Widget>[];
                       return <Widget>[
-                        Text('Criteria Breakdown', style: Theme.of(context).textTheme.titleMedium),
+                        Text('Categories', style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 10),
                         ...crits.map((c) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
@@ -702,19 +638,6 @@ class _ResultScreenState extends State<ResultScreen> {
                       icon: const Icon(Icons.school_rounded, size: 18),
                       label: const Text('Teach Mark — correct how it marks'),
                     ),
-                  ] else ...[
-                    // No live result in memory — show the stored summary
-                    // (tests skip the written feedback entirely).
-                    if (sub?.gradingMode == GradingMode.testQuiz)
-                      const SizedBox.shrink()
-                    else if ((sub?.feedback ?? '').trim().isNotEmpty)
-                      _FeedbackCard(title: 'Summary', color: cs.primary, body: sub!.feedback.trim())
-                    else
-                      _FeedbackCard(
-                        title: 'Summary',
-                        color: cs.primary,
-                        body: 'Detailed feedback is shown right after marking. This saved result keeps the score and summary only.',
-                      ),
                   ],
 
                   if (sub != null && sub.triageFlags.isNotEmpty) ...[
@@ -784,14 +707,6 @@ class _ResultScreenState extends State<ResultScreen> {
     await Share.share(b.toString().trim(), subject: 'Marked result');
   }
 
-  String _providerLabel(String provider) {
-    switch (provider) {
-      case 'claude': return 'Claude';
-      case 'gemini': return 'Gemini';
-      case 'openai': return 'GPT-4o';
-      default: return provider;
-    }
-  }
 }
 
 // ── Hero grade: the final mark, big and unmissable ─────────────────────────
@@ -847,14 +762,12 @@ class _HeroGrade extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // Tests lead with the marks themselves ("30 / 40"); other work leads
-    // with the level or percentage.
-    final big = isTest
-        ? '${_num(raw)} / ${_num(max)}'
-        : (displayFormat == 'levels' ? _levelFor(pct) : '${pct.round()}%');
-    final sub2 = isTest
-        ? '${pct.round()}%${displayFormat == 'levels' ? ' · ${_levelFor(pct)}' : ''}'
-        : '${_num(raw)} / ${_num(max)}${displayFormat == 'levels' ? ' · ${pct.round()}%' : ''}';
+    // Marks lead ("30 / 40"), percent rides along; level-scale work leads
+    // with the level instead.
+    final big = displayFormat == 'levels' ? _levelFor(pct) : '${_num(raw)} / ${_num(max)}';
+    final sub2 = displayFormat == 'levels'
+        ? '${_num(raw)} / ${_num(max)} · ${pct.round()}%'
+        : '${pct.round()}%';
 
     return Container(
       width: double.infinity,
@@ -1032,100 +945,6 @@ class _AnnotationMark extends StatelessWidget {
       ),
     );
   }
-}
-
-// ── Score row with format toggle ─────────────────────────────────────────────
-
-class _ScoreRow extends StatelessWidget {
-  final AiGradeResult? result;
-  final Submission? sub;
-  final String displayFormat;
-  final VoidCallback onToggleFormat;
-  final VoidCallback? onEditScore;
-
-  const _ScoreRow({required this.result, required this.sub, required this.displayFormat, required this.onToggleFormat, this.onEditScore});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    // Primary display value
-    final String primary;
-    final String secondary;
-
-    if (result != null) {
-      if (displayFormat == 'levels' && result!.levelDisplay != null) {
-        primary = result!.levelDisplay!;
-        secondary = result!.percentageDisplay;
-      } else {
-        primary = result!.percentageDisplay;
-        secondary = result!.levelDisplay ?? '';
-      }
-    } else if (sub != null) {
-      final pct = sub!.maxScore == 0 ? 0 : ((sub!.score / sub!.maxScore) * 100).round();
-      primary = '$pct%';
-      secondary = '';
-    } else {
-      primary = '—';
-      secondary = '';
-    }
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(primary, style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w900)),
-                  if (onEditScore != null)
-                    IconButton(
-                      onPressed: onEditScore,
-                      icon: Icon(Icons.edit_rounded, size: 20, color: AiMarkerColors.neutral),
-                      tooltip: 'Override score',
-                    ),
-                ],
-              ),
-              if (result != null)
-                Text('${_trim(result!.rawScore)}/${_trim(result!.maxScore)}${secondary.isNotEmpty ? ' · $secondary' : ''}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral))
-              else if (secondary.isNotEmpty)
-                Text(secondary, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-            ],
-          ),
-        ),
-        // Format toggle button — only show when we have both formats available
-        if (result != null && result!.level != null)
-          GestureDetector(
-            onTap: onToggleFormat,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: cs.outline.withValues(alpha: 0.30)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.swap_horiz_rounded, size: 16, color: cs.primary),
-                  const SizedBox(width: 6),
-                  Text(
-                    displayFormat == 'levels' ? 'Show %' : 'Show Level',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  static String _trim(double v) => v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1);
 }
 
 // ── Criterion card ───────────────────────────────────────────────────────────
