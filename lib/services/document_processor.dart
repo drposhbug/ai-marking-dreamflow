@@ -46,6 +46,17 @@ class DocumentProcessor {
   // in rotated on disk and would otherwise stay sideways.
   image = img.bakeOrientation(image);
 
+  // Vision cost scales with pixels, and marking never needs more than
+  // ~1600px on the long side. Downscaling FIRST cuts the dominant API cost
+  // (the parse/vision step) 2-4x, shrinks uploads, and speeds every local
+  // processing step below — with no marking-accuracy loss.
+  const maxSide = 1600;
+  if (math.max(image.width, image.height) > maxSide) {
+    image = image.width >= image.height
+        ? img.copyResize(image, width: maxSide, interpolation: img.Interpolation.linear)
+        : img.copyResize(image, height: maxSide, interpolation: img.Interpolation.linear);
+  }
+
   final corners = _findPageCorners(image);
   final isDocument = corners != null || _looksLikeDocument(image);
 

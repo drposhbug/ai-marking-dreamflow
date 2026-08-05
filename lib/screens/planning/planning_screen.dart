@@ -382,7 +382,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Planning is a thank-you feature: invite one teacher and it\'s yours for good. Share your code below — the moment a colleague enters it in their app, Planning unlocks for you.',
+                        'Planning is a thank-you feature: invite one teacher and it\'s yours for good. Share your code below — the moment a colleague enters it in their app, Planning unlocks for you. '
+                        'And it keeps paying: every colleague who subscribes adds +25 marks to your month, for as long as they stay.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.45),
                       ),
                       const SizedBox(height: 14),
