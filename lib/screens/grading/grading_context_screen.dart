@@ -294,7 +294,9 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
         presetId: presetId,
         subject: draft.detectedSubject ?? 'Subject',
         mode: draft.mode,
-        criteria: _criteria,
+        // Criteria checkboxes are gone — marking rules handle style: strict
+        // per-question for tests, completion only for homework, blanks = 0.
+        criteria: const {},
         harshness: _harshness.round(),
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
         overrideUsed: draft.oneTimeOverride,
@@ -580,30 +582,6 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                       Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
                     ],
                   ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text('What to grade on', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 10),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  children: [
-                    for (final entry in _criteria.entries)
-                      CheckboxListTile(
-                        value: entry.value,
-                        onChanged: (v) {
-                          setState(() => _criteria = {..._criteria, entry.key: v ?? false});
-                          context.read<AppState>().setCriteria(_criteria);
-                        },
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: Text(entry.key, style: Theme.of(context).textTheme.bodyMedium),
-                        activeColor: cs.primary,
-                        checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                      ),
-                  ],
                 ),
               ),
             ),

@@ -124,7 +124,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 10;
+const CACHE_VERSION = 11;
 
 // Shown instead of an unknown code that has no detail text — a teacher must
 // never see a raw "#37" on screen.
@@ -525,8 +525,10 @@ const STATIC_SYSTEM = `You are an expert teacher marking scanned pages of ONE st
 Do all of the following:
 1. Detect the subject, and the student's school grade level 1-13 (null if unclear). Also read the student's name if it is written on the paper into studentNameOnPaper (null if none visible).
 2. Identify the assignment itself: set assignmentKind to a short label ("test", "quiz", "homework", "worksheet", "lab report", "essay", ...) based on what the pages look like, and choose markingStyle:
-   - "completion" — practice work that should be checked for being DONE, not for correctness (typical homework and practice worksheets with no printed marks and no answer key). Then rawScore = the number of questions with a genuine attempt, maxScore = the number of questions assigned; do NOT deduct for wrong answers, but still flag wrong answers with annotation codes so the teacher sees them.
-   - "graded" — correctness marking (tests, quizzes, essays, lab reports, anything with printed marks, or whenever an OFFICIAL ANSWER KEY is present).
+   - "completion" — ONLY for homework and practice worksheets (no printed marks, no answer key). Then rawScore = the number of questions with a genuine attempt, maxScore = the number of questions assigned; a BLANK or untouched question counts as 0 — never credit for empty questions. Do NOT deduct for wrong answers, but still flag wrong answers with annotation codes so the teacher sees them.
+   - "graded" — correctness marking, exactly like marking a test: tests, quizzes, essays, lab reports, anything with printed marks, or whenever an OFFICIAL ANSWER KEY is present. When in doubt, choose "graded".
+   - Either style: a blank/unanswered question scores 0 for that question, with correct = false and a code noting it was left blank.
+   - NEVER mark, deduct for, or comment on neatness, handwriting quality, or presentation — messy-but-correct earns full marks.
 3. Create one annotation per question or answer visible across all pages:
    - questionLabel like "Q1", earnedMark like "2", outOfMark like "/4" — when the paper prints a question's marks (e.g. "(2 marks)"), use exactly those marks
    - earnedMark may use QUARTER-STEP decimals ("0.25", "0.5", "1.75"): deduct fractions for minor slips — a missing unit, a sign error, sloppy rounding — instead of taking a whole mark.
