@@ -32,7 +32,22 @@ class ClassesService extends ChangeNotifier {
       // One-time cleanup: drop the template classes seeded by old builds.
       final before = _classes.length;
       _classes = _classes.where((c) => !_isLegacySeed(c)).toList();
-      if (_classes.length != before) await _persist();
+      var changed = _classes.length != before;
+
+      // Classes made on this device under another sign-in (dev/test account)
+      // belong to the teacher holding the phone — adopt them so they show in
+      // the dashboard and Classes instead of being silently filtered out.
+      var adopted = 0;
+      _classes = _classes.map((c) {
+        if (c.teacherId == teacherId) return c;
+        adopted++;
+        return c.copyWith(teacherId: teacherId, updatedAt: DateTime.now());
+      }).toList();
+      if (adopted > 0) {
+        changed = true;
+        debugPrint('ClassesService: adopted $adopted class(es) from other sign-ins on this device');
+      }
+      if (changed) await _persist();
     } catch (e) {
       debugPrint('ClassesService.init failed: $e');
       _classes = const [];
