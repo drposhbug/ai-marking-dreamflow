@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
+import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
@@ -49,6 +50,14 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   bool _exportingToDrive = false;
+
+  /// KTCA-marked work: show the final grade as the category average (how
+  /// Ontario marking works, and the server default) or as total marks —
+  /// the teacher picks.
+  bool _useCategoryAverage = true;
+  static const _ktcaNames = ['Knowledge', 'Thinking', 'Communication', 'Application'];
+  List<CriterionResult> _ktcaOf(AiGradeResult r) =>
+      r.criteriaBreakdown.where((c) => _ktcaNames.contains(c.name) && c.maxScore > 0).toList(growable: false);
 
   @override
   void initState() {
@@ -312,6 +321,19 @@ class _ResultScreenState extends State<ResultScreen> {
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
                 children: [
+                  // ── The grade, big and unmissable ─────────────────────
+                  _HeroGrade(
+                    result: result,
+                    sub: sub,
+                    displayFormat: _displayFormat,
+                    useCategoryAverage: _useCategoryAverage,
+                    ktca: result == null ? const [] : _ktcaOf(result),
+                    onToggleAverage: result != null && _ktcaOf(result).length >= 2
+                        ? (v) => setState(() => _useCategoryAverage = v)
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+
                   // ── Tab switcher ──────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(6),
@@ -444,35 +466,61 @@ class _ResultScreenState extends State<ResultScreen> {
                   ]),
                   const SizedBox(height: 18),
 
-                  // ── AI Feedback ───────────────────────────────────────
-                  Text('Feedback', style: Theme.of(context).textTheme.titleMedium),
+                  // ── Marks & feedback ──────────────────────────────────
+                  // Tests read as a scoreboard: per-question marks + the
+                  // final grade, no essay-style commentary.
+                  Text(sub?.gradingMode == GradingMode.testQuiz ? 'Marks' : 'Feedback', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 10),
 
                   if (result != null) ...[
-                    // Summary
-                    if (result.summary.isNotEmpty)
-                      _FeedbackCard(title: 'Summary', color: cs.primary, body: result.summary),
-                    const SizedBox(height: 10),
-
-                    // Strengths
-                    if (result.strengths.isNotEmpty)
-                      _FeedbackCard(
-                        title: 'What was done well',
-                        color: AiMarkerColors.secondary,
-                        body: result.strengths.map((s) => '• $s').join('\n'),
+                    // Per-question scoreboard (tap a row to change the mark).
+                    if (sub?.gradingMode == GradingMode.testQuiz && result.annotations.isNotEmpty) ...[
+                      Card(
+                        child: Column(
+                          children: [
+                            for (final a in result.annotations)
+                              ListTile(
+                                dense: true,
+                                onTap: () => _editAnnotation(a),
+                                leading: Icon(
+                                  a.correct ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                                  color: a.correct ? AiMarkerColors.secondary : AiMarkerColors.error,
+                                  size: 20,
+                                ),
+                                title: Text(a.questionLabel.isEmpty ? 'Question' : a.questionLabel, style: Theme.of(context).textTheme.bodyMedium),
+                                trailing: Text(
+                                  '${a.earnedMark}${a.outOfMark}',
+                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    const SizedBox(height: 10),
+                      const SizedBox(height: 10),
+                    ],
 
-                    // Improvements
-                    if (result.improvements.isNotEmpty)
-                      _FeedbackCard(
-                        title: 'What to improve',
-                        color: AiMarkerColors.error,
-                        body: result.improvements.map((s) => '• $s').join('\n'),
-                      ),
-                    const SizedBox(height: 14),
+                    // Written feedback stays for non-test work only.
+                    if (sub?.gradingMode != GradingMode.testQuiz) ...[
+                      if (result.summary.isNotEmpty)
+                        _FeedbackCard(title: 'Summary', color: cs.primary, body: result.summary),
+                      const SizedBox(height: 10),
+                      if (result.strengths.isNotEmpty)
+                        _FeedbackCard(
+                          title: 'What was done well',
+                          color: AiMarkerColors.secondary,
+                          body: result.strengths.map((s) => '• $s').join('\n'),
+                        ),
+                      const SizedBox(height: 10),
+                      if (result.improvements.isNotEmpty)
+                        _FeedbackCard(
+                          title: 'What to improve',
+                          color: AiMarkerColors.error,
+                          body: result.improvements.map((s) => '• $s').join('\n'),
+                        ),
+                      const SizedBox(height: 14),
+                    ],
 
-                    // Criteria breakdown
+                    // Criteria breakdown (KTCA categories, rubric criteria).
                     if (result.criteriaBreakdown.isNotEmpty) ...[
                       Text('Criteria Breakdown', style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 10),
@@ -539,6 +587,126 @@ class _ResultScreenState extends State<ResultScreen> {
       case 'openai': return 'GPT-4o';
       default: return provider;
     }
+  }
+}
+
+// ── Hero grade: the final mark, big and unmissable ─────────────────────────
+
+class _HeroGrade extends StatelessWidget {
+  final AiGradeResult? result;
+  final Submission? sub;
+  final String displayFormat;
+  final bool useCategoryAverage;
+  final List<CriterionResult> ktca;
+  final ValueChanged<bool>? onToggleAverage;
+
+  const _HeroGrade({
+    required this.result,
+    required this.sub,
+    required this.displayFormat,
+    required this.useCategoryAverage,
+    required this.ktca,
+    required this.onToggleAverage,
+  });
+
+  static String _levelFor(double pct) {
+    if (pct >= 95) return 'Level 4+';
+    if (pct >= 80) return 'Level 4';
+    if (pct >= 70) return 'Level 3';
+    if (pct >= 60) return 'Level 2';
+    if (pct >= 50) return 'Level 1';
+    return 'R';
+  }
+
+  static String _num(double v) => v.toStringAsFixed(v % 1 == 0 ? 0 : 1);
+
+  @override
+  Widget build(BuildContext context) {
+    double raw, max, pct;
+    if (result != null) {
+      raw = result!.rawScore;
+      max = result!.maxScore;
+      final totalPct = max > 0 ? raw / max * 100 : result!.percentage;
+      final avgPct = ktca.length >= 2
+          ? ktca.map((c) => c.score / c.maxScore * 100).reduce((a, b) => a + b) / ktca.length
+          : result!.percentage;
+      pct = (onToggleAverage != null && !useCategoryAverage) ? totalPct : (ktca.length >= 2 ? avgPct : result!.percentage);
+    } else if (sub != null) {
+      raw = sub!.score;
+      max = sub!.maxScore;
+      pct = max > 0 ? raw / max * 100 : 0;
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    final big = displayFormat == 'levels' ? _levelFor(pct) : '${pct.round()}%';
+    final sub2 = '${_num(raw)} / ${_num(max)}'
+        '${displayFormat == 'levels' ? ' · ${pct.round()}%' : ''}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        gradient: const LinearGradient(
+          colors: [AiMarkerColors.primary, AiMarkerColors.tertiary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(big, style: Theme.of(context).textTheme.displaySmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 2),
+          Text(sub2, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white.withValues(alpha: 0.9))),
+          if (onToggleAverage != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _HeroChip(label: 'Category average', selected: useCategoryAverage, onTap: () => onToggleAverage!(true)),
+                const SizedBox(width: 8),
+                _HeroChip(label: 'Total marks', selected: !useCategoryAverage, onTap: () => onToggleAverage!(false)),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              useCategoryAverage
+                  ? 'K/T/C/A categories weighted equally (Ontario style)'
+                  : 'Marks earned out of total marks',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.85)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _HeroChip({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: selected ? 0.28 : 0.10),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withValues(alpha: selected ? 0.7 : 0.25)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(color: Colors.white, fontWeight: selected ? FontWeight.w800 : FontWeight.w500, fontSize: 12),
+        ),
+      ),
+    );
   }
 }
 

@@ -13,6 +13,7 @@ import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
@@ -195,6 +196,28 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
           content: Text('Long PDF — only the first 15 pages were imported.'),
         ));
       }
+
+      // Several files usually means several STUDENTS (one PDF per test) —
+      // offer to mark each file as its own submission in the background.
+      if (import.fileGroups.length > 1) {
+        final choice = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('${import.fileGroups.length} files picked'),
+            content: const Text('Mark each file as a separate student\'s test, or combine all pages into one submission?'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, 'combine'), child: const Text('One submission')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, 'batch'), child: const Text('One per student')),
+            ],
+          ),
+        );
+        if (!mounted || choice == null) return;
+        if (choice == 'batch') {
+          _enqueueBatch(import.fileGroups);
+          return;
+        }
+      }
+
       context.read<AppState>().setPages(import.pages);
       context.push(AppRoutes.gradingContext);
     } on DrivePickerUnavailable {
@@ -207,6 +230,53 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open Google Drive.')));
     }
+  }
+
+  /// One background marking job per file — a whole class set of PDFs gets
+  /// marked while the teacher does something else. Students auto-link from
+  /// the name on each paper; class/key/grade come from the current draft.
+  void _enqueueBatch(List<List<ScannedPage>> groups) {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    final app = context.read<AppState>();
+    final draft = app.draft;
+    final students = context.read<StudentsService>();
+    final submissions = context.read<SubmissionsService>();
+    final queue = context.read<GradingQueueService>();
+
+    for (final group in groups) {
+      final bytes = group.map((p) => p.bytes).toList(growable: false);
+      final req = AiGradeRequest(
+        teacherId: auth.id,
+        studentId: '',
+        classId: draft.classId ?? '',
+        presetId: draft.presetId ?? '',
+        subject: draft.detectedSubject ?? 'Subject',
+        mode: draft.mode,
+        criteria: draft.criteria,
+        harshness: draft.harshness,
+        notes: null,
+        overrideUsed: draft.oneTimeOverride,
+        imageBytes: bytes.first,
+        pageImages: bytes,
+        studentName: null,
+        studentGrade: null,
+        gradeLevel: draft.gradeLevel,
+        region: app.region,
+        teacherFeedback: app.markingFeedback,
+        answerKeyId: draft.answerKeyId.isEmpty ? null : draft.answerKeyId,
+      );
+      queue.enqueue(
+        req: req,
+        pages: bytes,
+        students: students,
+        submissions: submissions,
+        label: group.first.fileName.replaceAll(RegExp(r'\s*\(page \d+\)$'), ''),
+      );
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Marking ${groups.length} students in the background — results land in the tray as they finish.'),
+    ));
   }
 
   void _onSearchChanged(String value) {

@@ -124,7 +124,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 
 // Shown instead of an unknown code that has no detail text — a teacher must
 // never see a raw "#37" on screen.
@@ -535,6 +535,8 @@ Do all of the following:
    - pageIndex: which page the answer is on, 0-based (Page 1 = 0, Page 2 = 1, ...)
    - positionTop and positionLeft: where the answer sits on THAT page, as fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
 4. Score each grading criterion listed in CONTEXT in criteriaBreakdown with a per-criterion score and maxScore, a level 1-4 (or null), and a feedback code — considering all pages together. criteriaBreakdown is diagnostic feedback ONLY — it must NOT determine the overall score. If a criterion does not apply to this work (e.g. "Diagrams labeled" when no diagrams are required), give it full marks and use criteria code #5 — never deduct for inapplicable criteria.
+   - EXCEPTION for graded tests/quizzes: drop effort/attempt/completion-style criteria ("Attempted all questions", "Working shown", "Effort evident", ...) from criteriaBreakdown ENTIRELY — a test is scored on the questions, and the teacher doesn't want attempt commentary. Keep only KTCA categories (rule 6), rubric criteria, and academically meaningful criteria.
+   - RUBRICS: if the pages include a printed rubric (or the ANSWER KEY contains one), mark against it — one criteriaBreakdown entry per rubric criterion with a level 1-4 each — and choose gradingFormat "levels" with the overall level from the rubric average.
 5. Compute maxScore and rawScore for the whole submission:
    - When markingStyle is "completion", rawScore and maxScore count completed vs assigned questions (see rule 2) — the rules below apply to "graded" work.
    - If the paper prints marks per question (e.g. "(2 marks)", "/4"), maxScore = the TOTAL of the printed marks of the questions VISIBLE in the images, and rawScore = the marks the student earned on those questions.
