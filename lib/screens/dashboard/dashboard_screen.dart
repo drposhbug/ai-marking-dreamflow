@@ -74,21 +74,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final classesService = context.watch<ClassesService>();
 
       final teacherClasses = teacherId == null ? const [] : classesService.classes.where((c) => c.teacherId == teacherId).toList();
-      if (teacherId != null && teacherClasses.isNotEmpty) {
-        final desiredId = teacherClasses.any((c) => c.id == _selectedClassId) ? _selectedClassId : teacherClasses.first.id;
-        if (desiredId != null && desiredId != _selectedClassId) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            setState(() => _selectedClassId = desiredId);
-          });
-        }
+      // A previously selected class that no longer exists falls back to All.
+      if (_selectedClassId != null && !teacherClasses.any((c) => c.id == _selectedClassId)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _selectedClassId = null);
+        });
       }
 
       final selectedClass = (_selectedClassId == null) ? null : classesService.getById(_selectedClassId!);
 
-      final classSubmissions = (teacherId == null || _selectedClassId == null)
+      // Default view is ALL of the teacher's marks — including work marked
+      // with "No class" — so nothing is ever invisible on the dashboard.
+      final classSubmissions = teacherId == null
           ? const <Submission>[]
-          : submissionsService.submissions.where((s) => s.teacherId == teacherId && s.classId == _selectedClassId).toList();
+          : submissionsService.submissions
+              .where((s) => s.teacherId == teacherId && (_selectedClassId == null || s.classId == _selectedClassId))
+              .toList();
 
       final sortedSubmissions = (classSubmissions.isNotEmpty)
           ? (List<Submission>.from(classSubmissions)..sort((a, b) => b.createdAt.compareTo(a.createdAt)))
@@ -129,14 +130,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           Text('Class Average', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Colors.white.withValues(alpha: 0.92))),
                           const SizedBox(height: 4),
-                          if (teacherClasses.length <= 1)
-                            Text(selectedClass?.name ?? 'Your class', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white))
+                          if (teacherClasses.isEmpty)
+                            Text('All marked work', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white))
                           else
                             _ClassSelector(
-                              value: _selectedClassId,
-                              items: teacherClasses.map((c) => _ClassOption(id: c.id, label: c.name)).toList(),
+                              value: _selectedClassId ?? '',
+                              items: [
+                                const _ClassOption(id: '', label: 'All classes'),
+                                ...teacherClasses.map((c) => _ClassOption(id: c.id, label: c.name)),
+                              ],
                               onChanged: (id) {
-                                if (id == null || teacherId == null) return;
+                                if (teacherId == null) return;
+                                if (id == null || id.isEmpty) {
+                                  setState(() => _selectedClassId = null);
+                                  _store.setString('$_kSelectedClassKeyPrefix$teacherId', '');
+                                  return;
+                                }
                                 _setSelectedClass(teacherId: teacherId, classId: id);
                               },
                             ),
