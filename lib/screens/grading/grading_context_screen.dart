@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:marking_prokect_v2/services/drive_picker.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
@@ -140,6 +142,12 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
               subtitle: const Text('Read once, saved to the cloud, reused for every grade'),
               onTap: () => Navigator.pop(ctx, 'scan'),
             ),
+            ListTile(
+              leading: const Icon(Icons.add_to_drive_rounded),
+              title: const Text('From Google Drive'),
+              subtitle: const Text('Pick a photo or PDF of the key from Drive or Files'),
+              onTap: () => Navigator.pop(ctx, 'drive'),
+            ),
             if (_answerKeyId != null)
               ListTile(
                 leading: const Icon(Icons.link_off_rounded),
@@ -182,6 +190,8 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       context.read<AppState>().setAnswerKey();
     } else if (choice == 'scan') {
       await _scanAnswerKey(auth.id);
+    } else if (choice == 'drive') {
+      await _importKeyFromDrive(auth.id);
     } else if (choice is AnswerKeySummary) {
       setState(() {
         _answerKeyId = choice.id;
@@ -196,7 +206,61 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       MaterialPageRoute(builder: (_) => const LiveScanScreen()),
     );
     if (pages == null || pages.isEmpty || !mounted) return;
+    await _extractKeyFromPages(teacherId, pages);
+  }
 
+  /// Key document straight from the Drive app's picker (Files as fallback) —
+  /// photos or PDFs, same as the Answers tab.
+  Future<void> _importKeyFromDrive(String teacherId) async {
+    final pages = <ScannedPage>[];
+    try {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 18),
+              Expanded(child: Text('Loading from Google Drive…')),
+            ],
+          ),
+        ),
+      );
+      DriveImport import;
+      try {
+        import = await DrivePicker.importScannedPages();
+      } finally {
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (!mounted || import.cancelled) return;
+      if (import.pages.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          duration: Duration(seconds: 6),
+          content: Text('That file couldn\'t be read — pick a photo or a PDF of the key. For a Google Doc, use Share → Save as PDF in Drive first.'),
+        ));
+        return;
+      }
+      pages.addAll(import.pages);
+    } on DrivePickerUnavailable {
+      final res = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'pdf'],
+        allowMultiple: true,
+        withData: true,
+      );
+      if (res == null || res.files.isEmpty || !mounted) return;
+      for (final f in res.files) {
+        final bytes = f.bytes;
+        if (bytes == null) continue;
+        pages.addAll(await pagesFromPickedFile(name: f.name, mime: '', bytes: bytes));
+      }
+    }
+    if (pages.isEmpty || !mounted) return;
+    await _extractKeyFromPages(teacherId, pages);
+  }
+
+  Future<void> _extractKeyFromPages(String teacherId, List<ScannedPage> pages) async {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -551,7 +615,16 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            // Blue and unmissable until a key is attached — a key is the
+            // single biggest accuracy lever, so it must not look optional.
             Card(
+              color: _answerKeyId == null ? cs.primary.withValues(alpha: 0.08) : null,
+              shape: _answerKeyId == null
+                  ? RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      side: BorderSide(color: cs.primary.withValues(alpha: 0.55), width: 1.4),
+                    )
+                  : null,
               child: InkWell(
                 splashFactory: NoSplash.splashFactory,
                 onTap: _grading ? null : _chooseAnswerKey,
@@ -559,7 +632,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                   padding: const EdgeInsets.all(14),
                   child: Row(
                     children: [
-                      Icon(Icons.key_rounded, color: _answerKeyId != null ? cs.primary : AiMarkerColors.neutral),
+                      Icon(Icons.key_rounded, color: cs.primary),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -567,19 +640,33 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                           children: [
                             Text(
                               _answerKeyName == null ? 'No answer key' : 'Answer key: $_answerKeyName',
-                              style: Theme.of(context).textTheme.titleSmall,
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: _answerKeyId == null ? cs.primary : null,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               _answerKeyName == null
-                                  ? 'Tap to scan or pick one — marks strictly against your key'
+                                  ? 'Scan, pick a saved key, or pull one from Google Drive'
                                   : 'Marking strictly against your key',
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
                             ),
                           ],
                         ),
                       ),
-                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
+                      if (_answerKeyId == null)
+                        FilledButton(
+                          onPressed: _grading ? null : _chooseAnswerKey,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: cs.primary,
+                            foregroundColor: Colors.white,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          child: const Text('Add key'),
+                        )
+                      else
+                        Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
                     ],
                   ),
                 ),
