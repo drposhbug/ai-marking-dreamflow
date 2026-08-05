@@ -237,10 +237,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               const SizedBox(height: 4),
               Text('Start with a 7-day free trial', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
-              const Text('•  Starter — \$6.99/mo · 120 marks a month'),
-              const Text('•  Pro ⭐ — \$14.99/mo · 400 marks (best value)'),
-              const Text('•  Pro Annual — \$119.99/yr (≈ \$10/mo) · 400 marks'),
-              const Text('•  School — \$24.99/mo · 900 marks'),
+              const Text('•  Starter — \$6.99/mo · credits for ~120 typical tests'),
+              const Text('•  Pro ⭐ — \$14.99/mo · ~3× the credits (best value)'),
+              const Text('•  Pro Annual — \$119.99/yr (≈ \$10/mo) · same as Pro'),
+              const Text('•  School — \$24.99/mo · ~7.5× the credits'),
               const SizedBox(height: 10),
               const Text('Every paid plan sends 15% to a classroom — you pick whose.'),
               const SizedBox(height: 12),
@@ -383,7 +383,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       const SizedBox(height: 8),
                       Text(
                         'Planning is a thank-you feature: invite one teacher and it\'s yours for good. Share your code below — the moment a colleague enters it in their app, Planning unlocks for you. '
-                        'And it keeps paying: every colleague who subscribes adds +25 marks to your month, for as long as they stay.',
+                        'And it keeps paying: every colleague who subscribes adds bonus marking credits to your month, for as long as they stay.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.45),
                       ),
                       const SizedBox(height: 14),
