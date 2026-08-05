@@ -72,6 +72,18 @@ Deno.serve(async (req) => {
       )`;
     await sql`alter table public.usage_log enable row level security`;
     await sql`create index if not exists usage_log_teacher_time_idx on public.usage_log (teacher_id, created_at desc)`;
+    // Named submissions_cloud because the original template left behind a
+    // legacy public.submissions table with an incompatible schema.
+    await sql`
+      create table if not exists public.submissions_cloud (
+        id text primary key,
+        teacher_id text not null,
+        payload jsonb not null,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      )`;
+    await sql`alter table public.submissions_cloud enable row level security`;
+    await sql`create index if not exists submissions_cloud_teacher_time_idx on public.submissions_cloud (teacher_id, created_at desc)`;
     await sql`alter table public.profiles add column if not exists plan text`;
     await sql`alter table public.profiles add column if not exists referral_code text`;
     await sql`alter table public.profiles add column if not exists referred_by text`;

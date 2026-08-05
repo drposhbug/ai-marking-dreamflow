@@ -126,15 +126,11 @@ class UsageLimitException implements Exception {
 
 class UsageSummary {
   final String planLabel;
-  final int marksMonth;
-  final int capMonthly;
   final int dayPct;
   final int weekPct;
   final int monthPct;
   const UsageSummary({
     required this.planLabel,
-    required this.marksMonth,
-    required this.capMonthly,
     required this.dayPct,
     required this.weekPct,
     required this.monthPct,
@@ -426,7 +422,7 @@ class AiGradingService {
     }
   }
 
-  /// Usage meter (percent of the daily/weekly/monthly allowance used).
+  /// Usage meter (percent of the daily/weekly/monthly credit allowance).
   Future<UsageSummary> getUsage({required String teacherId}) async {
     final client = Supabase.instance.client;
     final res = await client.functions.invoke(
@@ -437,14 +433,34 @@ class AiGradingService {
     if (data is Map) {
       return UsageSummary(
         planLabel: (data['planLabel'] ?? 'Preview').toString(),
-        marksMonth: (data['marksMonth'] as num?)?.toInt() ?? 0,
-        capMonthly: (data['capMonthly'] as num?)?.toInt() ?? 0,
         dayPct: (data['dayPct'] as num?)?.toInt() ?? 0,
         weekPct: (data['weekPct'] as num?)?.toInt() ?? 0,
         monthPct: (data['monthPct'] as num?)?.toInt() ?? 0,
       );
     }
     throw Exception('Usage lookup failed: $data');
+  }
+
+  /// Cloud copy of a marked result — results follow the account.
+  Future<void> saveSubmissionCloud({required String teacherId, required Map<String, dynamic> submission}) async {
+    final client = Supabase.instance.client;
+    await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'save_submission', 'teacherId': teacherId, 'submission': submission},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listSubmissionsCloud({required String teacherId}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'list_submissions', 'teacherId': teacherId},
+    );
+    final data = res.data;
+    if (data is Map && data['submissions'] is List) {
+      return (data['submissions'] as List).whereType<Map>().map((m) => m.cast<String, dynamic>()).toList(growable: false);
+    }
+    return const [];
   }
 
   /// The teacher's referral code + how many colleagues joined with it.

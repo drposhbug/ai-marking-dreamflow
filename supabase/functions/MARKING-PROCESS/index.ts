@@ -124,7 +124,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 9;
+const CACHE_VERSION = 10;
 
 // Shown instead of an unknown code that has no detail text — a teacher must
 // never see a raw "#37" on screen.
@@ -529,11 +529,12 @@ Do all of the following:
    - "graded" — correctness marking (tests, quizzes, essays, lab reports, anything with printed marks, or whenever an OFFICIAL ANSWER KEY is present).
 3. Create one annotation per question or answer visible across all pages:
    - questionLabel like "Q1", earnedMark like "2", outOfMark like "/4" — when the paper prints a question's marks (e.g. "(2 marks)"), use exactly those marks
+   - earnedMark may use QUARTER-STEP decimals ("0.25", "0.5", "1.75"): deduct fractions for minor slips — a missing unit, a sign error, sloppy rounding — instead of taking a whole mark.
    - correct = true only if fully correct
    - feedback: one code from ANNOTATION CODES (see FEEDBACK CODES below)
    - check every numeric final answer for UNITS: if a required unit is missing or wrong, deduct part marks and use code #5
    - pageIndex: which page the answer is on, 0-based (Page 1 = 0, Page 2 = 1, ...)
-   - positionTop and positionLeft: where the answer sits on THAT page, as fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
+   - positionTop and positionLeft: point at the EXACT spot of the mistake when the answer is wrong (the erroneous line or step, so the app can highlight it), otherwise at the final answer — as fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
 4. Score each grading criterion listed in CONTEXT in criteriaBreakdown with a per-criterion score and maxScore, a level 1-4 (or null), and a feedback code — considering all pages together. criteriaBreakdown is diagnostic feedback ONLY — it must NOT determine the overall score. If a criterion does not apply to this work (e.g. "Diagrams labeled" when no diagrams are required), give it full marks and use criteria code #5 — never deduct for inapplicable criteria.
    - EXCEPTION for graded tests/quizzes: drop effort/attempt/completion-style criteria ("Attempted all questions", "Working shown", "Effort evident", ...) from criteriaBreakdown ENTIRELY — a test is scored on the questions, and the teacher doesn't want attempt commentary. Keep only KTCA categories (rule 6), rubric criteria, and academically meaningful criteria.
    - RUBRICS: if the pages include a printed rubric (or the ANSWER KEY contains one), mark against it — one criteriaBreakdown entry per rubric criterion with a level 1-4 each — and choose gradingFormat "levels" with the overall level from the rubric average.
@@ -842,18 +843,19 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
 const PRICE_IN_PER_M = 3; // USD per 1M input tokens
 const PRICE_OUT_PER_M = 15; // USD per 1M output tokens
 
-// ---------- Plans & mark caps ----------
-// Caps are counted in fresh marks (cache hits are free). Daily/weekly
-// pacing lets a full test day through while keeping the month intact.
-// The usd backstop (~$0.05/mark headroom) only exists to catch
-// pathological many-page scans; normal use never touches it.
-const PLAN_CAPS: Record<string, { monthly: number; daily: number; weekly: number; plans: number; label: string }> = {
-  trial: { monthly: 30, daily: 15, weekly: 30, plans: 5, label: "Free Trial" },
-  starter: { monthly: 120, daily: 30, weekly: 60, plans: 10, label: "Starter" },
-  pro: { monthly: 400, daily: 100, weekly: 200, plans: 30, label: "Pro" },
-  school: { monthly: 900, daily: 225, weekly: 450, plans: 60, label: "School" },
+// ---------- Plans & marking-credit caps ----------
+// Credits are COST-WEIGHTED (real billed spend), not mark counts: a 2-page
+// multiple-choice quiz uses far fewer credits than a 6-page problem set.
+// The app only ever shows percentages. Cache hits are free. Daily pacing =
+// 25% of the month, weekly = 50%, so a test day fits but the month lasts.
+// Budgets ≈ old mark caps × typical cost/mark.
+const PLAN_CAPS: Record<string, { monthlyUsd: number; plans: number; label: string }> = {
+  trial: { monthlyUsd: 0.75, plans: 5, label: "Free Trial" },
+  starter: { monthlyUsd: 3.0, plans: 10, label: "Starter" },
+  pro: { monthlyUsd: 10.0, plans: 30, label: "Pro" },
+  school: { monthlyUsd: 22.5, plans: 60, label: "School" },
   // Pre-launch preview accounts get Pro-level room.
-  preview: { monthly: 400, daily: 100, weekly: 200, plans: 30, label: "Preview" },
+  preview: { monthlyUsd: 10.0, plans: 30, label: "Preview" },
 };
 
 async function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
@@ -867,10 +869,10 @@ async function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
 }
 
 // Referral loop: every colleague who joined with this teacher's code AND is
-// currently on a PAID plan adds bonus marks to the monthly cap — the reward
-// is the thing teachers run out of, and it can't be farmed with free
-// accounts because unpaid referrals add nothing.
-const REFERRAL_BONUS_MARKS = 25;
+// currently on a PAID plan adds bonus marking credits to the monthly cap —
+// the reward is the thing teachers run out of, and it can't be farmed with
+// free accounts because unpaid referrals add nothing.
+const REFERRAL_BONUS_USD = 0.65; // ≈ 25 typical marks of credits
 const PAID_PLANS = ["starter", "pro", "school"];
 
 async function paidReferralCount(teacherId: string): Promise<number> {
@@ -948,24 +950,23 @@ async function budgetGate(teacherId: string, pacing: boolean): Promise<Response 
     const plan = await planFor(teacherId);
     const caps = PLAN_CAPS[plan];
     const p = periodStarts();
-    const [day, week, month, monthUsd, paidRefs] = await Promise.all([
-      countSince(teacherId, "grade", p.day),
-      countSince(teacherId, "grade", p.week),
-      countSince(teacherId, "grade", p.month),
+    const [day, week, month, paidRefs] = await Promise.all([
+      spendSince(teacherId, p.day),
+      spendSince(teacherId, p.week),
       spendSince(teacherId, p.month),
       paidReferralCount(teacherId),
     ]);
-    const monthlyCap = caps.monthly + paidRefs * REFERRAL_BONUS_MARKS;
+    const monthlyCap = caps.monthlyUsd + paidRefs * REFERRAL_BONUS_USD;
     const block = (scope: string, message: string): Response =>
       json({ error: "usage_limit", scope, plan, message }, 429);
-    if (month >= monthlyCap || monthUsd >= monthlyCap * 0.05) {
-      return block("monthly", `You've used all ${monthlyCap} marks in your ${caps.label} plan this month. It resets on the 1st — upgrade for more, or invite colleagues (+${REFERRAL_BONUS_MARKS} marks/month for each one who subscribes).`);
+    if (month >= monthlyCap) {
+      return block("monthly", `You've used 100% of this month's marking credits (${caps.label} plan). They reset on the 1st — upgrade for more, or invite colleagues: every paid referral adds bonus credits monthly.`);
     }
-    if (pacing && week >= caps.weekly) {
-      return block("weekly", `You've hit this week's pace (${caps.weekly} marks). It frees up as the week rolls on — or upgrade for more headroom.`);
+    if (pacing && week >= monthlyCap * 0.5) {
+      return block("weekly", `You've used this week's share of marking credits (50% of the month). It frees up as the week rolls on — or upgrade for more headroom.`);
     }
-    if (pacing && day >= caps.daily) {
-      return block("daily", `You've hit today's pace (${caps.daily} marks). It resets tomorrow — or upgrade for more headroom.`);
+    if (pacing && day >= monthlyCap * 0.25) {
+      return block("daily", `You've used today's share of marking credits (25% of the month). It resets tomorrow — or upgrade for more headroom.`);
     }
     return null;
   } catch (e) {
@@ -1210,30 +1211,53 @@ Deno.serve(async (req) => {
       const caps = PLAN_CAPS[plan];
       const p = periodStarts();
       const [day, week, month, paidRefs] = await Promise.all([
-        countSince(teacherId, "grade", p.day),
-        countSince(teacherId, "grade", p.week),
-        countSince(teacherId, "grade", p.month),
+        spendSince(teacherId, p.day),
+        spendSince(teacherId, p.week),
+        spendSince(teacherId, p.month),
         paidReferralCount(teacherId),
       ]);
-      const monthlyCap = caps.monthly + paidRefs * REFERRAL_BONUS_MARKS;
+      const monthlyCap = caps.monthlyUsd + paidRefs * REFERRAL_BONUS_USD;
       return json({
         plan,
         planLabel: caps.label,
-        marksMonth: month,
-        capMonthly: monthlyCap,
-        bonusMarks: paidRefs * REFERRAL_BONUS_MARKS,
         paidReferrals: paidRefs,
-        marksDay: day,
-        capDaily: caps.daily,
-        marksWeek: week,
-        capWeekly: caps.weekly,
-        dayPct: Math.min(100, Math.round((day / caps.daily) * 100)),
-        weekPct: Math.min(100, Math.round((week / caps.weekly) * 100)),
+        dayPct: Math.min(100, Math.round((day / (monthlyCap * 0.25)) * 100)),
+        weekPct: Math.min(100, Math.round((week / (monthlyCap * 0.5)) * 100)),
         monthPct: Math.min(100, Math.round((month / monthlyCap) * 100)),
       });
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, 500);
     }
+  }
+
+  // ── Cloud-saved marked results: they follow the account across sign-ins
+  //    and devices instead of living only on one phone. ──────────────────
+  if (action === "save_submission") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    const s = payload?.submission;
+    if (!teacherId || !s || typeof s !== "object") return json({ error: "teacherId and submission are required" }, 400);
+    // deno-lint-ignore no-explicit-any
+    const id = String((s as any).id ?? "").trim();
+    if (!id) return json({ error: "submission.id is required" }, 400);
+    const { error } = await serviceDb()
+      .from("submissions_cloud")
+      .upsert({ id, teacher_id: teacherId, payload: s, updated_at: new Date().toISOString() });
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
+  if (action === "list_submissions") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const { data, error } = await serviceDb()
+      .from("submissions_cloud")
+      .select("payload")
+      .eq("teacher_id", teacherId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) return json({ error: error.message }, 500);
+    // deno-lint-ignore no-explicit-any
+    return json({ submissions: (data ?? []).map((r: any) => r.payload) });
   }
 
   // ── Referrals: each teacher has a share code; referring one teacher

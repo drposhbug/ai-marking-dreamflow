@@ -63,10 +63,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 4),
               Text('Start with a 7-day free trial', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
-              const Text('•  Starter — \$6.99/mo · 120 marks a month'),
-              const Text('•  Pro ⭐ — \$14.99/mo · 400 marks (best value)'),
-              const Text('•  Pro Annual — \$119.99/yr (≈ \$10/mo) · 400 marks'),
-              const Text('•  School — \$24.99/mo · 900 marks'),
+              const Text('•  Starter — \$6.99/mo · credits for ~120 typical tests'),
+              const Text('•  Pro ⭐ — \$14.99/mo · ~3× the credits (best value)'),
+              const Text('•  Pro Annual — \$119.99/yr (≈ \$10/mo) · same as Pro'),
+              const Text('•  School — \$24.99/mo · ~7.5× the credits'),
               const SizedBox(height: 10),
               const Text('Every paid plan sends 15% to a classroom — you pick whose.'),
               const SizedBox(height: 12),
@@ -593,9 +593,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: Text(_usage == null ? 'Marking allowance' : 'Marking allowance · ${_usage!.planLabel}', style: Theme.of(context).textTheme.titleSmall)),
+                        Expanded(child: Text(_usage == null ? 'Marking credits' : 'Marking credits · ${_usage!.planLabel}', style: Theme.of(context).textTheme.titleSmall)),
                         Text(
-                          _usage == null ? '—' : '${_usage!.marksMonth} / ${_usage!.capMonthly}',
+                          _usage == null ? '—' : '${_usage!.monthPct}% used',
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
                         ),
                       ],
@@ -608,8 +608,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 8),
                     Text(
                       _usage == null
-                          ? 'Marks used this month. Cache hits and repeats are always free.'
-                          : '${_usage!.marksMonth} of ${_usage!.capMonthly} marks used this month · today\'s pace ${_usage!.dayPct}% · this week ${_usage!.weekPct}%. Daily and weekly pacing keeps the allowance lasting all month; repeats are always free.',
+                          ? 'Credits scale with marking complexity — a quick multiple-choice quiz uses far less than a long problem set. Repeats are always free.'
+                          : 'This month: ${_usage!.monthPct}% · this week: ${_usage!.weekPct}% · today: ${_usage!.dayPct}%. Credits scale with marking complexity — a quick multiple-choice quiz uses far less than a long problem set. Repeats are always free.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                     ),
                     const SizedBox(height: 10),

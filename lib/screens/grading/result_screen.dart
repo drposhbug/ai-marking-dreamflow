@@ -12,6 +12,7 @@ import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ResultScreen extends StatefulWidget {
   final String? submissionId;
@@ -559,7 +560,7 @@ class _ResultScreenState extends State<ResultScreen> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () {},
+                          onPressed: (result == null && sub == null) ? null : () => _share(result, sub, student?.name),
                           icon: Icon(Icons.ios_share_rounded, color: cs.primary),
                           label: Text('Share', style: TextStyle(color: cs.primary)),
                         ),
@@ -578,6 +579,40 @@ class _ResultScreenState extends State<ResultScreen> {
               ),
       ),
     );
+  }
+
+  /// Shares the marked result as plain text via the system share sheet
+  /// (message, email, Classroom, wherever the teacher sends it).
+  Future<void> _share(AiGradeResult? result, Submission? sub, String? studentName) async {
+    final b = StringBuffer();
+    if (result != null) {
+      final name = (studentName?.trim().isNotEmpty == true) ? studentName!.trim() : (result.studentNameOnPaper ?? 'Student');
+      b.writeln('$name — ${result.detectedSubject}');
+      b.writeln(result.gradingFormat == 'levels' && result.levelDisplay != null
+          ? '${result.levelDisplay} · ${result.percentageDisplay}'
+          : '${result.percentageDisplay} (${result.rawScore.toStringAsFixed(result.rawScore % 1 == 0 ? 0 : 2)}/${result.maxScore.toStringAsFixed(result.maxScore % 1 == 0 ? 0 : 2)})');
+      if (result.annotations.isNotEmpty) {
+        b.writeln('\nQuestion marks:');
+        for (final a in result.annotations) {
+          b.writeln('${a.questionLabel.isEmpty ? 'Q' : a.questionLabel}: ${a.earnedMark}${a.outOfMark}');
+        }
+      }
+      final ktca = _ktcaOf(result);
+      if (ktca.isNotEmpty) {
+        b.writeln('\nCategories:');
+        for (final c in ktca) {
+          b.writeln('${c.name}: ${c.score.toStringAsFixed(c.score % 1 == 0 ? 0 : 2)}/${c.maxScore.toStringAsFixed(c.maxScore % 1 == 0 ? 0 : 2)}');
+        }
+      }
+      if (sub?.gradingMode != GradingMode.testQuiz && result.summary.isNotEmpty) {
+        b.writeln('\n${result.summary}');
+      }
+    } else if (sub != null) {
+      b.writeln('Marked result: ${sub.score.toStringAsFixed(sub.score % 1 == 0 ? 0 : 2)}/${sub.maxScore.toStringAsFixed(sub.maxScore % 1 == 0 ? 0 : 2)}');
+      if (sub.feedback.trim().isNotEmpty) b.writeln('\n${sub.feedback.trim()}');
+    }
+    b.writeln('\nMarked with Markless');
+    await Share.share(b.toString().trim(), subject: 'Marked result');
   }
 
   String _providerLabel(String provider) {
@@ -726,6 +761,23 @@ class _AnnotatedImage extends StatelessWidget {
         fit: StackFit.passthrough,
         children: [
           Image.memory(imageBytes, fit: BoxFit.contain, width: constraints.maxWidth),
+          // Highlight boxes on the mistakes themselves — the AI points its
+          // position at the erroneous line, this draws the teacher's eye.
+          ...annotations.where((a) => !a.correct).map((a) => Positioned(
+                left: (a.positionLeft * constraints.maxWidth - 46).clamp(0.0, constraints.maxWidth - 92),
+                top: (a.positionTop * constraints.maxHeight - 17),
+                child: IgnorePointer(
+                  child: Container(
+                    width: 92,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: AiMarkerColors.error.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AiMarkerColors.error.withValues(alpha: 0.75), width: 2),
+                    ),
+                  ),
+                ),
+              )),
           ...annotations.map((a) => Positioned(
                 left: a.positionLeft * constraints.maxWidth - 18,
                 top: a.positionTop * constraints.maxHeight - 12,
