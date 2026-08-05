@@ -650,18 +650,31 @@ class _ResultScreenState extends State<ResultScreen> {
                               ListTile(
                                 dense: true,
                                 onTap: () => _editAnnotation(a),
+                                // "?" = the AI couldn't mark it (drawing, no
+                                // key) — a yellow flag, never a red "wrong".
                                 leading: Icon(
-                                  a.correct ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                                  color: a.correct ? AiMarkerColors.secondary : AiMarkerColors.error,
+                                  _isTeacherOnly(a)
+                                      ? Icons.flag_rounded
+                                      : (a.correct ? Icons.check_circle_rounded : Icons.cancel_rounded),
+                                  color: _isTeacherOnly(a)
+                                      ? _kFlagAmber
+                                      : (a.correct ? AiMarkerColors.secondary : AiMarkerColors.error),
                                   size: 20,
                                 ),
                                 title: Text(a.questionLabel.isEmpty ? 'Question' : a.questionLabel, style: Theme.of(context).textTheme.bodyMedium),
+                                subtitle: _isTeacherOnly(a)
+                                    ? Text('Yours to mark — ${a.feedback.isEmpty ? "the AI can't check this" : a.feedback}',
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: _kFlagAmber, fontWeight: FontWeight.w700))
+                                    : null,
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
                                       '${a.earnedMark}${a.outOfMark}',
-                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                            color: _isTeacherOnly(a) ? _kFlagAmber : null,
+                                          ),
                                     ),
                                     const SizedBox(width: 6),
                                     Icon(Icons.edit_rounded, size: 15, color: AiMarkerColors.neutral),
@@ -925,6 +938,11 @@ String _bubbleLabel(String s) {
   return words.take(4).join(' ');
 }
 
+// "?" marks are questions the AI refused to judge (drawings, listening tests
+// with no key) — flagged for the teacher in amber, never shown as "wrong".
+const _kFlagAmber = Color(0xFFB45309);
+bool _isTeacherOnly(QuestionAnnotation a) => a.earnedMark.trim() == '?';
+
 class _AnnotatedImage extends StatelessWidget {
   final Uint8List imageBytes;
   final List<QuestionAnnotation> annotations;
@@ -935,12 +953,32 @@ class _AnnotatedImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
+      // The right margin is a single column: each question gets one slot
+      // holding its mark chip and (for mistakes) its label bubble. Slots are
+      // laid out top-to-bottom with a minimum gap so close-together questions
+      // never overlap each other's notes.
+      final sorted = [...annotations]..sort((a, b) => a.positionTop.compareTo(b.positionTop));
+      const chipH = 26.0, bubbleH = 34.0, gap = 6.0;
+      final slotTop = <QuestionAnnotation, double>{};
+      var prevBottom = 0.0;
+      for (final a in sorted) {
+        final hasBubble = !a.correct && a.feedback.trim().isNotEmpty;
+        final blockH = chipH + (hasBubble ? bubbleH + 2 : 0);
+        var top = (a.positionTop * constraints.maxHeight - 12).clamp(0.0, constraints.maxHeight - blockH);
+        if (top < prevBottom + gap && prevBottom > 0) top = (prevBottom + gap).clamp(0.0, constraints.maxHeight - blockH);
+        slotTop[a] = top;
+        prevBottom = top + blockH;
+      }
+
+      Color tone(QuestionAnnotation a) => _isTeacherOnly(a) ? _kFlagAmber : AiMarkerColors.error;
+
       return Stack(
         fit: StackFit.passthrough,
         children: [
           Image.memory(imageBytes, fit: BoxFit.contain, width: constraints.maxWidth),
           // Highlight boxes on the mistakes themselves — the AI points its
           // position at the erroneous line, this draws the teacher's eye.
+          // Teacher-only "?" questions get amber (check it), not red (wrong).
           ...annotations.where((a) => !a.correct).map((a) => Positioned(
                 left: (a.positionLeft * constraints.maxWidth - 46).clamp(0.0, constraints.maxWidth - 92),
                 top: (a.positionTop * constraints.maxHeight - 17),
@@ -949,46 +987,56 @@ class _AnnotatedImage extends StatelessWidget {
                     width: 92,
                     height: 34,
                     decoration: BoxDecoration(
-                      color: AiMarkerColors.error.withValues(alpha: 0.12),
+                      color: tone(a).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AiMarkerColors.error.withValues(alpha: 0.75), width: 2),
+                      border: Border.all(color: tone(a).withValues(alpha: 0.75), width: 2),
                     ),
                   ),
                 ),
               )),
-          // Short "what went wrong" note in the right margin beside each
-          // mistake — kept off the student's writing so both stay readable.
-          ...annotations.where((a) => !a.correct && a.feedback.trim().isNotEmpty).map((a) => Positioned(
-                right: 4,
-                top: (a.positionTop * constraints.maxHeight + 12).clamp(0.0, constraints.maxHeight - 40),
-                child: IgnorePointer(
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 130),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AiMarkerColors.error.withValues(alpha: 0.6)),
-                    ),
-                    child: Text(
-                      _bubbleLabel(a.feedback),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 10, height: 1.2, color: Color(0xFF8B1A1A), fontWeight: FontWeight.w600),
-                    ),
+          // One slot per question: mark chip, then the tiny label bubble.
+          ...sorted.map((a) {
+            final hasBubble = !a.correct && a.feedback.trim().isNotEmpty;
+            return Positioned(
+              right: 4,
+              top: slotTop[a]!,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: onTapAnnotation == null ? null : () => onTapAnnotation!(a),
+                    child: _AnnotationMark(annotation: a),
                   ),
-                ),
-              )),
-          // Marks live in the right margin at the answer's row — never on
-          // top of the writing.
-          ...annotations.map((a) => Positioned(
-                right: 4,
-                top: (a.positionTop * constraints.maxHeight - 12).clamp(0.0, constraints.maxHeight - 24),
-                child: GestureDetector(
-                  onTap: onTapAnnotation == null ? null : () => onTapAnnotation!(a),
-                  child: _AnnotationMark(annotation: a),
-                ),
-              )),
+                  if (hasBubble)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: IgnorePointer(
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 130),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.92),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: tone(a).withValues(alpha: 0.6)),
+                          ),
+                          child: Text(
+                            _bubbleLabel(a.feedback),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              height: 1.2,
+                              color: _isTeacherOnly(a) ? _kFlagAmber : const Color(0xFF8B1A1A),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
         ],
       );
     });
@@ -1001,7 +1049,9 @@ class _AnnotationMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = annotation.correct ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    final color = _isTeacherOnly(annotation)
+        ? _kFlagAmber
+        : (annotation.correct ? const Color(0xFF2E7D32) : const Color(0xFFC62828));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
@@ -1009,9 +1059,19 @@ class _AnnotationMark extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 3)],
       ),
-      child: Text(
-        '${annotation.questionLabel.isEmpty ? '' : '${annotation.questionLabel} '}${annotation.earnedMark}${annotation.outOfMark}',
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_isTeacherOnly(annotation))
+            const Padding(
+              padding: EdgeInsets.only(right: 3),
+              child: Icon(Icons.flag_rounded, size: 12, color: Colors.white),
+            ),
+          Text(
+            '${annotation.questionLabel.isEmpty ? '' : '${annotation.questionLabel} '}${annotation.earnedMark}${annotation.outOfMark}',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12),
+          ),
+        ],
       ),
     );
   }

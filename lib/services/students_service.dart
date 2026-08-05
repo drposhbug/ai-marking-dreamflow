@@ -35,7 +35,21 @@ class StudentsService extends ChangeNotifier {
       // One-time cleanup: drop the demo/template students seeded by old builds.
       final before = _students.length;
       _students = _students.where((s) => !_legacySeedCodes.contains(s.studentId)).toList();
-      if (_students.length != before) await _persist();
+      var changed = _students.length != before;
+
+      // Same adoption as classes/submissions: students created under another
+      // sign-in on this device follow the current teacher.
+      var adopted = 0;
+      _students = _students.map((s) {
+        if (s.teacherId == teacherId) return s;
+        adopted++;
+        return s.copyWith(teacherId: teacherId, updatedAt: DateTime.now());
+      }).toList();
+      if (adopted > 0) {
+        changed = true;
+        debugPrint('StudentsService: adopted $adopted student(s) from other sign-ins on this device');
+      }
+      if (changed) await _persist();
     } catch (e) {
       debugPrint('StudentsService.init failed: $e');
       _students = const [];
