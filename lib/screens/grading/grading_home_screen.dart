@@ -141,8 +141,59 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         return;
       }
 
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
-      await _handlePickedFile(image);
+      final images = await _picker.pickMultiImage(imageQuality: 85);
+      if (images.isEmpty || !mounted) return;
+      if (images.length == 1) {
+        await _handlePickedFile(images.first);
+        return;
+      }
+
+      // Several photos: pages of ONE test, or one test per photo?
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('${images.length} photos picked'),
+          content: const Text('Are these the pages of one test, or a separate student\'s test per photo?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, 'combine'), child: const Text('One test (pages)')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, 'batch'), child: const Text('One per student')),
+          ],
+        ),
+      );
+      if (!mounted || choice == null) return;
+
+      // Straighten/clean every photo like a live scan — with progress.
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 18),
+              Expanded(child: Text('Preparing ${images.length} photos…')),
+            ],
+          ),
+        ),
+      );
+      final pages = <ScannedPage>[];
+      try {
+        for (final img in images) {
+          final bytes = await img.readAsBytes();
+          final processed = await DocumentProcessor.processPage(bytes);
+          pages.add(ScannedPage(bytes: processed, fileName: img.name));
+        }
+      } finally {
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (!mounted || pages.isEmpty) return;
+
+      if (choice == 'batch') {
+        _enqueueBatch([for (final p in pages) [p]]);
+        return;
+      }
+      context.read<AppState>().setPages(pages);
+      context.push(AppRoutes.gradingContext);
     } catch (e) {
       debugPrint('Pick from gallery failed: $e');
       if (!mounted) return;
@@ -157,41 +208,72 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     final ok = await _askWhichClass();
     if (!ok || !mounted) return;
     try {
-      DriveImport import;
-      // Drive downloads can take a few seconds — show progress instead of
-      // leaving the teacher staring at a screen that "does nothing".
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 18),
-              Expanded(child: Text('Loading from Google Drive…')),
+      // The Drive app's picker is often single-select, so let the teacher
+      // stack up the whole class set across several picks before marking.
+      final groups = <List<ScannedPage>>[];
+      var unreadable = 0;
+      var pdfTruncated = false;
+      while (true) {
+        DriveImport import;
+        // Drive downloads can take a few seconds — show progress instead of
+        // leaving the teacher staring at a screen that "does nothing".
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 18),
+                Expanded(child: Text('Loading from Google Drive…')),
+              ],
+            ),
+          ),
+        );
+        try {
+          import = await DrivePicker.importScannedPages();
+        } finally {
+          if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        }
+        if (!mounted) return;
+        if (import.cancelled) {
+          if (groups.isEmpty) return; // cancelled the first pick — nothing to do
+          break; // cancelled an "add more" round — mark what we have
+        }
+        if (import.pages.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            duration: Duration(seconds: 6),
+            content: Text('That file couldn\'t be read — pick a photo or a PDF. For a Google Doc, open it in Drive and use Share → Save as PDF first.'),
+          ));
+          if (groups.isEmpty) return;
+        } else {
+          groups.addAll(import.fileGroups);
+          unreadable += import.unreadable;
+          pdfTruncated = pdfTruncated || import.pdfTruncated;
+        }
+
+        final more = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('${groups.length} test file${groups.length == 1 ? '' : 's'} ready'),
+            content: const Text('Add more tests from Google Drive, or start marking what you have?'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, 'more'), child: const Text('Add more')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, 'go'), child: const Text('Start marking')),
             ],
           ),
-        ),
-      );
-      try {
-        import = await DrivePicker.importScannedPages();
-      } finally {
-        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        );
+        if (!mounted) return;
+        if (more != 'more') break;
       }
-      if (!mounted || import.cancelled) return;
-      if (import.pages.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          duration: Duration(seconds: 6),
-          content: Text('That file couldn\'t be read — pick a photo or a PDF. For a Google Doc, open it in Drive and use Share → Save as PDF first.'),
-        ));
-        return;
-      }
-      if (import.unreadable > 0) {
+      if (groups.isEmpty) return;
+
+      if (unreadable > 0) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${import.unreadable} file${import.unreadable == 1 ? '' : 's'} couldn\'t be read and ${import.unreadable == 1 ? 'was' : 'were'} skipped.'),
+          content: Text('$unreadable file${unreadable == 1 ? '' : 's'} couldn\'t be read and ${unreadable == 1 ? 'was' : 'were'} skipped.'),
         ));
       }
-      if (import.pdfTruncated) {
+      if (pdfTruncated) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Long PDF — only the first 15 pages were imported.'),
         ));
@@ -199,11 +281,11 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
 
       // Several files usually means several STUDENTS (one PDF per test) —
       // offer to mark each file as its own submission in the background.
-      if (import.fileGroups.length > 1) {
+      if (groups.length > 1) {
         final choice = await showDialog<String>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text('${import.fileGroups.length} files picked'),
+            title: Text('${groups.length} files picked'),
             content: const Text('Mark each file as a separate student\'s test, or combine all pages into one submission?'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, 'combine'), child: const Text('One submission')),
@@ -213,12 +295,12 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         );
         if (!mounted || choice == null) return;
         if (choice == 'batch') {
-          _enqueueBatch(import.fileGroups);
+          _enqueueBatch(groups);
           return;
         }
       }
 
-      context.read<AppState>().setPages(import.pages);
+      context.read<AppState>().setPages([for (final g in groups) ...g]);
       context.push(AppRoutes.gradingContext);
     } on DrivePickerUnavailable {
       final pages = await _pickPagesFromFiles();

@@ -59,13 +59,48 @@ String markedResultHtml({required AiGradeResult result, required String studentN
 /// nothing else in the teacher's Drive.
 class DriveService {
   static const _folderName = 'Markless';
+  static const _kTokenKey = 'ai_marker.drive_token.v1';
+
+  // Supabase drops providerToken from the session on refresh even though
+  // the Google token itself lives ~1 hour — so the moment we see one we
+  // persist it (memory + disk) and serve it until it actually expires.
+  static String? _memToken;
+  static int _memExpMs = 0;
+
+  static Future<void> persistSessionToken() async {
+    try {
+      final t = Supabase.instance.client.auth.currentSession?.providerToken;
+      if (t == null || t.isEmpty || t == _memToken) return;
+      _memToken = t;
+      _memExpMs = DateTime.now().add(const Duration(minutes: 55)).millisecondsSinceEpoch;
+      await const LocalStore().setString(_kTokenKey, jsonEncode({'t': t, 'e': _memExpMs}));
+    } catch (_) {}
+  }
+
+  /// Loads a previously persisted (still-valid) token — call once at startup.
+  static Future<void> restore() async {
+    try {
+      final raw = await const LocalStore().getString(_kTokenKey);
+      if (raw == null || raw.isEmpty) return;
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      final exp = (m['e'] as num?)?.toInt() ?? 0;
+      if (exp > DateTime.now().millisecondsSinceEpoch) {
+        _memToken = m['t']?.toString();
+        _memExpMs = exp;
+      }
+    } catch (_) {}
+  }
 
   String? get _token {
     try {
-      return Supabase.instance.client.auth.currentSession?.providerToken;
-    } catch (_) {
-      return null;
-    }
+      final t = Supabase.instance.client.auth.currentSession?.providerToken;
+      if (t != null && t.isNotEmpty) {
+        persistSessionToken(); // fire-and-forget refresh of the stored copy
+        return t;
+      }
+    } catch (_) {}
+    if (_memToken != null && _memExpMs > DateTime.now().millisecondsSinceEpoch) return _memToken;
+    return null;
   }
 
   /// True when the current session carries a Google access token.
