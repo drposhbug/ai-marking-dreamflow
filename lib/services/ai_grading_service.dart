@@ -202,6 +202,10 @@ class QuestionAnnotation {
   final String outOfMark;    // e.g. "/4"
   final bool correct;
   final String feedback;     // short inline note
+  // Right answer reached a different way than the answer key shows
+  // ("different method", "advanced method", "steps skipped") — marks are
+  // awarded, but the teacher decides if their class rules allow it.
+  final String methodNote;
   final int pageIndex;       // which scanned page this mark belongs to (0-based)
   final double positionTop;  // 0.0–1.0 fraction of image height
   final double positionLeft; // 0.0–1.0 fraction of image width
@@ -214,6 +218,7 @@ class QuestionAnnotation {
     required this.feedback,
     required this.positionTop,
     required this.positionLeft,
+    this.methodNote = '',
     this.pageIndex = 0,
   });
 
@@ -224,6 +229,7 @@ class QuestionAnnotation {
       outOfMark: (j['outOfMark'] ?? '').toString(),
       correct: j['correct'] == true,
       feedback: (j['feedback'] ?? '').toString(),
+      methodNote: (j['methodNote'] ?? '').toString(),
       pageIndex: (j['pageIndex'] as num?)?.toInt() ?? 0,
       positionTop: (j['positionTop'] as num?)?.toDouble() ?? 0.0,
       positionLeft: (j['positionLeft'] as num?)?.toDouble() ?? 0.0,
@@ -236,6 +242,7 @@ class QuestionAnnotation {
         'outOfMark': outOfMark,
         'correct': correct,
         'feedback': feedback,
+        'methodNote': methodNote,
         'pageIndex': pageIndex,
         'positionTop': positionTop,
         'positionLeft': positionLeft,
@@ -867,10 +874,15 @@ class AiGradingService {
     // "?" marks are questions the AI refuses to judge (drawings, listening
     // tests with no key) — excluded from the totals, marked by the teacher.
     final handMarked = annotations.where((a) => a.earnedMark.trim() == '?').toList();
+    // Right answer via a method the key doesn't show — awarded, but some
+    // teachers only accept the taught method, so surface it.
+    final methodFlagged = annotations.where((a) => a.correct && a.methodNote.trim().isNotEmpty).toList();
     final triageStatus = handMarked.isEmpty ? TriageStatus.graded : TriageStatus.needsReview;
     final flags = [
       for (final a in handMarked)
         '${a.questionLabel.isEmpty ? 'Question' : a.questionLabel} (${a.feedback.isEmpty ? 'teacher must mark' : a.feedback}): tap its row to enter your mark',
+      for (final a in methodFlagged)
+        '${a.questionLabel.isEmpty ? 'Question' : a.questionLabel}: right answer via ${a.methodNote.trim()} — awarded; adjust if you require the taught method',
     ];
     final confidence = handMarked.isEmpty ? 95 : 70;
 

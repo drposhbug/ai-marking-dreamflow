@@ -196,10 +196,14 @@ class GradingQueueService extends ChangeNotifier {
       job.submissionId = submission.id;
       notifyListeners();
       final unmatchedName = studentId.isEmpty && paperName.isNotEmpty;
+      final methodFlags = res.annotations.where((a) => a.correct && a.methodNote.trim().isNotEmpty).length;
+      final flagNote = methodFlags > 0
+          ? ' $methodFlags question${methodFlags == 1 ? '' : 's'} solved with a different method — check the blue notes.'
+          : '';
       messengerKey?.currentState?.showSnackBar(
         SnackBar(content: Text(unmatchedName
-            ? '${job.label} is marked (${res.primaryDisplay}) — no student called "$paperName" yet; open it to create or link them.'
-            : '${job.label} is marked (${res.primaryDisplay}) — open it from the Marking tray.')),
+            ? '${job.label} is marked (${res.primaryDisplay}) — no student called "$paperName" yet; open it to create or link them.$flagNote'
+            : '${job.label} is marked (${res.primaryDisplay}) — open it from the Marking tray.$flagNote')),
       );
       if (job.notifyLearnedKey && res.learnedKeyId != null) {
         messengerKey?.currentState?.showSnackBar(
