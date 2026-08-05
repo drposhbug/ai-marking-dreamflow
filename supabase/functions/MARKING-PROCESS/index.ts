@@ -1633,8 +1633,18 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
   // ~10x cheaper per mark than the frontier path. Essays, lab reports, and
   // keyless marking skip this. ANY failure falls through to the frontier
   // single-call path below, so quality can only fall back, never dead-end.
-  const objectiveRoute = !!Deno.env.get("DEEPSEEK_API_KEY") && !!answerKey && !preferGemini &&
-    (mode === "homework" || mode === "testQuiz");
+  // Routing spec (question-type first, grade level as the secondary lever):
+  //   1. Answer key + homework/testQuiz → cheap route, any grade (grading
+  //      is compare-against-key, no judgment needed).
+  //   2. No key, but ELEMENTARY (≤ Grade 6) homework → cheap route too:
+  //      K-6 objective content is well within the small model's judgment.
+  //   3. Essays, lab reports, keyless high-school work, explicit
+  //      provider=gemini → frontier path (Sonnet-class judgment).
+  const keyedObjective = !!answerKey && (mode === "homework" || mode === "testQuiz");
+  const elementaryKeyless = !answerKey && mode === "homework" &&
+    expectationGrade != null && expectationGrade <= 6;
+  const objectiveRoute = !!Deno.env.get("DEEPSEEK_API_KEY") && !preferGemini &&
+    (keyedObjective || elementaryKeyless);
   if (objectiveRoute) {
     try {
       const parsed = await callGemini(imagesBase64, mediaType, PARSE_PROMPT, PARSE_SHAPE);
