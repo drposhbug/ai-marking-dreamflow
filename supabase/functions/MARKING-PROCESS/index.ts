@@ -124,7 +124,44 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 15;
+const CACHE_VERSION = 16;
+
+// A keyless graded mark works out every correct answer anyway — store that
+// as a real answer key so the REST of the class marks against it on the
+// cheap deterministic route instead of paying the frontier price per paper.
+// deno-lint-ignore no-explicit-any
+async function maybeStoreLearnedKey(teacherId: string, raw: any): Promise<{ id: string; name: string } | null> {
+  try {
+    const qs = Array.isArray(raw?.derivedKey) ? raw.derivedKey : [];
+    if (qs.length < 2 || !teacherId) return null;
+    const subject = String(raw?.detectedSubject ?? "").trim();
+    const kind = String(raw?.assignmentKind ?? "test").trim() || "test";
+    const name = `Learned key — ${subject ? `${subject} ` : ""}${kind} (${new Date().toISOString().slice(0, 10)})`;
+    // deno-lint-ignore no-explicit-any
+    const totalMarks = qs.reduce((s: number, q: any) => s + (Number(q?.marks) || 0), 0);
+    const keyJson = {
+      name,
+      subject,
+      totalMarks,
+      // deno-lint-ignore no-explicit-any
+      questions: qs.map((q: any) => ({
+        label: String(q?.label ?? ""),
+        marks: Number(q?.marks) || 0,
+        answer: String(q?.answer ?? ""),
+      })),
+    };
+    const { data, error } = await serviceDb()
+      .from("answer_keys")
+      .insert({ teacher_id: teacherId, name, subject: subject || null, total_marks: totalMarks || null, key_json: keyJson })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return { id: String(data.id), name };
+  } catch (e) {
+    console.error("learned-key store failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
 
 // Margin labels for annotation codes. Annotations render as tiny bubbles ON
 // the page, so a code must never expand into a bank sentence — it maps to a
@@ -386,7 +423,7 @@ function gradeSchema(includeTranscription: boolean): any {
     "detectedSubject", "detectedGrade", "studentNameOnPaper", "assignmentKind", "markingStyle",
     "gradingFormat", "rawScore", "maxScore",
     "percentage", "summary", "strengths", "improvements",
-    "criteriaBreakdown", "annotations",
+    "criteriaBreakdown", "annotations", "derivedKey",
   ];
   // deno-lint-ignore no-explicit-any
   const properties: any = {
@@ -432,6 +469,19 @@ function gradeSchema(includeTranscription: boolean): any {
           pageIndex: { type: "integer" },
           positionTop: { type: "number" },
           positionLeft: { type: "number" },
+        },
+      },
+    },
+    derivedKey: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["label", "marks", "answer"],
+        properties: {
+          label: { type: "string" },
+          marks: { type: "number" },
+          answer: { type: "string" },
         },
       },
     },
@@ -607,6 +657,8 @@ Do all of the following:
    - If the paper's sections are not labeled with KTCA categories, skip this rule and use percentage = rawScore / maxScore * 100.
 7. Choose gradingFormat: "levels" for work at Grades 1-8 (see GRADE-LEVEL EXPECTATIONS below) and for essays, lab reports, and rubric-style work; "percentage" for Grades 9-13 tests, quizzes, and homework.
 8. For graded tests/quizzes: summary is AT MOST 1 short sentence, and strengths and improvements are EMPTY arrays — the per-question marks ARE the feedback. For all other work: summary at most 2 short sentences addressed to the teacher (no per-question details, no KTCA scores — those are appended automatically), with 2-4 strengths and 2-4 improvements as feedback codes.
+
+9. LEARN THE KEY: when marking GRADED work with NO official answer key present, also fill derivedKey — one entry per question with its label, its printed marks, and the correct answer you worked out while marking (final answer with required units and common acceptable alternates, COMPACT — no working, no explanation). Skip teacher-only "?" questions. When an OFFICIAL ANSWER KEY is present, or markingStyle is "completion", derivedKey MUST be [].
 
 GRADE-LEVEL EXPECTATIONS — mark at the grade level given in CONTEXT when present; otherwise mark at the grade level you detected from the work itself. For work at Grades 1-8, report on the elementary Level scale by choosing gradingFormat "levels": Level 3 = meeting grade expectations, Level 4 = exceeding them, Level 4+ = outstanding. Percentages still back the levels, so compute rawScore/maxScore/percentage as usual.
 
@@ -1046,7 +1098,8 @@ function gradeShape(includeTranscription: boolean): string {
   "strengths": string[],
   "improvements": string[],
   "criteriaBreakdown": [{"name": string, "score": number, "maxScore": number, "level": integer or null, "feedback": string}],
-  "annotations": [{"questionLabel": string, "earnedMark": string, "outOfMark": string, "correct": boolean, "feedback": string, "pageIndex": integer, "positionTop": number, "positionLeft": number}]${includeTranscription ? `,
+  "annotations": [{"questionLabel": string, "earnedMark": string, "outOfMark": string, "correct": boolean, "feedback": string, "pageIndex": integer, "positionTop": number, "positionLeft": number}],
+  "derivedKey": [{"label": string, "marks": number, "answer": string}]${includeTranscription ? `,
   "rawText": string` : ""}
 }`;
 }
@@ -1810,7 +1863,10 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
       const stats: CodeUse[] = [];
       const normalized = normalize(raw, name, maxScore, formatOverride, stats, expectationGrade);
       await logCodeUsage(stats);
-      return json({ ...normalized, cached: false });
+      const learnedKey = (!answerKeyId && normalized.markingStyle === "graded")
+        ? await maybeStoreLearnedKey(gradeTeacherId, raw)
+        : null;
+      return json({ ...normalized, cached: false, ...(learnedKey ? { learnedKey } : {}) });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`${name} grading failed:`, msg);

@@ -82,6 +82,31 @@ class AiGradeRequest {
     this.answerKeyId,
     this.includeTranscription = false,
   });
+
+  /// Same request marking against [keyId] — used when the first paper of a
+  /// keyless batch learns the answer key and the rest reuse it.
+  AiGradeRequest withAnswerKey(String keyId) => AiGradeRequest(
+        teacherId: teacherId,
+        studentId: studentId,
+        classId: classId,
+        presetId: presetId,
+        subject: subject,
+        mode: mode,
+        criteria: criteria,
+        harshness: harshness,
+        overrideUsed: overrideUsed,
+        imageBytes: imageBytes,
+        pageImages: pageImages,
+        notes: notes,
+        studentGrade: studentGrade,
+        gradeLevel: gradeLevel,
+        region: region,
+        teacherFeedback: teacherFeedback,
+        formatOverride: formatOverride,
+        studentName: studentName,
+        answerKeyId: keyId,
+        includeTranscription: includeTranscription,
+      );
 }
 
 // ---------- Roster entry (read off a photographed attendance sheet) ----------
@@ -293,6 +318,12 @@ class AiGradeResult {
   final List<String> flags;
   final TriageStatus triageStatus;
 
+  // Set when a keyless graded mark derived the correct answers and saved
+  // them as a reusable answer key — the rest of the class marks cheaply
+  // against it. Transient (not persisted with the submission).
+  final String? learnedKeyId;
+  final String? learnedKeyName;
+
   const AiGradeResult({
     required this.detectedSubject,
     required this.detectedGrade,
@@ -314,6 +345,8 @@ class AiGradeResult {
     required this.confidence,
     required this.flags,
     required this.triageStatus,
+    this.learnedKeyId,
+    this.learnedKeyName,
   });
 
   // Convenience: the score to display given the current format.
@@ -869,6 +902,8 @@ class AiGradingService {
       confidence: confidence,
       flags: flags,
       triageStatus: triageStatus,
+      learnedKeyId: (map['learnedKey'] is Map) ? (map['learnedKey'] as Map)['id']?.toString() : null,
+      learnedKeyName: (map['learnedKey'] is Map) ? (map['learnedKey'] as Map)['name']?.toString() : null,
     );
   }
 

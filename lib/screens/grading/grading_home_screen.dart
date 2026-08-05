@@ -244,9 +244,12 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     final submissions = context.read<SubmissionsService>();
     final queue = context.read<GradingQueueService>();
 
+    final reqs = <AiGradeRequest>[];
+    final pagesList = <List<Uint8List>>[];
+    final labels = <String?>[];
     for (final group in groups) {
       final bytes = group.map((p) => p.bytes).toList(growable: false);
-      final req = AiGradeRequest(
+      reqs.add(AiGradeRequest(
         teacherId: auth.id,
         studentId: '',
         classId: draft.classId ?? '',
@@ -265,17 +268,17 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         region: app.region,
         teacherFeedback: app.markingFeedback,
         answerKeyId: draft.answerKeyId.isEmpty ? null : draft.answerKeyId,
-      );
-      queue.enqueue(
-        req: req,
-        pages: bytes,
-        students: students,
-        submissions: submissions,
-        label: group.first.fileName.replaceAll(RegExp(r'\s*\(page \d+\)$'), ''),
-      );
+      ));
+      pagesList.add(bytes);
+      labels.add(group.first.fileName.replaceAll(RegExp(r'\s*\(page \d+\)$'), ''));
     }
+    // Pilot-then-fleet: with no key chosen, the first paper learns one and
+    // the rest mark against it on the cheap route.
+    queue.enqueueBatch(reqs: reqs, pagesList: pagesList, labels: labels, students: students, submissions: submissions);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Marking ${groups.length} students in the background — results land in the tray as they finish.'),
+      content: Text(draft.answerKeyId.isEmpty
+          ? 'Marking ${groups.length} students — the first paper goes ahead to learn the answer key, then the rest follow.'
+          : 'Marking ${groups.length} students in the background — results land in the tray as they finish.'),
     ));
   }
 

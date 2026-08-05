@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -23,6 +24,17 @@ class GradingJob {
   AiGradeResult? result;
   String? submissionId;
   String? error;
+  // Whether to announce a learned answer key for this job (batch pilots
+  // stay quiet — the batch announces once for the whole set).
+  bool notifyLearnedKey = true;
+
+  /// Completes when this job finishes (done or error) — lets a batch wait
+  /// for its pilot paper before releasing the rest.
+  final Completer<void> _done = Completer<void>();
+  Future<void> get done => _done.future;
+  void _markDone() {
+    if (!_done.isCompleted) _done.complete();
+  }
 
   GradingJob({
     required this.id,
@@ -47,12 +59,13 @@ class GradingQueueService extends ChangeNotifier {
   List<GradingJob> get jobs => List.unmodifiable(_jobs);
   int get markingCount => _jobs.where((j) => j.status == GradingJobStatus.marking).length;
 
-  void enqueue({
+  GradingJob enqueue({
     required AiGradeRequest req,
     required List<Uint8List> pages,
     required StudentsService students,
     required SubmissionsService submissions,
     String? label,
+    bool notifyLearnedKey = true,
   }) {
     final job = GradingJob(
       id: 'job_${IdFactory.newId()}',
@@ -61,9 +74,53 @@ class GradingQueueService extends ChangeNotifier {
       req: req,
       label: (label != null && label.trim().isNotEmpty) ? label : _timeLabel(DateTime.now()),
     );
+    job.notifyLearnedKey = notifyLearnedKey;
     _jobs.insert(0, job);
     notifyListeners();
     _run(job, req, students, submissions); // deliberately not awaited
+    return job;
+  }
+
+  /// Class-set marking, cost-aware: the FIRST paper marks alone (the pilot).
+  /// If it was keyless graded work, the AI saves the answers it derived as a
+  /// reusable key, and every remaining paper marks against that key on the
+  /// cheap deterministic route (~10× cheaper) — then they all run in parallel.
+  Future<void> enqueueBatch({
+    required List<AiGradeRequest> reqs,
+    required List<List<Uint8List>> pagesList,
+    required List<String?> labels,
+    required StudentsService students,
+    required SubmissionsService submissions,
+  }) async {
+    if (reqs.isEmpty) return;
+    final pilot = enqueue(
+      req: reqs.first,
+      pages: pagesList.first,
+      students: students,
+      submissions: submissions,
+      label: labels.first,
+      notifyLearnedKey: reqs.length == 1,
+    );
+    if (reqs.length == 1) return;
+    await pilot.done;
+
+    final keyId = pilot.result?.learnedKeyId;
+    final keyName = pilot.result?.learnedKeyName;
+    for (var i = 1; i < reqs.length; i++) {
+      var r = reqs[i];
+      if (keyId != null && (r.answerKeyId == null || r.answerKeyId!.isEmpty)) {
+        r = r.withAnswerKey(keyId);
+      }
+      enqueue(req: r, pages: pagesList[i], students: students, submissions: submissions, label: labels[i]);
+    }
+    if (keyId != null) {
+      messengerKey?.currentState?.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text('Learned "$keyName" from the first paper — the rest of this set is marking against it (cheaper and more consistent). It\'s saved with your answer keys.'),
+        ),
+      );
+    }
   }
 
   static String _timeLabel(DateTime t) {
@@ -144,11 +201,21 @@ class GradingQueueService extends ChangeNotifier {
             ? '${job.label} is marked (${res.primaryDisplay}) — no student called "$paperName" yet; open it to create or link them.'
             : '${job.label} is marked (${res.primaryDisplay}) — open it from the Marking tray.')),
       );
+      if (job.notifyLearnedKey && res.learnedKeyId != null) {
+        messengerKey?.currentState?.showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 6),
+            content: Text('Answer key learned from this paper and saved ("${res.learnedKeyName}") — pick it for the rest of the class to mark cheaper and more consistently.'),
+          ),
+        );
+      }
       _maybeAutoSaveToDrive(job, res); // deliberately not awaited
+      job._markDone();
     } catch (e) {
       debugPrint('GradingQueueService job failed: $e');
       job.status = GradingJobStatus.error;
       job.error = e.toString();
+      job._markDone();
       notifyListeners();
       messengerKey?.currentState?.showSnackBar(
         SnackBar(
