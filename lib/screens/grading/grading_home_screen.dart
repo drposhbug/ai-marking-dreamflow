@@ -253,7 +253,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         presetId: draft.presetId ?? '',
         subject: draft.detectedSubject ?? 'Subject',
         mode: draft.mode,
-        criteria: draft.criteria,
+        criteria: const {},
         harshness: draft.harshness,
         notes: null,
         overrideUsed: draft.oneTimeOverride,
