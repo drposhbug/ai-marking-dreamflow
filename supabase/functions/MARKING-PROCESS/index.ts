@@ -124,7 +124,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 14;
+const CACHE_VERSION = 15;
 
 // Margin labels for annotation codes. Annotations render as tiny bubbles ON
 // the page, so a code must never expand into a bank sentence — it maps to a
@@ -581,7 +581,10 @@ Do all of the following:
    - correct = true only if fully correct
    - feedback: a TINY plain-words error label, 2-4 words max — "wrong formula", "addition mistake", "missing unit", "wrong number", "sign error", "sig figs", "left blank", "skipped a step". NEVER a sentence, never an explanation, never a summary of the question, never a #code here. Fully correct answers get feedback "".
    - check every numeric final answer for UNITS: if a required unit is missing or wrong, deduct part marks with label "missing unit"
-   - DRAWINGS THE TEACHER MUST MARK BY HAND: when a question is answered with a drawing whose correctness you cannot reliably judge — a free-body diagram, ray diagram, graph the student drew, sketch, geometric construction — do NOT guess a mark. Set earnedMark "?", outOfMark from the printed marks, correct = false, feedback "check drawing". EXCLUDE that question's printed marks from rawScore, maxScore, and its KTCA category totals — the teacher adds it by hand. Simple diagram READING (taking numbers off a printed graph) is normal marking, not this rule.
+   - QUESTIONS ONLY THE TEACHER CAN MARK: when you cannot reliably judge an answer from the pages alone, do NOT guess a mark. Set earnedMark "?", outOfMark from the printed marks, correct = false, and a tiny label saying why. EXCLUDE that question's printed marks from rawScore, maxScore, and its KTCA category totals — the teacher marks it by hand. This applies to:
+     * drawings — free-body diagrams, ray diagrams, graphs the student drew, sketches, geometric constructions → feedback "check drawing". Simple diagram READING (taking numbers off a printed graph) is normal marking, not this rule.
+     * answers that can only be checked against material NOT in the images and there is NO OFFICIAL ANSWER KEY — listening/écoute or dictation tests (answers depend on audio you cannot hear), questions about a reading passage or source not photographed, oral components → feedback "needs answer key". With an answer key present these mark normally against the key.
+     * If EVERY question is teacher-only (e.g. a listening test with no key), still return all annotations with "?" and say why in a one-sentence summary ("Listening test with no answer key — answers can't be checked without the audio.").
    - pageIndex: which page the answer is on, 0-based (Page 1 = 0, Page 2 = 1, ...)
    - positionTop and positionLeft: land ON the specific wrong number, expression, or step itself — never the question header, never a subtotal, never the general question area. When the answer is fully correct, point at the final answer. Fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
 4. criteriaBreakdown must normally be EMPTY — marking is right-or-wrong per question, nothing else. Include entries ONLY in exactly two cases:
@@ -590,7 +593,7 @@ Do all of the following:
    NEVER invent criteria ("Attempted all questions", "Effort", "Neatness", "Organization", "Working shown", ...). "Communication" is a criterion ONLY when a rubric or a KTCA section defines it — otherwise communication slips (missing units, missing sig figs, wrong rounding or decimal places) are PART-MARK DEDUCTIONS (quarter-steps, rule 3) on the question where they occur, never a separate criterion or comment section.
 5. Compute maxScore and rawScore for the whole submission:
    - When markingStyle is "completion", rawScore and maxScore count completed vs assigned questions (see rule 2) — the rules below apply to "graded" work.
-   - If the paper prints marks per question (e.g. "(2 marks)", "/4"), maxScore = the TOTAL of the printed marks of the questions VISIBLE in the images, and rawScore = the marks the student earned on those questions. Questions marked "?" as teacher-marked drawings (rule 3) are excluded from BOTH totals.
+   - If the paper prints marks per question (e.g. "(2 marks)", "/4"), maxScore = the TOTAL of the printed marks of the questions VISIBLE in the images, and rawScore = the marks the student earned on those questions. Questions marked "?" as teacher-only (rule 3) are excluded from BOTH totals.
    - Only if the paper shows no marks at all, use the fallback total marks from CONTEXT.
    - Grade ONLY what is visible. NEVER deduct for questions, sections, or pages that are not in the images — treat the visible pages as the entire submission. If everything visible is fully correct, the score must be full marks.
    - percentage must equal rawScore / maxScore * 100 (rounded is fine).

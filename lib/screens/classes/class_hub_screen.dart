@@ -147,7 +147,13 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                       for (final s in classSubmissions.take(10))
                         ListTile(
                           dense: true,
-                          leading: Icon(Icons.description_rounded, color: cs.primary, size: 20),
+                          contentPadding: const EdgeInsets.only(left: 4, right: 16),
+                          leading: IconButton(
+                            onPressed: () => _confirmDeleteSubmission(context, s.id),
+                            tooltip: 'Delete this result',
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(Icons.delete_outline_rounded, size: 20, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
+                          ),
                           title: Text(
                             s.studentId.isEmpty
                                 ? '${s.subject} · unlinked'
@@ -162,27 +168,7 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                             style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w900),
                           ),
                           onTap: () => context.push('${AppRoutes.result}?submissionId=${s.id}'),
-                          onLongPress: () async {
-                            final confirmed = await showDialog<bool>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Delete this result?'),
-                                content: const Text('The mark, its pages, and the cloud copy are removed everywhere. This cannot be undone.'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                                  FilledButton(
-                                    style: FilledButton.styleFrom(backgroundColor: AiMarkerColors.error),
-                                    onPressed: () => Navigator.pop(ctx, true),
-                                    child: const Text('Delete'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (confirmed != true || !context.mounted) return;
-                            await context.read<SubmissionsService>().delete(s.id);
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Result deleted')));
-                          },
+                          onLongPress: () => _confirmDeleteSubmission(context, s.id),
                         ),
                     ],
                   ),
@@ -241,6 +227,28 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
   }
 
   /// Most recent marked work for this student, e.g. "Last: Physics · 2d ago".
+  Future<void> _confirmDeleteSubmission(BuildContext context, String submissionId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this result?'),
+        content: const Text('The mark, its pages, and the cloud copy are removed everywhere. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AiMarkerColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await context.read<SubmissionsService>().delete(submissionId);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Result deleted')));
+  }
+
   String _lastMarkLabel(String studentId, List<Submission> submissions) {
     final own = submissions.where((s) => s.studentId == studentId).toList();
     if (own.isEmpty) return 'No marks yet';

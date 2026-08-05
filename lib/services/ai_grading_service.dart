@@ -831,13 +831,13 @@ class AiGradingService {
         .map((a) => QuestionAnnotation.fromJson(a.cast<String, dynamic>()))
         .toList();
 
-    // "?" marks are drawings (FBDs, sketched graphs) the AI refuses to judge —
-    // they are excluded from the totals and the teacher marks them by hand.
+    // "?" marks are questions the AI refuses to judge (drawings, listening
+    // tests with no key) — excluded from the totals, marked by the teacher.
     final handMarked = annotations.where((a) => a.earnedMark.trim() == '?').toList();
     final triageStatus = handMarked.isEmpty ? TriageStatus.graded : TriageStatus.needsReview;
     final flags = [
       for (final a in handMarked)
-        '${a.questionLabel.isEmpty ? 'Drawing' : a.questionLabel}: mark the drawing by hand, then tap its row to enter the marks',
+        '${a.questionLabel.isEmpty ? 'Question' : a.questionLabel} (${a.feedback.isEmpty ? 'teacher must mark' : a.feedback}): tap its row to enter your mark',
     ];
     final confidence = handMarked.isEmpty ? 95 : 70;
 
