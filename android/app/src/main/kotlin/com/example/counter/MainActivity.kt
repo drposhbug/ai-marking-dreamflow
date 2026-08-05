@@ -24,7 +24,8 @@ class MainActivity : FlutterActivity() {
                     return@setMethodCallHandler
                 }
                 val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                    type = "image/*"
+                    type = "*/*"
+                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "application/pdf"))
                     addCategory(Intent.CATEGORY_OPENABLE)
                     putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                     // Target the Drive app directly instead of the system picker.

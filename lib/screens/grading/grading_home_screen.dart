@@ -107,17 +107,21 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     }
   }
 
-  /// Multi-select images via the system document picker (Drive included);
-  /// each one gets the full scanner treatment.
+  /// Multi-select images or PDFs via the system document picker; images get
+  /// the full scanner treatment, PDFs are rendered to pages on-device.
   Future<List<ScannedPage>> _pickPagesFromFiles() async {
-    final res = await FilePicker.pickFiles(type: FileType.image, allowMultiple: true, withData: true);
+    final res = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'pdf'],
+      allowMultiple: true,
+      withData: true,
+    );
     if (res == null || res.files.isEmpty) return const [];
     final pages = <ScannedPage>[];
     for (final f in res.files) {
       final bytes = f.bytes;
       if (bytes == null) continue;
-      final processed = await DocumentProcessor.processPage(bytes);
-      pages.add(ScannedPage(bytes: processed, fileName: f.name));
+      pages.addAll(await pagesFromPickedFile(name: f.name, mime: '', bytes: bytes));
     }
     return pages;
   }
@@ -176,13 +180,19 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       if (!mounted || import.cancelled) return;
       if (import.pages.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('That file isn\'t an image — pick a photo (JPG/PNG) of the test page. PDFs aren\'t supported yet.'),
+          duration: Duration(seconds: 6),
+          content: Text('That file couldn\'t be read — pick a photo or a PDF. For a Google Doc, open it in Drive and use Share → Save as PDF first.'),
         ));
         return;
       }
-      if (import.unusable > 0) {
+      if (import.unreadable > 0) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Skipped ${import.unusable} file${import.unusable == 1 ? '' : 's'} that weren\'t readable images.'),
+          content: Text('${import.unreadable} file${import.unreadable == 1 ? '' : 's'} couldn\'t be read and ${import.unreadable == 1 ? 'was' : 'were'} skipped.'),
+        ));
+      }
+      if (import.pdfTruncated) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Long PDF — only the first 15 pages were imported.'),
         ));
       }
       context.read<AppState>().setPages(import.pages);

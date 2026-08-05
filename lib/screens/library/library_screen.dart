@@ -2,7 +2,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
-import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
@@ -105,19 +104,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
         if (!mounted || import.cancelled) return;
         if (import.pages.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('That file isn\'t an image — pick a photo (JPG/PNG) of the key. PDFs aren\'t supported yet.'),
+            duration: Duration(seconds: 6),
+            content: Text('That file couldn\'t be read — pick a photo or a PDF of the key. For a Google Doc, use Share → Save as PDF in Drive first.'),
           ));
           return;
         }
         pages.addAll(import.pages);
       } on DrivePickerUnavailable {
-        final res = await FilePicker.pickFiles(type: FileType.image, allowMultiple: true, withData: true);
+        final res = await FilePicker.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'pdf'],
+          allowMultiple: true,
+          withData: true,
+        );
         if (res == null || res.files.isEmpty) return;
         for (final f in res.files) {
           final bytes = f.bytes;
           if (bytes == null) continue;
-          final processed = await DocumentProcessor.processPage(bytes);
-          pages.add(ScannedPage(bytes: processed, fileName: f.name));
+          pages.addAll(await pagesFromPickedFile(name: f.name, mime: '', bytes: bytes));
         }
       }
     } else {
