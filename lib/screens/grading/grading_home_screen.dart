@@ -12,7 +12,6 @@ import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
-import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
@@ -104,79 +103,6 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       debugPrint('Pick from camera failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera.')));
-    }
-  }
-
-  Future<void> _scanAnswerKey() async {
-    final auth = context.read<AuthService>().currentUser;
-    if (auth == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in first.')));
-      return;
-    }
-
-    // Camera scan, or pull the key document from Files / Google Drive.
-    final source = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_rounded),
-              title: const Text('Scan with camera'),
-              onTap: () => Navigator.pop(context, 'camera'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.add_to_drive_rounded),
-              title: const Text('Files or Google Drive'),
-              subtitle: const Text('Pick images of the key from Drive or any storage'),
-              onTap: () => Navigator.pop(context, 'files'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null || !mounted) return;
-
-    List<ScannedPage>? pages;
-    if (source == 'files') {
-      pages = await _pickPagesFromFiles();
-    } else {
-      pages = await Navigator.of(context).push<List<ScannedPage>>(
-        MaterialPageRoute(builder: (_) => const LiveScanScreen()),
-      );
-    }
-    if (pages == null || pages.isEmpty || !mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 18),
-            Expanded(child: Text('Reading the answer key…\nThis happens only once — it will be saved for reuse.')),
-          ],
-        ),
-      ),
-    );
-    try {
-      final key = await AiGradingService().extractAnswerKey(
-        teacherId: auth.id,
-        pages: pages.map((p) => p.bytes).toList(growable: false),
-      );
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-      context.read<AppState>().setAnswerKey(id: key.id, name: key.name);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Answer key saved: ${key.name} — it will be used for the next grade.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not read the answer key: $e')));
     }
   }
 
@@ -307,10 +233,10 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                     const SizedBox(height: 4),
                     Text('Take a photo to start grading', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.9))),
                     const SizedBox(height: 12),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 10,
-                      runSpacing: 8,
+                    // Answer keys live in the Answers tab — the card keeps
+                    // one clean row of import sources.
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         PillButton(
                           label: 'From Gallery',
@@ -319,19 +245,13 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                           foreground: Colors.white,
                           onTap: _pickFromGallery,
                         ),
+                        const SizedBox(width: 10),
                         PillButton(
                           label: 'From Drive',
                           icon: Icons.add_to_drive_rounded,
                           background: Colors.white.withValues(alpha: 0.16),
                           foreground: Colors.white,
                           onTap: _pickFromDrive,
-                        ),
-                        PillButton(
-                          label: state.draft.answerKeyId.isEmpty ? 'Scan Answer Key' : 'Key: ${state.draft.answerKeyName}',
-                          icon: Icons.key_rounded,
-                          background: Colors.white.withValues(alpha: 0.16),
-                          foreground: Colors.white,
-                          onTap: _scanAnswerKey,
                         ),
                       ],
                     ),
