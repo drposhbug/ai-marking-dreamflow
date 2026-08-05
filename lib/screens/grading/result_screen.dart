@@ -466,6 +466,7 @@ class _ResultScreenState extends State<ResultScreen> {
                     onToggleAverage: result != null && _ktcaOf(result).length >= 2
                         ? (v) => setState(() => _useCategoryAverage = v)
                         : null,
+                    onEditScore: result == null ? null : _editScore,
                   ),
                   const SizedBox(height: 12),
 
@@ -557,61 +558,73 @@ class _ResultScreenState extends State<ResultScreen> {
                       ),
                     ),
 
-                  // ── Score row ─────────────────────────────────────────
-                  _ScoreRow(
-                    result: result,
-                    sub: sub,
-                    displayFormat: _displayFormat,
-                    onToggleFormat: _toggleFormat,
-                    onEditScore: result == null ? null : _editScore,
-                  ),
-                  const SizedBox(height: 6),
-
-                  // ── Provider / detected info ──────────────────────────
-                  if (result != null) ...[
-                    Row(
-                      children: [
-                        Icon(Icons.auto_awesome_rounded, size: 14, color: AiMarkerColors.neutral),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Graded by ${_providerLabel(result.provider)} · ${result.detectedSubject} · ${result.detectedGrade != null ? 'Grade ${result.detectedGrade}' : 'Grade unknown'}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
-                        ),
-                      ],
+                  // ── Score row (non-tests; the hero already leads tests) ──
+                  if (sub?.gradingMode != GradingMode.testQuiz) ...[
+                    _ScoreRow(
+                      result: result,
+                      sub: sub,
+                      displayFormat: _displayFormat,
+                      onToggleFormat: _toggleFormat,
+                      onEditScore: result == null ? null : _editScore,
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 6),
+                    if (result != null) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.auto_awesome_rounded, size: 14, color: AiMarkerColors.neutral),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Graded by ${_providerLabel(result.provider)} · ${result.detectedSubject} · ${result.detectedGrade != null ? 'Grade ${result.detectedGrade}' : 'Grade unknown'}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                   ],
 
-                  // ── Triage badge ──────────────────────────────────────
-                  _TriageBadge(
-                    triageStatus: sub?.triageStatus ?? (result != null ? result.triageStatus : TriageStatus.graded),
-                    confidence: sub?.confidence ?? result?.confidence ?? 85,
-                    triageFlags: sub?.triageFlags ?? result?.flags ?? [],
-                  ),
-                  const SizedBox(height: 12),
+                  // ── Triage badge (tests: only when something's wrong) ──
+                  if (sub?.gradingMode != GradingMode.testQuiz ||
+                      (sub?.triageStatus ?? result?.triageStatus ?? TriageStatus.graded) != TriageStatus.graded) ...[
+                    _TriageBadge(
+                      triageStatus: sub?.triageStatus ?? (result != null ? result.triageStatus : TriageStatus.graded),
+                      confidence: sub?.confidence ?? result?.confidence ?? 85,
+                      triageFlags: sub?.triageFlags ?? result?.flags ?? [],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
 
-                  // ── Tags ──────────────────────────────────────────────
-                  Wrap(spacing: 8, runSpacing: 8, children: [
-                    if (result != null)
-                      _Tag(text: result.detectedSubject, color: cs.primary.withValues(alpha: 0.10), textColor: cs.primary),
-                    if (student != null)
-                      _Tag(text: 'Student: ${student.name}', color: cs.surfaceContainerHighest, textColor: AiMarkerColors.neutral),
-                    if (sub != null && sub.studentId.isEmpty)
-                      ActionChip(
-                        avatar: Icon(Icons.person_add_alt_1_rounded, size: 16, color: cs.primary),
-                        label: const Text('No student linked — tap to link'),
-                        onPressed: () => _linkStudent(sub),
+                  // ── Student (one tidy card, not a pile of chips) ──────
+                  Card(
+                    child: ListTile(
+                      leading: Icon(
+                        student == null ? Icons.person_add_alt_1_rounded : Icons.person_rounded,
+                        color: cs.primary,
                       ),
-                    if (sub?.overrideUsed == true)
-                      _Tag(text: 'One-time override', color: Colors.orange.withValues(alpha: 0.14), textColor: Colors.orange),
-                  ]),
-                  const SizedBox(height: 18),
+                      title: Text(student?.name ?? 'No student linked', style: Theme.of(context).textTheme.titleSmall),
+                      subtitle: Text(
+                        [
+                          if (result != null) result.detectedSubject,
+                          if (sub?.overrideUsed == true) 'override used',
+                          if (student == null) 'tap to link this test to a student',
+                        ].join(' · '),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                      ),
+                      trailing: (sub != null && student == null)
+                          ? FilledButton.tonal(onPressed: () => _linkStudent(sub), child: const Text('Link'))
+                          : null,
+                      onTap: (sub != null && student == null) ? () => _linkStudent(sub) : null,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
 
                   // ── Marks & feedback ──────────────────────────────────
                   // Tests read as a scoreboard: per-question marks + the
-                  // final grade, no essay-style commentary.
-                  Text(sub?.gradingMode == GradingMode.testQuiz ? 'Marks' : 'Feedback', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 10),
+                  // final grade, no headers, no essay-style commentary.
+                  if (sub?.gradingMode != GradingMode.testQuiz) ...[
+                    Text('Feedback', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 10),
+                  ],
 
                   if (result != null) ...[
                     // Per-question scoreboard (tap a row to change the mark).
@@ -791,6 +804,7 @@ class _HeroGrade extends StatelessWidget {
   final bool isTest;
   final List<CriterionResult> ktca;
   final ValueChanged<bool>? onToggleAverage;
+  final VoidCallback? onEditScore;
 
   const _HeroGrade({
     required this.result,
@@ -800,6 +814,7 @@ class _HeroGrade extends StatelessWidget {
     required this.isTest,
     required this.ktca,
     required this.onToggleAverage,
+    required this.onEditScore,
   });
 
   static String _levelFor(double pct) {
@@ -843,7 +858,6 @@ class _HeroGrade extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.lg),
         gradient: const LinearGradient(
@@ -852,7 +866,22 @@ class _HeroGrade extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
       ),
-      child: Column(
+      child: Stack(
+        children: [
+          if (onEditScore != null)
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                onPressed: onEditScore,
+                tooltip: 'Override the total',
+                icon: Icon(Icons.edit_rounded, color: Colors.white.withValues(alpha: 0.85), size: 20),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+            child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(big, style: Theme.of(context).textTheme.displaySmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
           const SizedBox(height: 2),
@@ -875,6 +904,9 @@ class _HeroGrade extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.85)),
             ),
           ],
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -941,9 +973,34 @@ class _AnnotatedImage extends StatelessWidget {
                   ),
                 ),
               )),
+          // Short "what went wrong" note in the right margin beside each
+          // mistake — kept off the student's writing so both stay readable.
+          ...annotations.where((a) => !a.correct && a.feedback.trim().isNotEmpty).map((a) => Positioned(
+                right: 4,
+                top: (a.positionTop * constraints.maxHeight + 12).clamp(0.0, constraints.maxHeight - 40),
+                child: IgnorePointer(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 130),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AiMarkerColors.error.withValues(alpha: 0.6)),
+                    ),
+                    child: Text(
+                      a.feedback,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10, height: 1.2, color: Color(0xFF8B1A1A), fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              )),
+          // Marks live in the right margin at the answer's row — never on
+          // top of the writing.
           ...annotations.map((a) => Positioned(
-                left: a.positionLeft * constraints.maxWidth - 18,
-                top: a.positionTop * constraints.maxHeight - 12,
+                right: 4,
+                top: (a.positionTop * constraints.maxHeight - 12).clamp(0.0, constraints.maxHeight - 24),
                 child: GestureDetector(
                   onTap: onTapAnnotation == null ? null : () => onTapAnnotation!(a),
                   child: _AnnotationMark(annotation: a),
@@ -970,8 +1027,8 @@ class _AnnotationMark extends StatelessWidget {
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 3)],
       ),
       child: Text(
-        annotation.earnedMark,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13),
+        '${annotation.questionLabel.isEmpty ? '' : '${annotation.questionLabel} '}${annotation.earnedMark}${annotation.outOfMark}',
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12),
       ),
     );
   }
@@ -1230,22 +1287,6 @@ class _TriageBadge extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-class _Tag extends StatelessWidget {
-  final String text;
-  final Color color;
-  final Color textColor;
-  const _Tag({required this.text, required this.color, required this.textColor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(999), border: Border.all(color: textColor.withValues(alpha: 0.18))),
-      child: Text(text, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: textColor, fontWeight: FontWeight.w800)),
     );
   }
 }
