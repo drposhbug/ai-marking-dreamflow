@@ -1,6 +1,8 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
+import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
@@ -49,9 +51,48 @@ class _LibraryScreenState extends State<LibraryScreen> {
       return;
     }
 
-    final pages = await Navigator.of(context).push<List<ScannedPage>>(
-      MaterialPageRoute(builder: (_) => const LiveScanScreen()),
+    // Camera scan, or pull the key document from Files / Google Drive —
+    // same choice as the home screen's Scan Answer Key button.
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded),
+              title: const Text('Scan with camera'),
+              onTap: () => Navigator.pop(context, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_to_drive_rounded),
+              title: const Text('Files or Google Drive'),
+              subtitle: const Text('Pick images of the key from Drive or any storage'),
+              onTap: () => Navigator.pop(context, 'files'),
+            ),
+          ],
+        ),
+      ),
     );
+    if (source == null || !mounted) return;
+
+    List<ScannedPage>? pages;
+    if (source == 'files') {
+      final res = await FilePicker.pickFiles(type: FileType.image, allowMultiple: true, withData: true);
+      if (res == null || res.files.isEmpty) return;
+      pages = <ScannedPage>[];
+      for (final f in res.files) {
+        final bytes = f.bytes;
+        if (bytes == null) continue;
+        final processed = await DocumentProcessor.processPage(bytes);
+        pages.add(ScannedPage(bytes: processed, fileName: f.name));
+      }
+    } else {
+      pages = await Navigator.of(context).push<List<ScannedPage>>(
+        MaterialPageRoute(builder: (_) => const LiveScanScreen()),
+      );
+    }
     if (pages == null || pages.isEmpty || !mounted) return;
 
     showDialog(
