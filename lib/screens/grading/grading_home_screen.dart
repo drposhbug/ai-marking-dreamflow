@@ -12,6 +12,7 @@ import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
+import 'package:marking_prokect_v2/services/drive_picker.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
@@ -144,20 +145,31 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     }
   }
 
-  /// Assignment pages straight from Google Drive (or any storage the
-  /// system Files picker offers). Multi-select supported.
+  /// Assignment pages straight from the Google Drive app's own picker;
+  /// falls back to the system file picker when Drive isn't installed.
+  /// Multi-select supported; every page gets the scanner treatment.
   Future<void> _pickFromDrive() async {
     final ok = await _askWhichClass();
     if (!ok || !mounted) return;
     try {
-      final pages = await _pickPagesFromFiles();
+      List<ScannedPage> pages;
+      try {
+        final picked = await DrivePicker.pickImages();
+        pages = <ScannedPage>[];
+        for (final f in picked) {
+          final processed = await DocumentProcessor.processPage(f.bytes);
+          pages.add(ScannedPage(bytes: processed, fileName: f.name));
+        }
+      } on DrivePickerUnavailable {
+        pages = await _pickPagesFromFiles();
+      }
       if (pages.isEmpty || !mounted) return;
       context.read<AppState>().setPages(pages);
       context.push(AppRoutes.gradingContext);
     } catch (e) {
       debugPrint('Pick from Drive failed: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open the file picker.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open Google Drive.')));
     }
   }
 
