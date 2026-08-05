@@ -3,6 +3,7 @@ import 'package:marking_prokect_v2/app/app_bootstrap.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/nav.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
@@ -54,6 +55,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => BillingService()..init()),
         ChangeNotifierProvider(create: (_) => AppState()),
         ChangeNotifierProvider(create: (_) => ClassesService()),
         ChangeNotifierProvider(create: (_) => StudentsService()),

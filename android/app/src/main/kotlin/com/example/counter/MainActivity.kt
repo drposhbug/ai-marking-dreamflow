@@ -2,7 +2,7 @@ package com.mycompany.CounterApp
 
 import android.content.Intent
 import android.provider.OpenableColumns
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -10,7 +10,9 @@ import io.flutter.plugin.common.MethodChannel
 /// OWN picker (not the generic system Files UI) so "From Drive" actually
 /// lands the teacher in their Drive. Falls back with an error code the
 /// Dart side catches when the Drive app isn't installed.
-class MainActivity : FlutterActivity() {
+/// FlutterFragmentActivity (not FlutterActivity) because RevenueCat's
+/// paywall and Customer Center render in fragments.
+class MainActivity : FlutterFragmentActivity() {
     private val channelName = "markless/drive_picker"
     private val requestCode = 4471
     private var pendingResult: MethodChannel.Result? = null

@@ -18,6 +18,13 @@ import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:provider/provider.dart';
 
+/// Sentinel returned by the key sheet when the trash icon on a saved key is
+/// tapped (vs. tapping the row to select it).
+class _DeleteKey {
+  final AnswerKeySummary key;
+  const _DeleteKey(this.key);
+}
+
 class GradingContextScreen extends StatefulWidget {
   const GradingContextScreen({super.key});
 
@@ -171,6 +178,11 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                         if (k.subject != null && k.subject!.isNotEmpty) k.subject!,
                         if (k.totalMarks != null) '${k.totalMarks!.round()} marks',
                       ].join(' · ')),
+                      trailing: IconButton(
+                        tooltip: 'Delete this key',
+                        icon: Icon(Icons.delete_outline_rounded, size: 20, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
+                        onPressed: () => Navigator.pop(ctx, _DeleteKey(k)),
+                      ),
                       onTap: () => Navigator.pop(ctx, k),
                     ),
                 ],
@@ -192,12 +204,55 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       await _scanAnswerKey(auth.id);
     } else if (choice == 'drive') {
       await _importKeyFromDrive(auth.id);
+    } else if (choice is _DeleteKey) {
+      await _deleteAnswerKey(auth.id, choice.key);
     } else if (choice is AnswerKeySummary) {
       setState(() {
         _answerKeyId = choice.id;
         _answerKeyName = choice.name;
       });
       context.read<AppState>().setAnswerKey(id: choice.id, name: choice.name);
+    }
+  }
+
+  /// Clears the selected key from this draft — marking goes judgment-based.
+  void _clearAnswerKey() {
+    setState(() {
+      _answerKeyId = null;
+      _answerKeyName = null;
+    });
+    context.read<AppState>().setAnswerKey();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Answer key removed for this marking — it stays in your saved keys.')),
+    );
+  }
+
+  Future<void> _deleteAnswerKey(String teacherId, AnswerKeySummary key) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete "${key.name}"?'),
+        content: const Text(
+            'The key is deleted for good — Mark won\'t remember it.\n\nMarking this test again without its key costs noticeably more credits (the answers have to be worked out from scratch) and is less consistent. Keep keys until the whole class set is marked.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep it')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AiMarkerColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete key'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await AiGradingService().deleteAnswerKey(teacherId: teacherId, id: key.id);
+      if (_answerKeyId == key.id) _clearAnswerKey();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Deleted "${key.name}".')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not delete the key: $e')));
     }
   }
 
@@ -665,8 +720,15 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                           ),
                           child: const Text('Add key'),
                         )
-                      else
+                      else ...[
+                        IconButton(
+                          tooltip: 'Remove the key for this marking',
+                          onPressed: _grading ? null : _clearAnswerKey,
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(Icons.close_rounded, size: 20, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                        ),
                         Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
+                      ],
                     ],
                   ),
                 ),
