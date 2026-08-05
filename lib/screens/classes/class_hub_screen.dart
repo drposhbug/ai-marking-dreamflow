@@ -136,6 +136,38 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              // The marked work itself — teachers look for it HERE, in the
+              // class, not just on the dashboard.
+              if (classSubmissions.isNotEmpty) ...[
+                Text('Assignments', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                Card(
+                  child: Column(
+                    children: [
+                      for (final s in classSubmissions.take(10))
+                        ListTile(
+                          dense: true,
+                          leading: Icon(Icons.description_rounded, color: cs.primary, size: 20),
+                          title: Text(
+                            s.studentId.isEmpty
+                                ? '${s.subject} · unlinked'
+                                : '${s.subject} · ${studentsService.getById(s.studentId)?.name ?? 'Student'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          subtitle: Text(timeAgo(s.createdAt), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                          trailing: Text(
+                            s.maxScore > 0 ? '${(s.score / s.maxScore * 100).round()}%' : '—',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w900),
+                          ),
+                          onTap: () => context.push('${AppRoutes.result}?submissionId=${s.id}'),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               TextField(controller: _search, onChanged: (_) => setState(() {}), decoration: InputDecoration(hintText: 'Search students...', prefixIcon: Icon(Icons.search_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.85)))),
               const SizedBox(height: 14),
               Text('Students', style: Theme.of(context).textTheme.titleMedium),
