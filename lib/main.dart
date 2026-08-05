@@ -4,6 +4,7 @@ import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/nav.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
+import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
@@ -28,6 +29,9 @@ void main() async {
   if (supabaseAnonKey.isNotEmpty) {
     try {
       await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+      // Google Drive tokens outlive the Supabase session field they arrive
+      // in — restore the persisted copy so Drive export works after restart.
+      await DriveService.restore();
     } catch (e) {
       // Keep the app usable in local-only mode if Supabase init fails.
       debugPrint('Supabase.initialize failed: $e');

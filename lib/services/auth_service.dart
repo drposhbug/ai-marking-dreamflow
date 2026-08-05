@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:marking_prokect_v2/models/ai_marker_user.dart';
+import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -197,6 +198,9 @@ class AuthService extends ChangeNotifier {
       );
       final u = client.auth.currentUser;
       if (u == null) throw Exception('Sign in failed — try again.');
+      // Google sign-ins carry a Drive token that vanishes from the session
+      // on refresh — persist it now while it's here.
+      await DriveService.persistSessionToken();
       await _setUser(id: u.id, email: u.email ?? '');
     } on AuthException catch (e) {
       throw Exception(_friendlyAuthError(e));
@@ -244,6 +248,7 @@ class AuthService extends ChangeNotifier {
   Future<bool> adoptSupabaseSession() async {
     final u = _supabase?.auth.currentUser;
     if (u == null) return false;
+    await DriveService.persistSessionToken();
     if (_currentUser?.id != u.id) {
       await _setUser(id: u.id, email: u.email ?? '');
     }
@@ -279,6 +284,7 @@ class AuthService extends ChangeNotifier {
         const Duration(minutes: 3),
         onTimeout: () => throw Exception('Google linking wasn\'t completed — try again.'),
       );
+      await DriveService.persistSessionToken();
     } on AuthException catch (e) {
       final m = e.message.toLowerCase();
       if (m.contains('manual linking') || m.contains('identity linking')) {

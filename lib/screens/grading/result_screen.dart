@@ -117,9 +117,28 @@ class _ResultScreenState extends State<ResultScreen> {
       ));
     } on DriveAuthException {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Google Drive isn\'t connected — sign out, then sign in with Google to link Drive.'),
-      ));
+      // The Google token expires ~hourly — offer a one-tap reconnect and
+      // retry instead of a dead-end "not connected" message.
+      final reconnect = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Reconnect Google Drive'),
+          content: const Text('Your Google Drive connection has expired. Reconnect to save this result to Drive?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reconnect')),
+          ],
+        ),
+      );
+      if (reconnect != true || !mounted) return;
+      try {
+        await context.read<AuthService>().connectGoogleDrive();
+        if (!mounted) return;
+        return _saveToDrive(result, studentName);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not reconnect Google Drive: $e')));
+      }
     } catch (e) {
       debugPrint('Drive export failed: $e');
       if (!mounted) return;
