@@ -152,17 +152,43 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     final ok = await _askWhichClass();
     if (!ok || !mounted) return;
     try {
-      List<ScannedPage> pages;
+      DriveImport import;
+      // Drive downloads can take a few seconds — show progress instead of
+      // leaving the teacher staring at a screen that "does nothing".
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 18),
+              Expanded(child: Text('Loading from Google Drive…')),
+            ],
+          ),
+        ),
+      );
       try {
-        final picked = await DrivePicker.pickImages();
-        pages = <ScannedPage>[];
-        for (final f in picked) {
-          final processed = await DocumentProcessor.processPage(f.bytes);
-          pages.add(ScannedPage(bytes: processed, fileName: f.name));
-        }
-      } on DrivePickerUnavailable {
-        pages = await _pickPagesFromFiles();
+        import = await DrivePicker.importScannedPages();
+      } finally {
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
       }
+      if (!mounted || import.cancelled) return;
+      if (import.pages.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('That file isn\'t an image — pick a photo (JPG/PNG) of the test page. PDFs aren\'t supported yet.'),
+        ));
+        return;
+      }
+      if (import.unusable > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Skipped ${import.unusable} file${import.unusable == 1 ? '' : 's'} that weren\'t readable images.'),
+        ));
+      }
+      context.read<AppState>().setPages(import.pages);
+      context.push(AppRoutes.gradingContext);
+    } on DrivePickerUnavailable {
+      final pages = await _pickPagesFromFiles();
       if (pages.isEmpty || !mounted) return;
       context.read<AppState>().setPages(pages);
       context.push(AppRoutes.gradingContext);

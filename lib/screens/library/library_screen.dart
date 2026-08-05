@@ -83,11 +83,33 @@ class _LibraryScreenState extends State<LibraryScreen> {
       pages = <ScannedPage>[];
       try {
         // Drive app's own picker first; system picker as the fallback.
-        final picked = await DrivePicker.pickImages();
-        for (final f in picked) {
-          final processed = await DocumentProcessor.processPage(f.bytes);
-          pages.add(ScannedPage(bytes: processed, fileName: f.name));
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 18),
+                Expanded(child: Text('Loading from Google Drive…')),
+              ],
+            ),
+          ),
+        );
+        DriveImport import;
+        try {
+          import = await DrivePicker.importScannedPages();
+        } finally {
+          if (mounted) Navigator.of(context, rootNavigator: true).pop();
         }
+        if (!mounted || import.cancelled) return;
+        if (import.pages.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('That file isn\'t an image — pick a photo (JPG/PNG) of the key. PDFs aren\'t supported yet.'),
+          ));
+          return;
+        }
+        pages.addAll(import.pages);
       } on DrivePickerUnavailable {
         final res = await FilePicker.pickFiles(type: FileType.image, allowMultiple: true, withData: true);
         if (res == null || res.files.isEmpty) return;
