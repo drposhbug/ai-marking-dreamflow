@@ -864,6 +864,27 @@ async function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
   }
 }
 
+// Referral loop: every colleague who joined with this teacher's code AND is
+// currently on a PAID plan adds bonus marks to the monthly cap — the reward
+// is the thing teachers run out of, and it can't be farmed with free
+// accounts because unpaid referrals add nothing.
+const REFERRAL_BONUS_MARKS = 25;
+const PAID_PLANS = ["starter", "pro", "school"];
+
+async function paidReferralCount(teacherId: string): Promise<number> {
+  try {
+    const { count, error } = await serviceDb()
+      .from("profiles")
+      .select("teacher_id", { count: "exact", head: true })
+      .eq("referred_by", teacherId)
+      .in("plan", PAID_PLANS);
+    if (error) throw error;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function logUsage(
   teacherId: string,
   action: string,
@@ -925,16 +946,18 @@ async function budgetGate(teacherId: string, pacing: boolean): Promise<Response 
     const plan = await planFor(teacherId);
     const caps = PLAN_CAPS[plan];
     const p = periodStarts();
-    const [day, week, month, monthUsd] = await Promise.all([
+    const [day, week, month, monthUsd, paidRefs] = await Promise.all([
       countSince(teacherId, "grade", p.day),
       countSince(teacherId, "grade", p.week),
       countSince(teacherId, "grade", p.month),
       spendSince(teacherId, p.month),
+      paidReferralCount(teacherId),
     ]);
+    const monthlyCap = caps.monthly + paidRefs * REFERRAL_BONUS_MARKS;
     const block = (scope: string, message: string): Response =>
       json({ error: "usage_limit", scope, plan, message }, 429);
-    if (month >= caps.monthly || monthUsd >= caps.monthly * 0.05) {
-      return block("monthly", `You've used all ${caps.monthly} marks in your ${caps.label} plan this month. It resets on the 1st — or upgrade for more.`);
+    if (month >= monthlyCap || monthUsd >= monthlyCap * 0.05) {
+      return block("monthly", `You've used all ${monthlyCap} marks in your ${caps.label} plan this month. It resets on the 1st — upgrade for more, or invite colleagues (+${REFERRAL_BONUS_MARKS} marks/month for each one who subscribes).`);
     }
     if (pacing && week >= caps.weekly) {
       return block("weekly", `You've hit this week's pace (${caps.weekly} marks). It frees up as the week rolls on — or upgrade for more headroom.`);
@@ -1184,23 +1207,27 @@ Deno.serve(async (req) => {
       const plan = await planFor(teacherId);
       const caps = PLAN_CAPS[plan];
       const p = periodStarts();
-      const [day, week, month] = await Promise.all([
+      const [day, week, month, paidRefs] = await Promise.all([
         countSince(teacherId, "grade", p.day),
         countSince(teacherId, "grade", p.week),
         countSince(teacherId, "grade", p.month),
+        paidReferralCount(teacherId),
       ]);
+      const monthlyCap = caps.monthly + paidRefs * REFERRAL_BONUS_MARKS;
       return json({
         plan,
         planLabel: caps.label,
         marksMonth: month,
-        capMonthly: caps.monthly,
+        capMonthly: monthlyCap,
+        bonusMarks: paidRefs * REFERRAL_BONUS_MARKS,
+        paidReferrals: paidRefs,
         marksDay: day,
         capDaily: caps.daily,
         marksWeek: week,
         capWeekly: caps.weekly,
         dayPct: Math.min(100, Math.round((day / caps.daily) * 100)),
         weekPct: Math.min(100, Math.round((week / caps.weekly) * 100)),
-        monthPct: Math.min(100, Math.round((month / caps.monthly) * 100)),
+        monthPct: Math.min(100, Math.round((month / monthlyCap) * 100)),
       });
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, 500);
