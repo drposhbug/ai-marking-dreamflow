@@ -100,12 +100,17 @@ Future<bool> pdfExceedsPageCap(String name, String mime, Uint8List bytes) async 
 /// the UI can explain itself instead of silently doing nothing.
 class DriveImport {
   final List<ScannedPage> pages;
+
+  /// Pages grouped by source file — a batch of PDFs (one per student) can
+  /// be marked as separate submissions instead of one merged pile.
+  final List<List<ScannedPage>> fileGroups;
   final int pickedCount;
   final int unreadable;
   final bool pdfTruncated;
 
   const DriveImport({
     required this.pages,
+    required this.fileGroups,
     required this.pickedCount,
     required this.unreadable,
     required this.pdfTruncated,
@@ -136,6 +141,7 @@ class DrivePicker {
     final files = (raw['files'] as List? ?? const []).whereType<Map>().toList();
 
     final pages = <ScannedPage>[];
+    final groups = <List<ScannedPage>>[];
     var unreadable = picked - files.length; // entries the native side couldn't stream
     var truncated = false;
     for (final f in files) {
@@ -153,9 +159,11 @@ class DrivePicker {
       }
       if (await pdfExceedsPageCap(name, mime, bytes)) truncated = true;
       pages.addAll(got);
+      groups.add(got);
     }
     return DriveImport(
       pages: pages,
+      fileGroups: groups,
       pickedCount: picked,
       unreadable: unreadable.clamp(0, picked),
       pdfTruncated: truncated,
