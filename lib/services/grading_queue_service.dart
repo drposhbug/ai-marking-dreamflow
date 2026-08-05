@@ -78,18 +78,32 @@ class GradingQueueService extends ChangeNotifier {
       final res = await ai.grade(req);
 
       // Auto-link by the name read off the paper when no student was chosen.
+      // Class students are tried first, full name then first name — a lone
+      // "Oscar" on the page still links when the class has exactly one Oscar.
       var studentId = req.studentId;
       var classId = req.classId;
       final paperName = res.studentNameOnPaper?.trim() ?? '';
       if (studentId.isEmpty && paperName.isNotEmpty) {
-        final matches = students.students
-            .where((s) => s.name.trim().toLowerCase() == paperName.toLowerCase())
-            .toList();
-        if (matches.length == 1) {
-          studentId = matches.first.id;
-          if (classId.isEmpty && matches.first.classId.trim().isNotEmpty) {
-            classId = matches.first.classId;
+        String norm(String s) => s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+        final target = norm(paperName);
+        final targetFirst = target.split(' ').first;
+        final inClass = classId.isEmpty
+            ? students.students
+            : students.students.where((s) => s.classId == classId).toList();
+        final pools = [if (!identical(inClass, students.students)) inClass, students.students];
+        for (final pool in pools) {
+          var matches = pool.where((s) => norm(s.name) == target).toList();
+          if (matches.isEmpty) {
+            matches = pool.where((s) => norm(s.name).split(' ').first == targetFirst).toList();
           }
+          if (matches.length == 1) {
+            studentId = matches.first.id;
+            if (classId.isEmpty && matches.first.classId.trim().isNotEmpty) {
+              classId = matches.first.classId;
+            }
+            break;
+          }
+          if (matches.length > 1) break; // ambiguous — leave for the teacher
         }
       }
       if (paperName.isNotEmpty && (job.label.startsWith('Scan') || job.label.isEmpty)) {
@@ -124,8 +138,11 @@ class GradingQueueService extends ChangeNotifier {
       job.result = res;
       job.submissionId = submission.id;
       notifyListeners();
+      final unmatchedName = studentId.isEmpty && paperName.isNotEmpty;
       messengerKey?.currentState?.showSnackBar(
-        SnackBar(content: Text('${job.label} is marked (${res.primaryDisplay}) — open it from the Marking tray.')),
+        SnackBar(content: Text(unmatchedName
+            ? '${job.label} is marked (${res.primaryDisplay}) — no student called "$paperName" yet; open it to create or link them.'
+            : '${job.label} is marked (${res.primaryDisplay}) — open it from the Marking tray.')),
       );
       _maybeAutoSaveToDrive(job, res); // deliberately not awaited
     } catch (e) {

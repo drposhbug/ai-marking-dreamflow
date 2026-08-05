@@ -365,9 +365,15 @@ class _SubmissionRow extends StatelessWidget {
       onTap: () => context.push('${AppRoutes.result}?submissionId=${submission.id}'),
       onLongPress: () => _confirmDelete(context, student?.name),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.only(left: 4, right: 14, top: 12, bottom: 12),
         child: Row(
           children: [
+            IconButton(
+              onPressed: () => _confirmDelete(context, student?.name),
+              tooltip: 'Delete this result',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.delete_outline_rounded, size: 20, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
+            ),
             CircleAvatar(
               radius: 18,
               backgroundColor: scoreColor.withValues(alpha: 0.12),

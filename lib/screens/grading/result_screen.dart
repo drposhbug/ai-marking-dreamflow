@@ -214,8 +214,11 @@ class _ResultScreenState extends State<ResultScreen> {
     }
   }
 
-  /// No student matched at marking time — let the teacher link one now.
+  /// No student matched at marking time — let the teacher link one now, or
+  /// create a student straight from the name read off the paper.
   Future<void> _linkStudent(Submission sub) async {
+    const kCreate = '::create::';
+    final paperName = _result?.studentNameOnPaper?.trim() ?? '';
     final students = context.read<StudentsService>().students;
     final inClass = sub.classId.isEmpty ? students : students.where((s) => s.classId == sub.classId).toList();
     final pool = inClass.isEmpty ? students : inClass;
@@ -224,7 +227,7 @@ class _ResultScreenState extends State<ResultScreen> {
       backgroundColor: Theme.of(context).colorScheme.surface,
       showDragHandle: true,
       builder: (ctx) => SafeArea(
-        child: pool.isEmpty
+        child: (pool.isEmpty && paperName.isEmpty)
             ? const Padding(
                 padding: EdgeInsets.all(24),
                 child: Text('No students yet — add them in Classes (or scan an attendance sheet) and link this result afterwards.'),
@@ -236,6 +239,13 @@ class _ResultScreenState extends State<ResultScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                     child: Text('Whose test is this?', style: Theme.of(ctx).textTheme.titleMedium),
                   ),
+                  if (paperName.isNotEmpty)
+                    ListTile(
+                      leading: const CircleAvatar(radius: 16, child: Icon(Icons.person_add_alt_1_rounded, size: 18)),
+                      title: Text('Create "$paperName"'),
+                      subtitle: const Text('New student, from the name on the paper'),
+                      onTap: () => Navigator.pop(ctx, kCreate),
+                    ),
                   for (final s in pool)
                     ListTile(
                       leading: CircleAvatar(
@@ -250,15 +260,26 @@ class _ResultScreenState extends State<ResultScreen> {
       ),
     );
     if (picked == null || !mounted) return;
-    final student = context.read<StudentsService>().getById(picked);
+
+    final student = picked == kCreate
+        ? await context.read<StudentsService>().create(
+            teacherId: sub.teacherId,
+            classId: sub.classId,
+            name: paperName,
+            studentId: '',
+          )
+        : context.read<StudentsService>().getById(picked);
+    if (student == null || !mounted) return;
     await context.read<SubmissionsService>().update(sub.copyWith(
-          studentId: picked,
-          classId: sub.classId.isEmpty ? (student?.classId ?? '') : sub.classId,
+          studentId: student.id,
+          classId: sub.classId.isEmpty ? student.classId : sub.classId,
           updatedAt: DateTime.now(),
         ));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Linked to ${student?.name ?? 'student'} — it now shows on their profile.')),
+      SnackBar(content: Text(picked == kCreate
+          ? 'Created ${student.name} and linked this result to them.'
+          : 'Linked to ${student.name} — it now shows on their profile.')),
     );
   }
 
@@ -595,12 +616,18 @@ class _ResultScreenState extends State<ResultScreen> {
                         student == null ? Icons.person_add_alt_1_rounded : Icons.person_rounded,
                         color: cs.primary,
                       ),
-                      title: Text(student?.name ?? 'No student linked', style: Theme.of(context).textTheme.titleSmall),
+                      title: Text(
+                        student?.name ??
+                            ((result?.studentNameOnPaper?.trim().isNotEmpty ?? false)
+                                ? 'Name on paper: ${result!.studentNameOnPaper!.trim()}'
+                                : 'No student linked'),
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
                       subtitle: Text(
                         [
                           if (result != null) result.detectedSubject,
                           if (sub?.overrideUsed == true) 'override used',
-                          if (student == null) 'tap to link this test to a student',
+                          if (student == null) 'tap to create or link a student',
                         ].join(' · '),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
                       ),
@@ -791,12 +818,19 @@ class _HeroGrade extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    // A result where every question is teacher-only ("?" marks — a listening
+    // test with no key, a page of drawings) has no AI score to show.
+    final anns = result?.annotations ?? const [];
+    final allTeacherOnly = anns.isNotEmpty && anns.every((a) => a.earnedMark.trim() == '?');
+
     // Marks lead ("30 / 40"), percent rides along; level-scale work leads
     // with the level instead.
-    final big = displayFormat == 'levels' ? _levelFor(pct) : '${_num(raw)} / ${_num(max)}';
-    final sub2 = displayFormat == 'levels'
-        ? '${_num(raw)} / ${_num(max)} · ${pct.round()}%'
-        : '${pct.round()}%';
+    final big = allTeacherOnly
+        ? '—'
+        : (displayFormat == 'levels' ? _levelFor(pct) : '${_num(raw)} / ${_num(max)}');
+    final sub2 = allTeacherOnly
+        ? 'Requires teacher marking — tap each question to enter your marks'
+        : (displayFormat == 'levels' ? '${_num(raw)} / ${_num(max)} · ${pct.round()}%' : '${pct.round()}%');
 
     return Container(
       width: double.infinity,
