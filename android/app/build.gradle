@@ -51,6 +51,9 @@ android {
         release {
             // Use release signing if key.properties exists, otherwise fall back to debug
             signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+            // ML Kit references optional script models we don't bundle —
+            // proguard-rules.pro tells R8 to ignore them.
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }

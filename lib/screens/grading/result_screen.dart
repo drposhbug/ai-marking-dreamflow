@@ -1164,10 +1164,20 @@ class _HeroChip extends StatelessWidget {
 
 // ── Annotated image with drawn marks ────────────────────────────────────────
 
+/// Results marked before the server-side fix can carry a literal "→"
+/// where the arrow should be — decode it here so old marks read properly.
+String cleanLabel(String s) => s
+    .replaceAllMapped(RegExp(r'\\u([0-9a-fA-F]{4})'), (m) => String.fromCharCode(int.parse(m.group(1)!, radix: 16)))
+    .replaceAll(RegExp(r'\s*(?:->|=>)\s*'), ' → ')
+    .replaceAll(RegExp(r'\s*→\s*'), ' → ')
+    .trim();
+
 // Margin bubbles are labels, not sentences — results marked under older rules
 // carry verbose notes, so cap what lands on the page at a few words.
 String _bubbleLabel(String s) {
-  final words = s.replaceAll(RegExp(r'[.,;!?]+$'), '').split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+  final clean = cleanLabel(s);
+  if (clean.contains('→')) return clean; // "dont → don't" is one label
+  final words = clean.replaceAll(RegExp(r'[.,;!?]+$'), '').split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
   return words.take(4).join(' ');
 }
 
