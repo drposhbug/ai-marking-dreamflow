@@ -189,6 +189,17 @@ const ANNOTATION_SHORT: Record<number, string> = {
   20: "partly correct",
 };
 
+// Models sometimes emit the ESCAPE ("→") instead of the character, which
+// a teacher then reads literally on the page. Decode any that slip through
+// and normalize every arrow spelling to a real arrow.
+function fixEscapes(s: string): string {
+  return s
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\s*(?:->|=>)\s*/g, " → ")
+    .replace(/\s*→\s*/g, " → ")
+    .trim();
+}
+
 // Hard cap for free-text annotation labels — the prompt demands 2-4 words,
 // this makes sure a disobedient model can never put a sentence on the page.
 function capWords(s: string, n: number): string {
@@ -196,11 +207,13 @@ function capWords(s: string, n: number): string {
   return words.length <= n ? words.join(" ") : words.slice(0, n).join(" ");
 }
 
-function tinyLabel(value: string, stats?: CodeUse[]): string {
+function tinyLabel(rawValue: string, stats?: CodeUse[]): string {
+  const value = fixEscapes(rawValue);
   const m = /^#(\d+)(?:[\s:—-]+(.+))?$/.exec(value.trim());
   if (!m) {
     if (value.trim().length > 0) stats?.push({ bank: "annotation", code: "free_text", kind: "free_text" });
-    return capWords(value.trim(), 4);
+    // "dont → don't" is 3 tokens but one label — keep both sides intact.
+    return value.includes("→") ? value.trim() : capWords(value.trim(), 4);
   }
   const short = ANNOTATION_SHORT[Number(m[1])];
   const detail = m[2]?.trim();
@@ -637,7 +650,7 @@ Do all of the following:
      * drawings — free-body diagrams, ray diagrams, graphs the student drew, sketches, geometric constructions → feedback "check drawing". Simple diagram READING (taking numbers off a printed graph) is normal marking, not this rule.
      * answers that can only be checked against material NOT in the images and there is NO OFFICIAL ANSWER KEY — listening/écoute or dictation tests (answers depend on audio you cannot hear), questions about a reading passage or source not photographed, oral components → feedback "needs answer key". With an answer key present these mark normally against the key.
      * If EVERY question is teacher-only (e.g. a listening test with no key), still return all annotations with "?" and say why in a one-sentence summary ("Listening test with no answer key — answers can't be checked without the audio.").
-   - ESSAY ERROR MARKS: essays, stories, and long written responses have no numbered questions — instead create one annotation per error INSTANCE found in the writing: questionLabel = the section it belongs to ("Grammar", "Spelling", "Flow", "Content"), earnedMark = "" and outOfMark = "" (error marks NEVER carry their own deduction — the marks come off ONCE in that section's criteriaBreakdown score, rule 4), correct = false, feedback = the student's EXACT words as written, then an arrow, then the fix — "dont → don't", "familys → families", "cost to much → costs too much", "that has → that have". ALWAYS lead with the student's own words (copied character for character, 1-4 words) so the app can find them on the page; for errors that aren't a word swap, still lead with the words at the spot: "Kids can still → start a new paragraph". Position ON the error word. CATALOGUE EVERYTHING: every missing apostrophe (contractions AND possessives), every homophone (close/clothes, to/too, there/their), every subject-verb agreement slip, every misspelling, every missing word — a sample is NOT marking. When the SAME error repeats ("familys" four times, an identical phrase reused), still mark every occurrence on the page but treat it as ONE recurring pattern when deducting.
+   - ESSAY ERROR MARKS: essays, stories, and long written responses have no numbered questions — instead create one annotation per error INSTANCE found in the writing: questionLabel = the section it belongs to ("Grammar", "Spelling", "Flow", "Content"), earnedMark = "" and outOfMark = "" (error marks NEVER carry their own deduction — the marks come off ONCE in that section's criteriaBreakdown score, rule 4), correct = false, feedback = the student's EXACT words as written, then a PLAIN ASCII ARROW "->" (never a unicode arrow or an escape sequence), then the fix — "dont -> don't", "familys -> families", "cost to much -> costs too much", "that has -> that have". ALWAYS lead with the student's own words (copied character for character, 1-4 words) so the app can find them on the page; for errors that aren't a word swap, still lead with the words at the spot: "Kids can still -> start a new paragraph". Position ON the error word. CATALOGUE EVERYTHING: every missing apostrophe (contractions AND possessives), every homophone (close/clothes, to/too, there/their), every subject-verb agreement slip, every misspelling, every missing word — a sample is NOT marking. When the SAME error repeats ("familys" four times, an identical phrase reused), still mark every occurrence on the page but treat it as ONE recurring pattern when deducting.
    - TEXT POSITIONING (LINE METHOD): positions are fractions of the WHOLE PAGE IMAGE, margins and headers included. For errors in written text: find the vertical band the body text occupies (typically starting ~0.15-0.25 down the page, under the title/header, and ending near the last written line); positionTop = that band's start + (the error's line number − 0.5) ÷ (number of body lines) × the band's height. positionLeft = the text block's left edge (typically ~0.12) + how far along the line the word sits × the block's width (typically ~0.76 wide). A position in a page margin, in the header, or below the last line of writing is ALWAYS wrong — every error sits on a line of the student's text.
    - pageIndex: which page the answer is on, 0-based (Page 1 = 0, Page 2 = 1, ...)
    - positionTop and positionLeft: land ON the specific wrong number, expression, or step itself — never the question header, never a subtotal, never the general question area. When the answer is fully correct, point at the final answer. Fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
@@ -799,7 +812,7 @@ function normalize(obj: any, provider: string, maxScoreDefault: number, formatOv
       outOfMark: String(a?.outOfMark ?? ""),
       correct: a?.correct === true,
       feedback: tinyLabel(String(a?.feedback ?? ""), stats),
-      methodNote: capWords(String(a?.methodNote ?? "").trim(), 4),
+      methodNote: capWords(fixEscapes(String(a?.methodNote ?? "")), 4),
       pageIndex: Math.round(clamp(a?.pageIndex, 0, 999, 0)),
       positionTop: clamp(a?.positionTop, 0, 1, 0.1),
       positionLeft: clamp(a?.positionLeft, 0, 1, 0.1),
