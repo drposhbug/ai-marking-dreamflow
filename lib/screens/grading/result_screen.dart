@@ -15,6 +15,7 @@ import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
+import 'package:marking_prokect_v2/services/word_locator.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -1209,6 +1210,10 @@ class _AnnotatedImageState extends State<_AnnotatedImage> {
   // mark outward from the centre and off the paper entirely.
   ui.Image? _decoded;
 
+  /// Real word rectangles read off this page — highlights snap to these
+  /// instead of trusting the AI's estimated coordinates.
+  List<RecognizedWord> _words = const [];
+
   @override
   void initState() {
     super.initState();
@@ -1228,6 +1233,27 @@ class _AnnotatedImageState extends State<_AnnotatedImage> {
     } catch (e) {
       debugPrint('Annotated page decode failed: $e');
     }
+    final words = await WordLocator.recognize(widget.imageBytes);
+    if (mounted && words.isNotEmpty) setState(() => _words = words);
+  }
+
+  /// Where this error actually sits: the matched word's rectangle as page
+  /// fractions, or null when the page can't be read / the label has no
+  /// anchor word (then the AI's estimate is used).
+  Rect? _anchorFor(QuestionAnnotation a, ui.Image? img) {
+    if (_words.isEmpty || img == null) return null;
+    final target = WordLocator.targetOf(a.feedback);
+    if (target == null) return null;
+    final size = Size(img.width.toDouble(), img.height.toDouble());
+    final r = WordLocator.locate(
+      words: _words,
+      target: target,
+      hintX: a.positionLeft,
+      hintY: a.positionTop,
+      imageSize: size,
+    );
+    if (r == null) return null;
+    return Rect.fromLTRB(r.left / size.width, r.top / size.height, r.right / size.width, r.bottom / size.height);
   }
 
   @override
@@ -1292,12 +1318,24 @@ class _AnnotatedImageState extends State<_AnnotatedImage> {
           // content). Reads like a teacher's pen instead of a box grid.
           ...errorMarks.map((a) {
             final c = _sectionColor(a.questionLabel);
-            // Stroke width tracks the page width so it stays word-sized.
-            final w = (pageW * 0.13).clamp(34.0, 90.0);
-            final h = (pageH * 0.016).clamp(11.0, 20.0);
+            final anchor = _anchorFor(a, img);
+            // Anchored: the exact word rectangle read off the page.
+            // Unanchored: fall back to the AI's estimate, word-sized.
+            final double w, h, left, top;
+            if (anchor != null) {
+              w = (anchor.width * pageW) + 4;
+              h = (anchor.height * pageH) + 2;
+              left = px(anchor.left) - 2;
+              top = py(anchor.top) - 1;
+            } else {
+              w = (pageW * 0.13).clamp(34.0, 90.0);
+              h = (pageH * 0.016).clamp(11.0, 20.0);
+              left = (px(a.positionLeft) - w / 2).clamp(pageX, pageX + pageW - w);
+              top = (py(a.positionTop) - h / 2).clamp(pageY, pageY + pageH - h - 2);
+            }
             return Positioned(
-              left: (px(a.positionLeft) - w / 2).clamp(pageX, pageX + pageW - w),
-              top: (py(a.positionTop) - h / 2).clamp(pageY, pageY + pageH - h - 2),
+              left: left,
+              top: top,
               child: IgnorePointer(
                 child: Container(
                   width: w,
