@@ -32,8 +32,12 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                 }
                 val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    // No EXTRA_MIME_TYPES: Drive greys out its Select button
+                    // for files whose stored mime doesn't match the filter —
+                    // including plain JPGs it reports generically. The Dart
+                    // side identifies real images/PDFs from their bytes and
+                    // explains anything it genuinely can't read.
                     type = "*/*"
-                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "application/pdf"))
                     addCategory(Intent.CATEGORY_OPENABLE)
                     putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                     // Target the Drive app directly instead of the system picker.
