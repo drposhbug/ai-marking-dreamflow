@@ -715,6 +715,33 @@ class AiGradingService {
     });
   }
 
+  /// Extra-credit pass: detailed explanations of every error in an
+  /// already-marked result. Costs roughly another mark's credits.
+  Future<String> explainResult({
+    required String teacherId,
+    required List<Uint8List> pages,
+    required Map<String, dynamic> resultJson,
+  }) async {
+    final client = Supabase.instance.client;
+    try {
+      final res = await client.functions.invoke('MARKING-PROCESS', body: {
+        'action': 'explain',
+        'teacherId': teacherId,
+        'imagesBase64': pages.map(base64Encode).toList(growable: false),
+        'mediaType': 'image/jpeg',
+        'result': resultJson,
+      });
+      final data = res.data;
+      if (data is Map && data['explanation'] is String && (data['explanation'] as String).isNotEmpty) {
+        return data['explanation'] as String;
+      }
+      throw Exception('No explanation returned');
+    } catch (e) {
+      _maybeThrowUsageLimit(e);
+      rethrow;
+    }
+  }
+
   /// Permanently removes a saved answer key.
   Future<void> deleteAnswerKey({required String teacherId, required String id}) async {
     final client = Supabase.instance.client;

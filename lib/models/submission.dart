@@ -31,11 +31,16 @@ class Submission {
   /// are too heavy for the cloud copy).
   final List<String> pageImagePaths;
 
-  const Submission({required this.id, required this.teacherId, required this.studentId, required this.classId, required this.presetId, required this.subject, required this.gradingMode, required this.score, required this.maxScore, required this.feedback, required this.triageStatus, required this.overrideUsed, required this.triageFlags, required this.confidence, required this.createdAt, required this.updatedAt, this.imageUrl, this.resultJson, this.pageImagePaths = const []});
+  /// Teacher-requested detailed explanations of the errors (extra-credit AI
+  /// pass) — kept with the submission so they never need paying for twice.
+  final String? explanation;
 
-  Submission copyWith({String? id, String? teacherId, String? studentId, String? classId, String? presetId, String? subject, GradingMode? gradingMode, double? score, double? maxScore, String? feedback, TriageStatus? triageStatus, bool? overrideUsed, String? imageUrl, List<String>? triageFlags, int? confidence, DateTime? createdAt, DateTime? updatedAt, Map<String, dynamic>? resultJson, List<String>? pageImagePaths}) => Submission(
+  const Submission({required this.id, required this.teacherId, required this.studentId, required this.classId, required this.presetId, required this.subject, required this.gradingMode, required this.score, required this.maxScore, required this.feedback, required this.triageStatus, required this.overrideUsed, required this.triageFlags, required this.confidence, required this.createdAt, required this.updatedAt, this.imageUrl, this.resultJson, this.pageImagePaths = const [], this.explanation});
+
+  Submission copyWith({String? id, String? teacherId, String? studentId, String? classId, String? presetId, String? subject, GradingMode? gradingMode, double? score, double? maxScore, String? feedback, TriageStatus? triageStatus, bool? overrideUsed, String? imageUrl, List<String>? triageFlags, int? confidence, DateTime? createdAt, DateTime? updatedAt, Map<String, dynamic>? resultJson, List<String>? pageImagePaths, String? explanation}) => Submission(
     resultJson: resultJson ?? this.resultJson,
     pageImagePaths: pageImagePaths ?? this.pageImagePaths,
+    explanation: explanation ?? this.explanation,
     id: id ?? this.id,
     teacherId: teacherId ?? this.teacherId,
     studentId: studentId ?? this.studentId,
@@ -75,6 +80,7 @@ class Submission {
     'updated_at': updatedAt.toIso8601String(),
     if (resultJson != null) 'result': resultJson,
     if (pageImagePaths.isNotEmpty) 'page_image_paths': pageImagePaths,
+    if (explanation != null && explanation!.isNotEmpty) 'explanation': explanation,
   };
 
   factory Submission.fromJson(Map<String, dynamic> json) => Submission(
@@ -97,6 +103,7 @@ class Submission {
     updatedAt: DateTime.tryParse((json['updated_at'] ?? '').toString()) ?? DateTime.now(),
     resultJson: json['result'] is Map ? (json['result'] as Map).cast<String, dynamic>() : null,
     pageImagePaths: (json['page_image_paths'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+    explanation: (json['explanation'] as String?),
   );
 
   static String encodeList(List<Submission> items) => jsonEncode(items.map((e) => e.toJson()).toList());
