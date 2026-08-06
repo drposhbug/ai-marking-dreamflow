@@ -124,7 +124,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 18;
+const CACHE_VERSION = 19;
 
 // A keyless graded mark works out every correct answer anyway — store that
 // as a real answer key so the REST of the class marks against it on the
@@ -637,14 +637,14 @@ Do all of the following:
      * drawings — free-body diagrams, ray diagrams, graphs the student drew, sketches, geometric constructions → feedback "check drawing". Simple diagram READING (taking numbers off a printed graph) is normal marking, not this rule.
      * answers that can only be checked against material NOT in the images and there is NO OFFICIAL ANSWER KEY — listening/écoute or dictation tests (answers depend on audio you cannot hear), questions about a reading passage or source not photographed, oral components → feedback "needs answer key". With an answer key present these mark normally against the key.
      * If EVERY question is teacher-only (e.g. a listening test with no key), still return all annotations with "?" and say why in a one-sentence summary ("Listening test with no answer key — answers can't be checked without the audio.").
-   - ESSAY ERROR MARKS: essays, stories, and long written responses have no numbered questions — instead create one annotation per error INSTANCE found in the writing: questionLabel = the section it belongs to ("Grammar", "Spelling", "Flow", "Content"), earnedMark = the deduction as a negative ("-0.5") or "" when it costs nothing, outOfMark = "", correct = false, feedback = a tiny label with the exact fix ("dont → don't", "familys → families", "run-on sentence", "costs — agreement"), position ON the error word. CATALOGUE EVERYTHING: every missing apostrophe (contractions AND possessives), every homophone (close/clothes, to/too, there/their), every subject-verb agreement slip, every misspelling, every missing word — a sample is NOT marking. When the SAME error repeats ("familys" four times, an identical phrase reused), still mark every occurrence on the page but treat it as ONE recurring pattern when deducting.
+   - ESSAY ERROR MARKS: essays, stories, and long written responses have no numbered questions — instead create one annotation per error INSTANCE found in the writing: questionLabel = the section it belongs to ("Grammar", "Spelling", "Flow", "Content"), earnedMark = "" and outOfMark = "" (error marks NEVER carry their own deduction — the marks come off ONCE in that section's criteriaBreakdown score, rule 4), correct = false, feedback = a tiny label with the exact fix ("dont → don't", "familys → families", "run-on sentence", "costs — agreement"), position ON the error word. CATALOGUE EVERYTHING: every missing apostrophe (contractions AND possessives), every homophone (close/clothes, to/too, there/their), every subject-verb agreement slip, every misspelling, every missing word — a sample is NOT marking. When the SAME error repeats ("familys" four times, an identical phrase reused), still mark every occurrence on the page but treat it as ONE recurring pattern when deducting.
    - TEXT POSITIONING (LINE METHOD): for errors in written text, count the text lines visible on the page; positionTop ≈ (the error's line number − 0.5) ÷ total lines; positionLeft ≈ how far along that line the word sits (0.1 = start of the line, 0.9 = end). The highlight must land on the exact word — never between paragraphs, never in the margin.
    - pageIndex: which page the answer is on, 0-based (Page 1 = 0, Page 2 = 1, ...)
    - positionTop and positionLeft: land ON the specific wrong number, expression, or step itself — never the question header, never a subtotal, never the general question area. When the answer is fully correct, point at the final answer. Fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
 4. criteriaBreakdown must normally be EMPTY — marking is right-or-wrong per question, nothing else. Include entries ONLY in exactly three cases:
    - KTCA sections: the paper's own sections are labeled with the Ontario categories (rule 6) — those category entries COUNT toward the mark.
    - Printed rubric: the pages (or the ANSWER KEY) include a rubric — mark each rubric criterion with a level 1-4 exactly as the rubric defines, choose gradingFormat "levels", overall level from the rubric average.
-   - ESSAYS/STORIES/WRITTEN RESPONSES with no printed rubric: break the total into exactly these marks-bearing sections — "Content & Ideas" (~30% of maxScore), "Evidence & Development" (~20%), "Organization & Flow" (~20%), "Grammar" (~15%), "Spelling & Mechanics" (~15%). Section scores sum to rawScore, section maxScores sum to maxScore. Score each section from ITS OWN evidence only: sloppy mechanics must never drag down Content/Evidence, and a strong argument must never hide weak conventions — a competent argument buried under surface errors scores high on Content and low on Mechanics. CREDIT real skills where shown: acknowledging then rebutting a counterargument, varied transitions, a concrete developed example. Deduct recurring error patterns ONCE, not per instance. Each section's feedback cites concrete evidence and names recurring patterns ("recurring: familys → families ×4", "reasons asserted, never illustrated — no example or number anywhere", "counterargument acknowledged and rebutted — credited") — never a generic comment.
+   - ESSAYS/STORIES/WRITTEN RESPONSES with no printed rubric: break the total into exactly these marks-bearing sections — "Content & Ideas" (~30% of maxScore), "Evidence & Development" (~20%), "Organization & Flow" (~20%), "Grammar" (~15%), "Spelling & Mechanics" (~15%). Section scores sum to rawScore, section maxScores sum to maxScore, and EVERY section score is a clean half or quarter step (3, 2.5, 2.25 — never 2.7 or 3.3). Deduct ONCE per section based on how many errors that section has overall — a light band for 1-2 errors, a bigger band for 3-6, a heavy band for 7+ — instead of subtracting a fraction per individual error; the page can show 20 highlighted errors while Grammar simply reads 2.5/3. State the count in the feedback ("11 grammar errors — mostly missing apostrophes"). Score each section from ITS OWN evidence only: sloppy mechanics must never drag down Content/Evidence, and a strong argument must never hide weak conventions — a competent argument buried under surface errors scores high on Content and low on Mechanics. CREDIT real skills where shown: acknowledging then rebutting a counterargument, varied transitions, a concrete developed example. Deduct recurring error patterns ONCE, not per instance. Each section's feedback cites concrete evidence and names recurring patterns ("recurring: familys → families ×4", "reasons asserted, never illustrated — no example or number anywhere", "counterargument acknowledged and rebutted — credited") — never a generic comment.
    NEVER invent criteria ("Attempted all questions", "Effort", "Neatness", "Organization", "Working shown", ...). "Communication" is a criterion ONLY when a rubric or a KTCA section defines it — otherwise communication slips (missing units, missing sig figs, wrong rounding or decimal places) are PART-MARK DEDUCTIONS (quarter-steps, rule 3) on the question where they occur, never a separate criterion or comment section.
 5. Compute maxScore and rawScore for the whole submission:
    - When markingStyle is "completion", rawScore and maxScore count completed vs assigned questions (see rule 2) — the rules below apply to "graded" work.
@@ -745,9 +745,12 @@ function normalize(obj: any, provider: string, maxScoreDefault: number, formatOv
   const asStringArray = (v: unknown) => (Array.isArray(v) ? v.filter((x: any) => typeof x === "string") : []);
 
   // deno-lint-ignore no-explicit-any
+  // Section marks land on clean quarter steps — "Grammar 2.7/3" reads like
+  // a glitch to a teacher, "Grammar 2.75/3" reads like marking.
+  const quarter = (n: number) => Math.round(n * 4) / 4;
   const criteriaBreakdown = (Array.isArray(obj?.criteriaBreakdown) ? obj.criteriaBreakdown : []).map((c: any) => ({
     name: String(c?.name ?? ""),
-    score: clamp(c?.score, 0, 10000, 0),
+    score: quarter(clamp(c?.score, 0, 10000, 0)),
     maxScore: clamp(c?.maxScore, 1, 10000, 10),
     level: Number.isFinite(Number(c?.level)) ? Math.round(Number(c.level)) : null,
     feedback: expandFeedback(String(c?.feedback ?? ""), "criteria", CRITERIA_BANK, stats),
@@ -787,7 +790,12 @@ function normalize(obj: any, provider: string, maxScoreDefault: number, formatOv
     // deno-lint-ignore no-explicit-any
     annotations: (Array.isArray(obj?.annotations) ? obj.annotations : []).map((a: any) => ({
       questionLabel: String(a?.questionLabel ?? ""),
-      earnedMark: String(a?.earnedMark ?? ""),
+      // An error mark (no "out of") never carries its own deduction — the
+      // marks come off once in the section score, so a stray "-0.3" here
+      // is dropped rather than stamped on the page.
+      earnedMark: String(a?.outOfMark ?? "").trim() === "" && String(a?.earnedMark ?? "").trim().startsWith("-")
+        ? ""
+        : String(a?.earnedMark ?? ""),
       outOfMark: String(a?.outOfMark ?? ""),
       correct: a?.correct === true,
       feedback: tinyLabel(String(a?.feedback ?? ""), stats),
