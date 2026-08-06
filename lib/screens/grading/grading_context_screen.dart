@@ -374,17 +374,26 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       return;
     }
 
-    // No answer key selected → warn that marks are judgment-based.
+    // No answer key selected → warn that marks are judgment-based. Written
+    // work (essays, labs) has no key to route cheap, so it burns the most
+    // credits — the honest moment to point heavy essay-markers at Pro.
     if (_answerKeyId == null) {
+      final isWritten = draft.mode == GradingMode.englishEssay || draft.mode == GradingMode.labReport;
       final choice = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('No answer key'),
-          content: const Text(
-              'Without an answer key, your assistant works out the answers itself and can make mistakes.\n\nFor accurate, consistent marking, scan or pick your answer key first.'),
+          title: Text(isWritten ? 'Marking written work' : 'No answer key'),
+          content: Text(isWritten
+              ? 'Essays and written answers take the deepest reading, so they use the most marking credits per page.\n\nIf you mark writing regularly, the Pro plan\'s bigger credit pool is the best fit.'
+              : 'Without an answer key, your assistant works out the answers itself and can make mistakes.\n\nFor accurate, consistent marking, scan or pick your answer key first.'),
           actions: [
+            if (isWritten)
+              TextButton(onPressed: () => Navigator.pop(ctx, 'plans'), child: const Text('See plans')),
             TextButton(onPressed: () => Navigator.pop(ctx, 'grade'), child: const Text('Grade anyway')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, 'key'), child: const Text('Add answer key')),
+            if (!isWritten)
+              FilledButton(onPressed: () => Navigator.pop(ctx, 'key'), child: const Text('Add answer key'))
+            else
+              FilledButton(onPressed: () => Navigator.pop(ctx, 'grade'), child: const Text('Mark it')),
           ],
         ),
       );
@@ -392,6 +401,10 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       if (choice == 'key') {
         await _chooseAnswerKey();
         return; // key selected — teacher taps Grade again when ready
+      }
+      if (choice == 'plans') {
+        context.push(AppRoutes.settings);
+        return;
       }
       if (choice != 'grade') return; // dismissed
     }

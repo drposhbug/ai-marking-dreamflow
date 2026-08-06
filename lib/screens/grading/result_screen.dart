@@ -60,6 +60,7 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   bool _exportingToDrive = false;
+  bool _explaining = false;
 
   /// KTCA-marked work: show the final grade as the category average (how
   /// Ontario marking works, and the server default) or as total marks —
@@ -231,6 +232,44 @@ class _ResultScreenState extends State<ResultScreen> {
               updatedAt: DateTime.now(),
             ),
           );
+    }
+  }
+
+  /// Extra-credit AI pass: re-reads the pages and explains every error in
+  /// detail. Saved with the submission so it's never paid for twice.
+  Future<void> _explainInDetail(Submission sub, AiGradeResult result) async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Explain issues in detail?'),
+        content: const Text(
+            'Mark re-reads the pages and writes a detailed explanation for every error — what\'s wrong, why it lost marks, and how to fix it.\n\nThis uses extra marking credits (about the cost of another mark). The explanations are saved with this result.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Explain')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _explaining = true);
+    try {
+      final text = await AiGradingService().explainResult(
+        teacherId: auth.id,
+        pages: _pages,
+        resultJson: result.toJson(),
+      );
+      if (!mounted) return;
+      await context.read<SubmissionsService>().update(sub.copyWith(explanation: text, updatedAt: DateTime.now()));
+    } on UsageLimitException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(duration: const Duration(seconds: 7), content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not create explanations: $e')));
+    } finally {
+      if (mounted) setState(() => _explaining = false);
     }
   }
 
@@ -758,12 +797,19 @@ class _ResultScreenState extends State<ResultScreen> {
                     ],
 
                     // Criteria appear ONLY when they carry marks: KTCA
-                    // categories or a printed rubric. Never commentary.
+                    // categories, a printed rubric, or the essay breakdown
+                    // (content / evidence / flow / grammar / spelling).
                     ...(() {
-                      final crits = _ktcaOf(result);
+                      final ktca = _ktcaOf(result);
+                      final isEssay = sub?.gradingMode == GradingMode.englishEssay;
+                      final crits = ktca.isNotEmpty
+                          ? ktca
+                          : (isEssay
+                              ? result.criteriaBreakdown.where((c) => c.name.isNotEmpty && c.maxScore > 0).toList(growable: false)
+                              : const <CriterionResult>[]);
                       if (crits.isEmpty) return const <Widget>[];
                       return <Widget>[
-                        Text('Categories', style: Theme.of(context).textTheme.titleMedium),
+                        Text(ktca.isNotEmpty ? 'Categories' : 'Breakdown', style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 10),
                         ...crits.map((c) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
@@ -782,6 +828,22 @@ class _ResultScreenState extends State<ResultScreen> {
                   if (sub != null && sub.triageFlags.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _FeedbackCard(title: 'For your review', color: Colors.orange, body: sub.triageFlags.join('\n• '), prefixBullet: true),
+                  ],
+
+                  // ── Detailed explanations (extra-credit AI pass) ──────
+                  if (sub != null && (sub.explanation ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _FeedbackCard(title: 'Detailed explanations', color: cs.primary, body: sub.explanation!),
+                  ] else if (sub != null && result != null && _pages.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _explaining ? null : () => _explainInDetail(sub, result),
+                      icon: _explaining
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(Icons.psychology_alt_rounded, size: 18, color: cs.primary),
+                      label: Text(_explaining ? 'Explaining…' : 'Explain issues in detail (uses extra credits)',
+                          style: TextStyle(color: cs.primary)),
+                    ),
                   ],
 
                   const SizedBox(height: 18),
@@ -1052,23 +1114,29 @@ class _AnnotatedImage extends StatelessWidget {
         children: [
           Image.memory(imageBytes, fit: BoxFit.contain, width: constraints.maxWidth),
           // Highlight boxes on the mistakes themselves — the AI points its
-          // position at the erroneous line, this draws the teacher's eye.
-          // Teacher-only "?" questions get amber (check it), not red (wrong).
-          ...annotations.where((a) => !a.correct).map((a) => Positioned(
-                left: (a.positionLeft * constraints.maxWidth - 46).clamp(0.0, constraints.maxWidth - 92),
-                top: (a.positionTop * constraints.maxHeight - 17),
-                child: IgnorePointer(
-                  child: Container(
-                    width: 92,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: tone(a).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: tone(a).withValues(alpha: 0.75), width: 2),
-                    ),
+          // position at the erroneous word/expression, this draws the eye.
+          // Essay error marks (no printed marks) get word-sized boxes;
+          // teacher-only "?" questions get amber (check it), not red (wrong).
+          ...annotations.where((a) => !a.correct).map((a) {
+            final wordSized = a.outOfMark.trim().isEmpty;
+            final w = wordSized ? 64.0 : 92.0;
+            final h = wordSized ? 24.0 : 34.0;
+            return Positioned(
+              left: (a.positionLeft * constraints.maxWidth - w / 2).clamp(0.0, constraints.maxWidth - w),
+              top: (a.positionTop * constraints.maxHeight - h / 2),
+              child: IgnorePointer(
+                child: Container(
+                  width: w,
+                  height: h,
+                  decoration: BoxDecoration(
+                    color: tone(a).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: tone(a).withValues(alpha: 0.75), width: 2),
                   ),
                 ),
-              )),
+              ),
+            );
+          }),
           // One slot per question: mark chip, then the tiny label bubble.
           ...sorted.map((a) {
             final hasBubble = noteOf(a).isNotEmpty;
