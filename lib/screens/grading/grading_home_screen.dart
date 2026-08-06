@@ -111,9 +111,11 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   /// Multi-select images or PDFs via the system document picker; images get
   /// the full scanner treatment, PDFs are rendered to pages on-device.
   Future<List<ScannedPage>> _pickPagesFromFiles() async {
+    // FileType.any, not a custom extension list: Drive-backed files often
+    // arrive without an extension and get greyed out by the filter, which
+    // looks like "I can't select my JPG". The bytes are sniffed after.
     final res = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'pdf'],
+      type: FileType.any,
       allowMultiple: true,
       withData: true,
     );
@@ -241,9 +243,10 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
           break; // cancelled an "add more" round — mark what we have
         }
         if (import.pages.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            duration: Duration(seconds: 6),
-            content: Text('That file couldn\'t be read — pick a photo or a PDF. For a Google Doc, open it in Drive and use Share → Save as PDF first.'),
+          final who = import.unreadableNames.isEmpty ? 'That file' : '"${import.unreadableNames.first}"';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            duration: const Duration(seconds: 7),
+            content: Text('$who couldn\'t be read — pick a photo or a PDF. For a Google Doc, open it in Drive and use Share → Save as PDF first.'),
           ));
           if (groups.isEmpty) return;
         } else {
