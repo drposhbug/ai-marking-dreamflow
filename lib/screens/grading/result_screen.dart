@@ -235,6 +235,41 @@ class _ResultScreenState extends State<ResultScreen> {
     }
   }
 
+  /// Creates a classroom on the spot (name + optional period) so a freshly
+  /// created student never ends up classless just because no class exists.
+  Future<String?> _createClassQuick(Submission sub) async {
+    final name = TextEditingController();
+    final period = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New class'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: 'Class name', hintText: 'e.g. Grade 11 Physics')),
+            const SizedBox(height: 8),
+            TextField(controller: period, decoration: const InputDecoration(labelText: 'Period (optional)', hintText: 'e.g. P2')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted || name.text.trim().isEmpty) return null;
+    final created = await context.read<ClassesService>().create(
+          teacherId: sub.teacherId,
+          name: name.text.trim(),
+          subject: sub.subject.isEmpty ? 'General' : sub.subject,
+          period: period.text.trim(),
+        );
+    if (!mounted) return created.id;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Created ${created.name}.')));
+    return created.id;
+  }
+
   /// Extra-credit AI pass: re-reads the pages and explains every error in
   /// detail. Saved with the submission so it's never paid for twice.
   Future<void> _explainInDetail(Submission sub, AiGradeResult result) async {
@@ -331,46 +366,58 @@ class _ResultScreenState extends State<ResultScreen> {
     if (student == null || !mounted) return;
 
     // Recent-submission marks often have no class — offer to file the
-    // student (and this result) into a classroom right here.
+    // student (and this result) into a classroom right here, creating the
+    // classroom on the spot when it doesn't exist yet.
     var classId = sub.classId;
     if (classId.isEmpty || student.classId.isEmpty) {
+      const kNewClass = '::newclass::';
       final classes = context.read<ClassesService>().classes;
-      if (classes.isNotEmpty) {
-        final pickedClass = await showModalBottomSheet<String>(
-          context: context,
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          showDragHandle: true,
-          builder: (ctx) => SafeArea(
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                  child: Text('Add ${student.name} to a class?', style: Theme.of(ctx).textTheme.titleMedium),
-                ),
-                for (final c in classes)
-                  ListTile(
-                    leading: const Icon(Icons.school_rounded),
-                    title: Text(c.name),
-                    subtitle: c.period.isEmpty ? null : Text(c.period),
-                    onTap: () => Navigator.pop(ctx, c.id),
-                  ),
+      final pickedClass = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        showDragHandle: true,
+        builder: (ctx) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Text('Add ${student.name} to a class?', style: Theme.of(ctx).textTheme.titleMedium),
+              ),
+              for (final c in classes)
                 ListTile(
-                  leading: const Icon(Icons.do_not_disturb_on_outlined),
-                  title: const Text('No class for now'),
-                  onTap: () => Navigator.pop(ctx, ''),
+                  leading: const Icon(Icons.school_rounded),
+                  title: Text(c.name),
+                  subtitle: c.period.isEmpty ? null : Text(c.period),
+                  onTap: () => Navigator.pop(ctx, c.id),
                 ),
-              ],
-            ),
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline_rounded),
+                title: const Text('Create a new class'),
+                onTap: () => Navigator.pop(ctx, kNewClass),
+              ),
+              ListTile(
+                leading: const Icon(Icons.do_not_disturb_on_outlined),
+                title: const Text('No class for now'),
+                onTap: () => Navigator.pop(ctx, ''),
+              ),
+            ],
           ),
-        );
-        if (!mounted) return;
-        if (pickedClass != null && pickedClass.isNotEmpty) {
-          if (student.classId.isEmpty) {
-            await context.read<StudentsService>().assignToClass(studentId: student.id, classId: pickedClass);
-          }
-          if (classId.isEmpty) classId = pickedClass;
+        ),
+      );
+      if (!mounted) return;
+      String? resolved;
+      if (pickedClass == kNewClass) {
+        resolved = await _createClassQuick(sub);
+      } else if (pickedClass != null && pickedClass.isNotEmpty) {
+        resolved = pickedClass;
+      }
+      if (!mounted) return;
+      if (resolved != null) {
+        if (student.classId.isEmpty) {
+          await context.read<StudentsService>().assignToClass(studentId: student.id, classId: resolved);
         }
+        if (classId.isEmpty) classId = resolved;
       }
     }
     if (!mounted) return;

@@ -589,11 +589,15 @@ class AiGradingService {
   }
 
   /// The teacher's referral code + how many colleagues joined with it.
-  Future<ReferralStatus> getReferral({required String teacherId}) async {
+  Future<ReferralStatus> getReferral({required String teacherId, String? email}) async {
     final client = Supabase.instance.client;
     final res = await client.functions.invoke(
       'MARKING-PROCESS',
-      body: {'action': 'get_referral', 'teacherId': teacherId},
+      body: {
+        'action': 'get_referral',
+        'teacherId': teacherId,
+        if (email != null && email.isNotEmpty) 'email': email,
+      },
     );
     final data = res.data;
     if (data is Map && data['code'] != null) {
