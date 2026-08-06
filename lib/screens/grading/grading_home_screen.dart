@@ -256,8 +256,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: Text('${groups.length} test file${groups.length == 1 ? '' : 's'} ready'),
-            content: const Text(
-                'Add more tests from Google Drive, or start marking what you have?\n\nTip: long-press a file in the picker to select several at once.'),
+            content: const Text('Add more tests from Google Drive, or start marking what you have?'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, 'more'), child: const Text('Add more')),
               FilledButton(onPressed: () => Navigator.pop(ctx, 'go'), child: const Text('Start marking')),
