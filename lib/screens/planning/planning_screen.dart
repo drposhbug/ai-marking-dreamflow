@@ -184,7 +184,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       return;
     }
     try {
-      final status = await AiGradingService().getReferral(teacherId: user.id);
+      final status = await AiGradingService().getReferral(teacherId: user.id, email: user.email);
       if (!mounted) return;
       setState(() {
         _planningUnlocked = status.planningUnlocked;

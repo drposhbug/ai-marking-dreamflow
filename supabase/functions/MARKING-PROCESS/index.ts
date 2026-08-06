@@ -1415,7 +1415,7 @@ Deno.serve(async (req) => {
     const db = serviceDb();
     const { data: prof } = await db
       .from("profiles")
-      .select("referral_code, referral_count")
+      .select("referral_code, referral_count, email")
       .eq("teacher_id", teacherId)
       .maybeSingle();
     let code = String(prof?.referral_code ?? "");
@@ -1427,7 +1427,12 @@ Deno.serve(async (req) => {
       );
     }
     const count = Number(prof?.referral_count ?? 0);
-    return json({ code, count, planningUnlocked: count >= 1 });
+    // Founder accounts get Planning without referrals (testing + demos).
+    const FOUNDER_EMAILS = ["oscar.cs.lee@gmail.com"];
+    const founder =
+      FOUNDER_EMAILS.includes(String(prof?.email ?? "").trim().toLowerCase()) ||
+      FOUNDER_EMAILS.includes(String(payload?.email ?? "").trim().toLowerCase());
+    return json({ code, count, planningUnlocked: count >= 1 || founder });
   }
 
   if (action === "redeem_referral") {
