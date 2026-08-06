@@ -13,10 +13,11 @@ import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 /// The server meters marking credits off profiles.plan, so whenever the
 /// entitlement flips this service syncs the plan to the backend.
 class BillingService extends ChangeNotifier {
-  // RevenueCat public SDK key. The test_ key hits RevenueCat's Test Store
-  // (no Play Console needed); swap for the goog_ key when Play billing is
-  // connected. Public by design — safe to ship in the APK.
-  static const _apiKey = 'test_mUaCHANjgBDPOVDSNsIojYxOFOZ';
+  // RevenueCat public SDK key. EMPTY disables billing entirely (no
+  // configure call, no store contact) — the test_ key crashed the app on
+  // device, so billing stays off until the real goog_ key is set here.
+  // Public by design once set — safe to ship in the APK.
+  static const _apiKey = '';
   static const entitlementId = 'markless Pro';
 
   bool _available = false;
@@ -31,9 +32,9 @@ class BillingService extends ChangeNotifier {
   String? _teacherId;
 
   /// Configure once at app start. Safe to call when billing isn't possible
-  /// (web, missing store) — the service just stays unavailable.
+  /// (web, missing store, no key) — the service just stays unavailable.
   Future<void> init() async {
-    if (kIsWeb) return;
+    if (kIsWeb || _apiKey.isEmpty) return;
     try {
       await Purchases.setLogLevel(kReleaseMode ? LogLevel.warn : LogLevel.debug);
       await Purchases.configure(PurchasesConfiguration(_apiKey));
