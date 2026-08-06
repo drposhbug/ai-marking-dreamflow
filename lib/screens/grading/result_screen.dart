@@ -746,7 +746,9 @@ class _ResultScreenState extends State<ResultScreen> {
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
-                        'Tap any mark on the page to change it',
+                        result.annotations.any(_isErrorMark)
+                            ? 'Highlights show every error — the marks come off once per section below'
+                            : 'Tap any mark on the page to change it',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
                       ),
@@ -795,11 +797,60 @@ class _ResultScreenState extends State<ResultScreen> {
                   // ── Marks — scoreboard only, for every kind of work ────
                   if (result != null) ...[
                     // Per-question scoreboard (tap a row to change the mark).
-                    if (result.annotations.isNotEmpty) ...[
+                    // Writing errors: grouped per section with a count, so
+                    // 24 spelling slips read as one line, not 24 rows.
+                    ...(() {
+                      final errors = result.annotations.where(_isErrorMark).toList(growable: false);
+                      if (errors.isEmpty) return const <Widget>[];
+                      final groups = <String, List<QuestionAnnotation>>{};
+                      for (final a in errors) {
+                        groups.putIfAbsent(a.questionLabel.isEmpty ? 'Other' : a.questionLabel, () => []).add(a);
+                      }
+                      return <Widget>[
+                        Card(
+                          child: Column(
+                            children: [
+                              for (final entry in groups.entries)
+                                ExpansionTile(
+                                  dense: true,
+                                  shape: const Border(),
+                                  collapsedShape: const Border(),
+                                  leading: Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(color: _sectionColor(entry.key), shape: BoxShape.circle),
+                                  ),
+                                  title: Text(entry.key, style: Theme.of(context).textTheme.bodyMedium),
+                                  subtitle: Text(
+                                    '${entry.value.length} ${entry.value.length == 1 ? 'error' : 'errors'} marked on the page',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                                  ),
+                                  children: [
+                                    for (final a in entry.value)
+                                      ListTile(
+                                        dense: true,
+                                        contentPadding: const EdgeInsets.only(left: 52, right: 16),
+                                        title: Text(
+                                          a.feedback.isEmpty ? 'Error' : a.feedback,
+                                          style: Theme.of(context).textTheme.bodySmall,
+                                        ),
+                                        trailing: Icon(Icons.edit_rounded, size: 15, color: AiMarkerColors.neutral),
+                                        onTap: () => _editAnnotation(a),
+                                      ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ];
+                    })(),
+
+                    if (result.annotations.any((a) => !_isErrorMark(a))) ...[
                       Card(
                         child: Column(
                           children: [
-                            for (final a in result.annotations)
+                            for (final a in result.annotations.where((a) => !_isErrorMark(a)))
                               ListTile(
                                 dense: true,
                                 onTap: () => _editAnnotation(a),
@@ -1122,6 +1173,22 @@ String _bubbleLabel(String s) {
 const _kFlagAmber = Color(0xFFB45309);
 bool _isTeacherOnly(QuestionAnnotation a) => a.earnedMark.trim() == '?';
 
+/// Writing errors carry no marks of their own — the deduction happens once in
+/// the section score — so they render as highlighter strokes, not mark chips.
+bool _isErrorMark(QuestionAnnotation a) =>
+    a.outOfMark.trim().isEmpty && !_isTeacherOnly(a) && a.earnedMark.trim().isEmpty;
+
+/// One colour per writing section, so a glance at the page says what kind of
+/// error each highlight is. Matches the dots on the scoreboard groups.
+Color _sectionColor(String label) {
+  final l = label.toLowerCase();
+  if (l.contains('spell') || l.contains('mechanic')) return const Color(0xFFC62828);
+  if (l.contains('grammar')) return const Color(0xFFD84315);
+  if (l.contains('flow') || l.contains('organi') || l.contains('cohes')) return const Color(0xFF6A1B9A);
+  if (l.contains('content') || l.contains('idea') || l.contains('evidence')) return const Color(0xFF1565C0);
+  return AiMarkerColors.error;
+}
+
 class _AnnotatedImage extends StatelessWidget {
   final Uint8List imageBytes;
   final List<QuestionAnnotation> annotations;
@@ -1132,11 +1199,17 @@ class _AnnotatedImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
+      // Writing errors are highlighter strokes on the word itself — no chip,
+      // no margin bubble, because they carry no marks. Only marks-bearing
+      // questions claim a slot in the right margin.
+      final errorMarks = annotations.where(_isErrorMark).toList(growable: false);
+      final scored = annotations.where((a) => !_isErrorMark(a)).toList(growable: false);
+
       // The right margin is a single column: each question gets one slot
       // holding its mark chip and (for mistakes) its label bubble. Slots are
       // laid out top-to-bottom with a minimum gap so close-together questions
       // never overlap each other's notes.
-      final sorted = [...annotations]..sort((a, b) => a.positionTop.compareTo(b.positionTop));
+      final sorted = [...scored]..sort((a, b) => a.positionTop.compareTo(b.positionTop));
       // Wrong answers carry their error label; right-but-different-method
       // answers carry the blue method note. Correct + matching method = no bubble.
       String noteOf(QuestionAnnotation a) => a.correct ? a.methodNote.trim() : a.feedback.trim();
@@ -1160,30 +1233,45 @@ class _AnnotatedImage extends StatelessWidget {
         fit: StackFit.passthrough,
         children: [
           Image.memory(imageBytes, fit: BoxFit.contain, width: constraints.maxWidth),
-          // Highlight boxes on the mistakes themselves — the AI points its
-          // position at the erroneous word/expression, this draws the eye.
-          // Essay error marks (no printed marks) get word-sized boxes;
-          // teacher-only "?" questions get amber (check it), not red (wrong).
-          ...annotations.where((a) => !a.correct).map((a) {
-            final wordSized = a.outOfMark.trim().isEmpty;
-            final w = wordSized ? 64.0 : 92.0;
-            final h = wordSized ? 24.0 : 34.0;
+          // Writing errors: a highlighter wash over the word with a solid
+          // underline, coloured by section (grammar / spelling / flow /
+          // content). Reads like a teacher's pen instead of a box grid.
+          ...errorMarks.map((a) {
+            final c = _sectionColor(a.questionLabel);
+            const w = 58.0, h = 15.0;
             return Positioned(
               left: (a.positionLeft * constraints.maxWidth - w / 2).clamp(0.0, constraints.maxWidth - w),
-              top: (a.positionTop * constraints.maxHeight - h / 2),
+              top: (a.positionTop * constraints.maxHeight - h / 2).clamp(0.0, constraints.maxHeight - h - 2),
               child: IgnorePointer(
                 child: Container(
                   width: w,
                   height: h,
                   decoration: BoxDecoration(
-                    color: tone(a).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: tone(a).withValues(alpha: 0.75), width: 2),
+                    color: c.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border(bottom: BorderSide(color: c.withValues(alpha: 0.9), width: 2)),
                   ),
                 ),
               ),
             );
           }),
+          // Marks-bearing questions keep the box on the wrong answer itself.
+          // Teacher-only "?" questions get amber (check it), not red (wrong).
+          ...scored.where((a) => !a.correct).map((a) => Positioned(
+                left: (a.positionLeft * constraints.maxWidth - 46).clamp(0.0, constraints.maxWidth - 92),
+                top: (a.positionTop * constraints.maxHeight - 17),
+                child: IgnorePointer(
+                  child: Container(
+                    width: 92,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: tone(a).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: tone(a).withValues(alpha: 0.75), width: 2),
+                    ),
+                  ),
+                ),
+              )),
           // One slot per question: mark chip, then the tiny label bubble.
           ...sorted.map((a) {
             final hasBubble = noteOf(a).isNotEmpty;
