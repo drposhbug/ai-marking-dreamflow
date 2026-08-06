@@ -112,8 +112,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         pages.addAll(import.pages);
       } on DrivePickerUnavailable {
         final res = await FilePicker.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'pdf'],
+          type: FileType.any,
           allowMultiple: true,
           withData: true,
         );

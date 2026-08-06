@@ -21,9 +21,15 @@ class MainActivity : FlutterFragmentActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
             if (call.method == "pickFromDrive") {
-                if (pendingResult != null) {
-                    result.error("busy", "A picker is already open", null)
-                    return@setMethodCallHandler
+                // A pick that never reported back (activity recreated, user
+                // swiped the picker away) must not wedge every later pick —
+                // release the stale one instead of answering "busy" forever.
+                pendingResult?.let { stale ->
+                    pendingResult = null
+                    try {
+                        stale.success(mapOf("picked" to 0, "files" to emptyList<Any>()))
+                    } catch (_: Exception) {
+                    }
                 }
                 val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
                     type = "*/*"

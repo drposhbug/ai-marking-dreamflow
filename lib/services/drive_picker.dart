@@ -15,6 +15,26 @@ class DrivePickerUnavailable implements Exception {}
 /// becoming 200 marks. The UI mentions when a PDF was cut off.
 const int kMaxPdfPages = 15;
 
+/// What the FILE ITSELF says it is. Drive and some file providers hand over
+/// a wrong or empty mime type ("application/octet-stream", "" or a Docs
+/// type) and names without extensions, so the bytes are the only source of
+/// truth worth trusting.
+bool _magicIsPdf(Uint8List b) =>
+    b.length > 4 && b[0] == 0x25 && b[1] == 0x50 && b[2] == 0x44 && b[3] == 0x46; // %PDF
+
+bool _magicIsImage(Uint8List b) {
+  if (b.length < 12) return false;
+  if (b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) return true; // JPEG
+  if (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) return true; // PNG
+  if (b[0] == 0x42 && b[1] == 0x4D) return true; // BMP
+  if (b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46) return true; // GIF
+  // RIFF....WEBP
+  if (b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46 && b[8] == 0x57 && b[9] == 0x45) return true;
+  // ....ftyp (HEIC/HEIF/AVIF)
+  if (b[4] == 0x66 && b[5] == 0x74 && b[6] == 0x79 && b[7] == 0x70) return true;
+  return false;
+}
+
 bool looksLikeImageFile(String name, String mime) {
   if (mime.startsWith('image/')) return true;
   if (mime.isNotEmpty && mime != 'application/octet-stream') return false;
@@ -61,8 +81,13 @@ Future<List<ScannedPage>> pagesFromPickedFile({
   required String mime,
   required Uint8List bytes,
 }) async {
+  // Trust the BYTES first: Drive hands over JPGs with an empty or generic
+  // mime type and names without extensions, and rejecting those was making
+  // perfectly good photos look unreadable.
+  final isPdf = _magicIsPdf(bytes) || looksLikePdfFile(name, mime);
+  final isImage = _magicIsImage(bytes) || looksLikeImageFile(name, mime);
   try {
-    if (looksLikePdfFile(name, mime)) {
+    if (isPdf) {
       final images = await renderPdfPages(bytes);
       final pages = <ScannedPage>[];
       for (var i = 0; i < images.length; i++) {
@@ -73,12 +98,18 @@ Future<List<ScannedPage>> pagesFromPickedFile({
       }
       return pages;
     }
-    if (looksLikeImageFile(name, mime)) {
+    if (isImage) {
+      final processed = await DocumentProcessor.processPage(bytes);
+      return [ScannedPage(bytes: processed, fileName: name)];
+    }
+    // Unknown type but real content — try it as an image anyway rather than
+    // telling the teacher their file "can't be read".
+    if (bytes.lengthInBytes > 1024) {
       final processed = await DocumentProcessor.processPage(bytes);
       return [ScannedPage(bytes: processed, fileName: name)];
     }
   } catch (e) {
-    debugPrint('pagesFromPickedFile failed for $name: $e');
+    debugPrint('pagesFromPickedFile failed for "$name" (mime "$mime", ${bytes.lengthInBytes} bytes): $e');
   }
   return const [];
 }
@@ -108,12 +139,17 @@ class DriveImport {
   final int unreadable;
   final bool pdfTruncated;
 
+  /// Names of the files that couldn't be turned into pages — so the message
+  /// can say WHICH file failed instead of a vague "that file".
+  final List<String> unreadableNames;
+
   const DriveImport({
     required this.pages,
     required this.fileGroups,
     required this.pickedCount,
     required this.unreadable,
     required this.pdfTruncated,
+    this.unreadableNames = const [],
   });
 
   bool get cancelled => pickedCount == 0;
@@ -142,6 +178,7 @@ class DrivePicker {
 
     final pages = <ScannedPage>[];
     final groups = <List<ScannedPage>>[];
+    final failed = <String>[];
     var unreadable = picked - files.length; // entries the native side couldn't stream
     var truncated = false;
     for (final f in files) {
@@ -150,11 +187,13 @@ class DrivePicker {
       final bytes = f['bytes'];
       if (bytes is! Uint8List) {
         unreadable++;
+        failed.add(name);
         continue;
       }
       final got = await pagesFromPickedFile(name: name, mime: mime, bytes: bytes);
       if (got.isEmpty) {
         unreadable++;
+        failed.add(name);
         continue;
       }
       if (await pdfExceedsPageCap(name, mime, bytes)) truncated = true;
@@ -167,6 +206,7 @@ class DrivePicker {
       pickedCount: picked,
       unreadable: unreadable.clamp(0, picked),
       pdfTruncated: truncated,
+      unreadableNames: failed,
     );
   }
 }
