@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -1189,7 +1191,7 @@ Color _sectionColor(String label) {
   return AiMarkerColors.error;
 }
 
-class _AnnotatedImage extends StatelessWidget {
+class _AnnotatedImage extends StatefulWidget {
   final Uint8List imageBytes;
   final List<QuestionAnnotation> annotations;
   final void Function(QuestionAnnotation)? onTapAnnotation;
@@ -1197,8 +1199,58 @@ class _AnnotatedImage extends StatelessWidget {
   const _AnnotatedImage({required this.imageBytes, required this.annotations, this.onTapAnnotation});
 
   @override
+  State<_AnnotatedImage> createState() => _AnnotatedImageState();
+}
+
+class _AnnotatedImageState extends State<_AnnotatedImage> {
+  // The page is drawn with BoxFit.contain, so it is letterboxed inside the
+  // panel. Marks are fractions OF THE PAGE, so they must be mapped onto the
+  // drawn image rect — mapping them onto the panel instead pushes every
+  // mark outward from the centre and off the paper entirely.
+  ui.Image? _decoded;
+
+  @override
+  void initState() {
+    super.initState();
+    _decode();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnnotatedImage old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.imageBytes, widget.imageBytes)) _decode();
+  }
+
+  Future<void> _decode() async {
+    try {
+      final img = await decodeImageFromList(widget.imageBytes);
+      if (mounted) setState(() => _decoded = img);
+    } catch (e) {
+      debugPrint('Annotated page decode failed: $e');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final imageBytes = widget.imageBytes;
+    final annotations = widget.annotations;
+    final onTapAnnotation = widget.onTapAnnotation;
     return LayoutBuilder(builder: (context, constraints) {
+      // Rect the page actually occupies inside the panel (BoxFit.contain).
+      final img = _decoded;
+      final panelW = constraints.maxWidth;
+      final panelH = constraints.maxHeight.isFinite ? constraints.maxHeight : panelW * 1.3;
+      double pageW = panelW, pageH = panelH, pageX = 0, pageY = 0;
+      if (img != null && img.width > 0 && img.height > 0) {
+        final scale = math.min(panelW / img.width, panelH / img.height);
+        pageW = img.width * scale;
+        pageH = img.height * scale;
+        pageX = (panelW - pageW) / 2;
+        pageY = (panelH - pageH) / 2;
+      }
+      // Page fraction → panel pixels.
+      double px(double f) => pageX + f * pageW;
+      double py(double f) => pageY + f * pageH;
       // Writing errors are highlighter strokes on the word itself — no chip,
       // no margin bubble, because they carry no marks. Only marks-bearing
       // questions claim a slot in the right margin.
@@ -1215,12 +1267,14 @@ class _AnnotatedImage extends StatelessWidget {
       String noteOf(QuestionAnnotation a) => a.correct ? a.methodNote.trim() : a.feedback.trim();
       const chipH = 26.0, bubbleH = 34.0, gap = 6.0;
       final slotTop = <QuestionAnnotation, double>{};
-      var prevBottom = 0.0;
+      var prevBottom = pageY;
       for (final a in sorted) {
         final hasBubble = noteOf(a).isNotEmpty;
         final blockH = chipH + (hasBubble ? bubbleH + 2 : 0);
-        var top = (a.positionTop * constraints.maxHeight - 12).clamp(0.0, constraints.maxHeight - blockH);
-        if (top < prevBottom + gap && prevBottom > 0) top = (prevBottom + gap).clamp(0.0, constraints.maxHeight - blockH);
+        var top = (py(a.positionTop) - 12).clamp(pageY, pageY + pageH - blockH);
+        if (top < prevBottom + gap && prevBottom > pageY) {
+          top = (prevBottom + gap).clamp(pageY, pageY + pageH - blockH);
+        }
         slotTop[a] = top;
         prevBottom = top + blockH;
       }
@@ -1238,10 +1292,12 @@ class _AnnotatedImage extends StatelessWidget {
           // content). Reads like a teacher's pen instead of a box grid.
           ...errorMarks.map((a) {
             final c = _sectionColor(a.questionLabel);
-            const w = 58.0, h = 15.0;
+            // Stroke width tracks the page width so it stays word-sized.
+            final w = (pageW * 0.13).clamp(34.0, 90.0);
+            final h = (pageH * 0.016).clamp(11.0, 20.0);
             return Positioned(
-              left: (a.positionLeft * constraints.maxWidth - w / 2).clamp(0.0, constraints.maxWidth - w),
-              top: (a.positionTop * constraints.maxHeight - h / 2).clamp(0.0, constraints.maxHeight - h - 2),
+              left: (px(a.positionLeft) - w / 2).clamp(pageX, pageX + pageW - w),
+              top: (py(a.positionTop) - h / 2).clamp(pageY, pageY + pageH - h - 2),
               child: IgnorePointer(
                 child: Container(
                   width: w,
@@ -1258,8 +1314,8 @@ class _AnnotatedImage extends StatelessWidget {
           // Marks-bearing questions keep the box on the wrong answer itself.
           // Teacher-only "?" questions get amber (check it), not red (wrong).
           ...scored.where((a) => !a.correct).map((a) => Positioned(
-                left: (a.positionLeft * constraints.maxWidth - 46).clamp(0.0, constraints.maxWidth - 92),
-                top: (a.positionTop * constraints.maxHeight - 17),
+                left: (px(a.positionLeft) - 46).clamp(pageX, pageX + pageW - 92),
+                top: (py(a.positionTop) - 17).clamp(pageY, pageY + pageH - 34),
                 child: IgnorePointer(
                   child: Container(
                     width: 92,
@@ -1276,13 +1332,14 @@ class _AnnotatedImage extends StatelessWidget {
           ...sorted.map((a) {
             final hasBubble = noteOf(a).isNotEmpty;
             return Positioned(
-              right: 4,
+              // Hug the page's right edge, not the panel's.
+              right: (panelW - (pageX + pageW)) + 4,
               top: slotTop[a]!,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   GestureDetector(
-                    onTap: onTapAnnotation == null ? null : () => onTapAnnotation!(a),
+                    onTap: onTapAnnotation == null ? null : () => onTapAnnotation(a),
                     child: _AnnotationMark(annotation: a),
                   ),
                   if (hasBubble)
