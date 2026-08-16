@@ -575,6 +575,21 @@ class AiGradingService {
     );
   }
 
+  /// Erases the account and everything in it, server-side. The function
+  /// checks the caller's own signed-in token, so this only ever deletes the
+  /// teacher who asked. Throws when anything is left behind.
+  Future<void> deleteAccountCloud({required String teacherId}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'delete_account', 'teacherId': teacherId},
+    );
+    final data = res.data;
+    if (data is Map && data['ok'] == true) return;
+    final message = data is Map ? (data['error'] ?? '').toString() : '';
+    throw Exception(message.isEmpty ? 'Could not delete the account — try again.' : message);
+  }
+
   Future<List<Map<String, dynamic>>> listSubmissionsCloud({required String teacherId}) async {
     final client = Supabase.instance.client;
     final res = await client.functions.invoke(

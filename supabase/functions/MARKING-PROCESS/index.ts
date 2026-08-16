@@ -48,6 +48,22 @@ function serviceDb() {
   );
 }
 
+/// Claims out of the caller's bearer token. Signature checking is the
+/// gateway's job (verify_jwt = true), so this only decodes — never trust it
+/// for anything the gateway hasn't already validated.
+// deno-lint-ignore no-explicit-any
+function jwtClaims(authHeader: string | null): Record<string, any> | null {
+  try {
+    const token = String(authHeader ?? "").replace(/^Bearer\s+/i, "").trim();
+    const body = token.split(".")[1];
+    if (!body) return null;
+    const pad = body.length % 4 === 0 ? body : body + "=".repeat(4 - (body.length % 4));
+    return JSON.parse(atob(pad.replace(/-/g, "+").replace(/_/g, "/")));
+  } catch {
+    return null;
+  }
+}
+
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
@@ -996,13 +1012,20 @@ const PLAN_CAPS: Record<string, { monthlyUsd: number; plans: number; label: stri
   preview: { monthlyUsd: 10.0, plans: 30, label: "Preview" },
 };
 
+// Founder accounts (testing, demos) keep Pro-level room without paying.
+const FOUNDER_EMAILS = ["oscar.cs.lee@gmail.com"];
+
 async function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
   try {
-    const { data } = await serviceDb().from("profiles").select("plan").eq("teacher_id", teacherId).maybeSingle();
+    const { data } = await serviceDb().from("profiles").select("plan, email").eq("teacher_id", teacherId).maybeSingle();
     const p = String(data?.plan ?? "").trim().toLowerCase();
-    return (p in PLAN_CAPS ? p : "preview") as keyof typeof PLAN_CAPS;
+    if (p in PLAN_CAPS) return p as keyof typeof PLAN_CAPS;
+    // No entitlement yet. Everyone starts on the trial's allowance — the old
+    // "preview = Pro credits for anyone" default was free Pro the moment the
+    // app went public.
+    return FOUNDER_EMAILS.includes(String(data?.email ?? "").trim().toLowerCase()) ? "preview" : "trial";
   } catch {
-    return "preview";
+    return "trial";
   }
 }
 
@@ -1278,12 +1301,10 @@ Deno.serve(async (req) => {
     if (payload?.name != null) row.name = String(payload.name).slice(0, 120);
     if (payload?.school != null) row.school = String(payload.school).slice(0, 200);
     if (payload?.region != null) row.region = String(payload.region).slice(0, 40);
-    // Plan comes from the RevenueCat entitlement sync — whitelist so a
-    // crafted request can't invent a tier. (Server-side receipt validation
-    // via RevenueCat webhooks is the hardening step before launch.)
-    if (payload?.plan != null && ["trial", "starter", "pro", "school"].includes(String(payload.plan))) {
-      row.plan = String(payload.plan);
-    }
+    // `plan` is deliberately NOT writable here. The anon key ships inside
+    // the APK, so anything this endpoint accepts, any teacher can set for
+    // themselves — a whitelist only limited them to picking "pro". Plans are
+    // written by the REVENUECAT-WEBHOOK function against a store receipt.
     // Marking defaults set in Settings, so they follow the account.
     if (payload?.defaultMode != null) row.default_mode = String(payload.defaultMode).slice(0, 40);
     if (payload?.defaultHarshness != null) {
@@ -1442,6 +1463,42 @@ Deno.serve(async (req) => {
     return json({ submissions: (data ?? []).map((r: any) => r.payload) });
   }
 
+  // ── Account deletion. Required by the App Store (5.1.1(v)) and Play:
+  //    a teacher who can create an account must be able to erase it from
+  //    inside the app. Unlike every other action this one is destructive and
+  //    irreversible, so it refuses to run on the strength of a teacherId in
+  //    the body — the caller must present their OWN signed-in token. The
+  //    gateway (verify_jwt) has already validated the signature; what's left
+  //    is checking the claims name the account being deleted. ──────────────
+  if (action === "delete_account") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+
+    const claims = jwtClaims(req.headers.get("authorization"));
+    if (claims?.role !== "authenticated" || String(claims?.sub ?? "") !== teacherId) {
+      return json({ error: "Sign in again before deleting your account." }, 403);
+    }
+
+    const db = serviceDb();
+    // Every table that holds this teacher's work. grade_cache is deliberately
+    // absent: its rows are keyed by a content hash, shared across accounts,
+    // and carry no teacher id — nothing in it identifies the teacher.
+    const owned = ["submissions_cloud", "collections_cloud", "answer_keys", "usage_log", "presets", "profiles"];
+    const failed: string[] = [];
+    for (const table of owned) {
+      const { error } = await db.from(table).delete().eq("teacher_id", teacherId);
+      // A table this project never created isn't a failure to delete from.
+      if (error && !/does not exist|schema cache/i.test(error.message)) failed.push(`${table}: ${error.message}`);
+    }
+    if (failed.length > 0) return json({ error: `Could not delete everything: ${failed.join("; ")}` }, 500);
+
+    // Last, so a failure above never leaves orphaned rows behind an
+    // un-signin-able account.
+    const { error: authError } = await db.auth.admin.deleteUser(teacherId);
+    if (authError) return json({ error: authError.message }, 500);
+    return json({ ok: true });
+  }
+
   // ── Setup lists (classes, students, student↔class links). Marked work
   //    already follows the account via submissions_cloud; these used to be
   //    phone-only, so clearing the app lost every class a teacher had made.
@@ -1537,7 +1594,7 @@ Deno.serve(async (req) => {
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
     const { data, error } = await serviceDb()
       .from("profiles")
-      .select("teacher_id, email, name, school, region, marking_feedback, default_mode, default_harshness, updated_at")
+      .select("teacher_id, email, name, school, region, marking_feedback, default_mode, default_harshness, plan, updated_at")
       .eq("teacher_id", teacherId)
       .maybeSingle();
     if (error) return json({ error: error.message }, 500);

@@ -166,7 +166,7 @@ class _PlansScreenState extends State<PlansScreen> {
           _CurrentPlanCard(usage: _usage, isPro: billing.isPro),
           const SizedBox(height: 18),
           Text(
-            'Every paid plan sends 15% to a classroom — you pick whose.',
+            'Every paid plan gives 10% to charities that help kids learn.',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 14),

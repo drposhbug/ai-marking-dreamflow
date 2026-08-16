@@ -2,3 +2,8 @@ project_id = "ai-marking-dreamflow"
 
 [functions.MARKING-PROCESS]
 verify_jwt = true
+
+# RevenueCat authenticates with its own shared-secret Authorization header,
+# not a Supabase JWT — the gateway must let the request through to it.
+[functions.REVENUECAT-WEBHOOK]
+verify_jwt = false
