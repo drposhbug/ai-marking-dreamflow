@@ -1,4 +1,4 @@
-package com.mycompany.CounterApp
+package com.markless.app
 
 import android.content.Intent
 import android.provider.OpenableColumns
