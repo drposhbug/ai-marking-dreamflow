@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
@@ -221,39 +222,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     }
   }
 
-  void _showUpgradeSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Markless plans', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 4),
-              Text('Start with a 7-day free trial', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 10),
-              const Text('•  Starter — \$6.99/mo · credits for ~120 typical tests'),
-              const Text('•  Pro ⭐ — \$14.99/mo · ~3× the credits (best value)'),
-              const Text('•  Pro Annual — \$119.99/yr (≈ \$10/mo) · same as Pro'),
-              const Text('•  School — \$24.99/mo · ~7.5× the credits'),
-              const SizedBox(height: 10),
-              const Text('Every paid plan sends 15% to a classroom — you pick whose.'),
-              const SizedBox(height: 12),
-              Text(
-                'Plans launch with the app-store release. During the preview you\'re on the Pro allowance.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  /// One plans surface for the whole app — tiers, live store prices and the
+  /// buy buttons all live on the Plans screen.
+  void _showUpgradeSheet() => context.push(AppRoutes.plans);
 
   @override
   void dispose() {

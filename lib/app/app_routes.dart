@@ -9,6 +9,7 @@ class AppRoutes {
   static const settings = '/settings';
 
   static const planning = '/planning';
+  static const plans = '/plans';
 
   static const imagePreview = '/grading/image-preview';
   static const gradingContext = '/grading/context';
