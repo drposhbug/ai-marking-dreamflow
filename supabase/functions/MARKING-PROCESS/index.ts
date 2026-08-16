@@ -24,6 +24,10 @@
 // Secrets required (Dashboard → Edge Functions → Secrets, or `npx supabase secrets set`):
 //   ANTHROPIC_API_KEY  — from https://platform.claude.com
 //   GEMINI_API_KEY     — from https://aistudio.google.com/apikey
+//   DEEPSEEK_API_KEY   — optional, from https://platform.deepseek.com/api_keys.
+//                         Without it, keyed homework/test marking silently
+//                         skips the cheap objective route (see "Cheap objective
+//                         route" below) and pays frontier prices instead.
 //
 // Run SETUP-DB once after deploying to create the grade_cache table.
 //
@@ -124,7 +128,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 21;
+const CACHE_VERSION = 22;
 
 // A keyless graded mark works out every correct answer anyway — store that
 // as a real answer key so the REST of the class marks against it on the
@@ -665,12 +669,12 @@ Do all of the following:
    - Only if the paper shows no marks at all, use the fallback total marks from CONTEXT.
    - Grade ONLY what is visible. NEVER deduct for questions, sections, or pages that are not in the images — treat the visible pages as the entire submission. If everything visible is fully correct, the score must be full marks.
    - percentage must equal rawScore / maxScore * 100 (rounded is fine).
-6. Ontario/Canadian KTCA marking: many Canadian tests divide their sections into the Ontario achievement categories — Knowledge/Understanding, Thinking/Inquiry, Communication, Application (e.g. "Part A – Knowledge Questions (10 marks)", "Part D – Application Questions (10 marks)"). If the visible sections are labeled with these categories:
+6. Ontario/Canadian KTCA marking: many Canadian tests divide their sections into the Ontario achievement categories — Knowledge/Understanding (short field name "Knowledge"), Thinking/Inquiry (short field name "Thinking"), Communication, Application (e.g. "Part A – Knowledge Questions (10 marks)", "Part D – Application Questions (10 marks)"). If the visible sections are labeled with these categories:
    - A question counts ONLY toward the category of the section it appears in.
    - questionLabel for annotations in KTCA sections uses the CATEGORY name instead of "Q1": "Knowledge 1", "Thinking 2" — or just "Thinking" when that section has a single question. The teacher must see the category at a glance on every mark.
    - Score each visible category separately: marks earned on that section's visible questions out of that section's visible printed marks.
    - Put one entry per visible category FIRST in criteriaBreakdown, named exactly "Knowledge", "Thinking", "Communication", or "Application" (only the categories actually visible), with that category's marks and a feedback code. Any requested criteria follow after as feedback-only entries.
-   - The category entry's feedback must JUSTIFY lost marks concretely — name the questions and the reason ("#6 units missing K2, C1", or free text like "no justification shown C2; sig figs C3"). Never a generic comment: a teacher reading "Communication 6/8" must see exactly where the 2 marks went.
+   - The category entry's feedback must JUSTIFY lost marks concretely, as FREE TEXT — none of the generic CRITERIA CODES below fit a specific justification, and this text must NOT start with "#" (that syntax selects a CRITERIA CODE sentence instead, wrecking the justification). Name the questions and the reason: "Q6 units missing K2, C1", or "no justification shown C2; sig figs C3". Never a generic comment: a teacher reading "Communication 6/8" must see exactly where the 2 marks went.
    - The overall percentage = the AVERAGE of the visible category percentages, each category weighted equally (this is how KTCA works — NOT total marks divided by total marks). rawScore and maxScore still report the total visible marks earned and available.
    - If the paper's sections are not labeled with KTCA categories, skip this rule and use percentage = rawScore / maxScore * 100.
 7. Choose gradingFormat: "levels" for work at Grades 1-8 (see GRADE-LEVEL EXPECTATIONS below) and for essays, lab reports, and rubric-style work; "percentage" for Grades 9-13 tests, quizzes, and homework.
@@ -1165,11 +1169,15 @@ async function callDeepSeek(userText: string, usage?: { inputTokens: number; out
   return JSON.parse(cleaned);
 }
 
-// Vision parse for the objective route: transcribe only, never judge.
+// Vision parse for the objective route: transcribe only, never judge. The
+// downstream grader (DeepSeek) is text-only and never sees the images, so a
+// question answered with a hand-drawn diagram must be flagged HERE — the
+// only step with eyes on the page — or the "?"/teacher-marks-it-by-hand rule
+// for drawings (STATIC_SYSTEM rule 3) can never fire on this route.
 const PARSE_PROMPT =
-  `You are a precise transcription engine for photographed school work. Transcribe every question label and EXACTLY what the student wrote for it — do NOT grade, do NOT correct errors, keep the student's wording and numbers verbatim. Record where each answer sits on its page.`;
+  `You are a precise transcription engine for photographed school work. Transcribe every question label and EXACTLY what the student wrote for it — do NOT grade, do NOT correct errors, keep the student's wording and numbers verbatim. Record where each answer sits on its page. When a question's answer is primarily a hand-drawn diagram, graph, sketch, or geometric construction rather than written text/numbers (a free-body diagram, a ray diagram, a plotted graph, a labeled sketch), set isDrawing true instead of trying to transcribe or describe the drawing. Simple diagram READING — copying numbers the student read off a printed graph — is normal transcription, not a drawing.`;
 const PARSE_SHAPE = `\n\nReturn ONLY a single JSON object:
-{"studentNameOnPaper": string or null, "detectedSubject": string, "questions": [{"label": string, "pageIndex": integer (0-based), "studentWork": string, "positionTop": number (0-1 fraction of page height), "positionLeft": number (0-1 fraction of page width)}]}`;
+{"studentNameOnPaper": string or null, "detectedSubject": string, "questions": [{"label": string, "pageIndex": integer (0-based), "studentWork": string, "isDrawing": boolean, "positionTop": number (0-1 fraction of page height), "positionLeft": number (0-1 fraction of page width)}]}`;
 
 async function callGemini(imagesBase64: string[], mediaType: string, prompt: string, jsonInstruction: string) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
@@ -1898,7 +1906,11 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
   const keyedObjective = !!answerKey && (mode === "homework" || mode === "testQuiz");
   const elementaryKeyless = !answerKey && mode === "homework" &&
     expectationGrade != null && expectationGrade <= 6;
-  const objectiveRoute = !!Deno.env.get("DEEPSEEK_API_KEY") && !preferGemini &&
+  const hasDeepSeekKey = !!Deno.env.get("DEEPSEEK_API_KEY");
+  if (keyedObjective && !preferGemini && !hasDeepSeekKey) {
+    console.warn("keyed cheap route skipped: DEEPSEEK_API_KEY is missing — this keyed request is paying frontier prices instead of the cheap deterministic route.");
+  }
+  const objectiveRoute = hasDeepSeekKey && !preferGemini &&
     (keyedObjective || elementaryKeyless);
   if (objectiveRoute) {
     try {
@@ -1913,7 +1925,7 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
       );
       const dsUsage = { inputTokens: 0, outputTokens: 0 };
       const transcript =
-        `\n\nA vision pass has already transcribed the pages. Treat this transcript as exactly what the student wrote (do not invent or omit answers), and reuse its pageIndex, positionTop, and positionLeft values for your annotations:\n${JSON.stringify(parsed)}`;
+        `\n\nA vision pass has already transcribed the pages. Treat this transcript as exactly what the student wrote (do not invent or omit answers), and reuse its pageIndex, positionTop, and positionLeft values for your annotations. A question with "isDrawing": true means the student's answer is a hand-drawn diagram/graph/sketch the vision pass could not transcribe as text — you cannot see the page either, so apply the drawings case of the QUESTIONS ONLY THE TEACHER CAN MARK rule ("?" mark, feedback "check drawing") rather than guessing its content:\n${JSON.stringify(parsed)}`;
       const raw = await callDeepSeek(geminiPrompt + transcript + shape, dsUsage);
       await logUsage(gradeTeacherId, "grade", dsUsage.inputTokens, dsUsage.outputTokens, DEEPSEEK_PRICE_IN, DEEPSEEK_PRICE_OUT);
       await cacheWrite(cacheKey, "deepseek", raw, imageHashes);
