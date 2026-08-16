@@ -4,72 +4,59 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Supabase integration hook.
 ///
-/// Notes:
-/// - If Supabase isn't configured (missing anon key or init failure), we keep the app usable
-///   in local-only mode.
+/// Everything here goes through the MARKING-PROCESS edge function rather
+/// than straight at the tables: the teacher profile lives in `profiles`,
+/// which is row-level-secured, so the function's service role is what may
+/// read and write it. (Earlier builds talked to a `users` table that never
+/// existed on this project — every call failed silently, which is why the
+/// default mode/harshness never followed the account.)
+///
+/// If Supabase isn't configured (missing anon key or init failure), we keep
+/// the app usable in local-only mode.
 class SupabaseHook extends ChangeNotifier {
-  SupabaseClient? get _client => Supabase.instance.client;
-
-  bool get isConfigured {
+  SupabaseClient? get _client {
     try {
       // Accessing Supabase.instance.client throws if initialize() was never called.
-      Supabase.instance.client;
-      return true;
+      return Supabase.instance.client;
     } catch (_) {
-      return false;
+      return null;
     }
   }
 
+  bool get isConfigured => _client != null;
+
   Future<void> updateUserPreferences({required String userId, GradingMode? defaultMode, int? defaultHarshness}) async {
-    if (!isConfigured) {
-      debugPrint('Supabase not configured. Skipping users preference update for $userId.');
+    final client = _client;
+    if (client == null || userId.trim().isEmpty) {
+      debugPrint('Supabase not configured. Skipping profile preference update for $userId.');
       return;
     }
-
-    final updates = <String, dynamic>{};
-    if (defaultMode != null) updates['default_mode'] = defaultMode.name;
-    if (defaultHarshness != null) updates['default_harshness'] = defaultHarshness;
-    if (updates.isEmpty) return;
+    if (defaultMode == null && defaultHarshness == null) return;
 
     try {
-      await _client!.from('users').update(updates).eq('id', userId);
+      await client.functions.invoke('MARKING-PROCESS', body: {
+        'action': 'save_profile',
+        'teacherId': userId,
+        if (defaultMode != null) 'defaultMode': defaultMode.name,
+        if (defaultHarshness != null) 'defaultHarshness': defaultHarshness,
+      });
     } catch (e) {
       debugPrint('Supabase updateUserPreferences failed: $e');
     }
   }
 
-  Future<void> updateUserProfileByEmail({required String email, String? displayName, String? title, String? school, String? firstName, String? lastName}) async {
-    final e = email.trim().toLowerCase();
-    if (e.isEmpty || !isConfigured) return;
-
-    final updates = <String, dynamic>{};
-    if (displayName != null) updates['name'] = displayName;
-    if (title != null) updates['title'] = title;
-    if (school != null) updates['school'] = school;
-    if (firstName != null) updates['first_name'] = firstName;
-    if (lastName != null) updates['last_name'] = lastName;
-    if (updates.isEmpty) return;
-
+  /// The teacher's saved profile row (name, school, region, default mode and
+  /// harshness). Empty when Supabase isn't configured or nothing is saved yet.
+  Future<Map<String, dynamic>> fetchProfile({required String teacherId}) async {
+    final client = _client;
+    if (client == null || teacherId.trim().isEmpty) return const {};
     try {
-      await _client!.from('users').update(updates).eq('email', e);
+      final res = await client.functions.invoke('MARKING-PROCESS', body: {'action': 'get_profile', 'teacherId': teacherId});
+      final data = res.data;
+      final profile = data is Map ? data['profile'] : null;
+      return profile is Map ? profile.cast<String, dynamic>() : const {};
     } catch (err) {
-      debugPrint('Supabase updateUserProfileByEmail failed: $err');
-    }
-  }
-
-  /// Fetches a teacher profile row from Supabase `users` table by email.
-  ///
-  /// Returns an empty map if Supabase isn't configured or no row is found.
-  Future<Map<String, dynamic>> fetchUserByEmail(String email) async {
-    final e = email.trim().toLowerCase();
-    if (e.isEmpty || !isConfigured) return const {};
-    try {
-      final res = await _client!.from('users').select().eq('email', e).limit(1);
-      final rows = (res as List?) ?? const [];
-      final first = rows.isEmpty ? null : rows.first;
-      return first is Map ? first.cast<String, dynamic>() : const {};
-    } catch (err) {
-      debugPrint('Supabase fetchUserByEmail failed: $err');
+      debugPrint('Supabase fetchProfile failed: $err');
       return const {};
     }
   }

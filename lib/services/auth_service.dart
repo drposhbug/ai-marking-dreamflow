@@ -370,17 +370,15 @@ class AuthService extends ChangeNotifier {
 
     try {
       final hook = SupabaseHook();
-      final row = await hook.fetchUserByEmail(user.email);
+      final row = await hook.fetchProfile(teacherId: user.id);
       if (row.isEmpty) return;
 
-      final firstName = (row['first_name'] ?? row['firstName'] ?? '').toString().trim();
-      final lastName = (row['last_name'] ?? row['lastName'] ?? '').toString().trim();
       final school = (row['school'] ?? '').toString().trim();
 
       // Gap-filler only: never overwrite a name the teacher already has,
-      // and NEVER apply a title from the legacy table — honorifics are
+      // and NEVER apply a title from the saved profile — honorifics are
       // gendered, so they come only from the teacher's own explicit pick.
-      final displayName = [firstName, lastName].where((e) => e.trim().isNotEmpty).join(' ').trim();
+      final displayName = (row['name'] ?? '').toString().trim();
       final next = user.copyWith(
         name: user.name.isEmpty ? (displayName.isEmpty ? user.name : displayName) : user.name,
         school: school.isEmpty ? user.school : school,

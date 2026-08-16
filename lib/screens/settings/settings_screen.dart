@@ -478,7 +478,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // Best-effort Supabase sync (safe when not configured).
     try {
-      await context.read<SupabaseHook>().updateUserProfileByEmail(email: auth.email, displayName: nextName, school: nextSchool, title: title);
       await AiGradingService().saveProfile(teacherId: auth.id, name: nextName, school: nextSchool);
     } catch (e) {
       debugPrint('SettingsScreen._editProfile Supabase sync failed: $e');
