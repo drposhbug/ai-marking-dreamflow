@@ -1284,6 +1284,12 @@ Deno.serve(async (req) => {
     if (payload?.plan != null && ["trial", "starter", "pro", "school"].includes(String(payload.plan))) {
       row.plan = String(payload.plan);
     }
+    // Marking defaults set in Settings, so they follow the account.
+    if (payload?.defaultMode != null) row.default_mode = String(payload.defaultMode).slice(0, 40);
+    if (payload?.defaultHarshness != null) {
+      const h = Number(payload.defaultHarshness);
+      if (Number.isFinite(h)) row.default_harshness = Math.min(10, Math.max(1, Math.round(h)));
+    }
     if (Array.isArray(payload?.markingFeedback)) {
       row.marking_feedback = payload.markingFeedback
         .map((f: unknown) => String(f).slice(0, 300))
@@ -1436,6 +1442,42 @@ Deno.serve(async (req) => {
     return json({ submissions: (data ?? []).map((r: any) => r.payload) });
   }
 
+  // ── Setup lists (classes, students, student↔class links). Marked work
+  //    already follows the account via submissions_cloud; these used to be
+  //    phone-only, so clearing the app lost every class a teacher had made.
+  //    Stored whole, one JSON array per teacher + kind. ──────────────────
+  if (action === "save_collection" || action === "get_collection") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    const kind = String(payload?.kind ?? "").trim();
+    const KINDS = ["classes", "students", "student_class_links"];
+    if (!teacherId || !KINDS.includes(kind)) return json({ error: "teacherId and a known kind are required" }, 400);
+
+    if (action === "get_collection") {
+      const { data, error } = await serviceDb()
+        .from("collections_cloud")
+        .select("payload")
+        .eq("teacher_id", teacherId)
+        .eq("kind", kind)
+        .maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      const items = data?.payload;
+      return json({ items: Array.isArray(items) ? items : [] });
+    }
+
+    const items = payload?.items;
+    if (!Array.isArray(items)) return json({ error: "items must be an array" }, 400);
+    // Cap the blob so one account can't push an unbounded row.
+    if (items.length > 5000) return json({ error: "too many items" }, 400);
+    const { error } = await serviceDb()
+      .from("collections_cloud")
+      .upsert(
+        { teacher_id: teacherId, kind, payload: items, updated_at: new Date().toISOString() },
+        { onConflict: "teacher_id,kind" },
+      );
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
   // ── Referrals: each teacher has a share code; referring one teacher
   //    unlocks the planning assistant for the referrer. ──────────────────
   if (action === "get_referral") {
@@ -1495,7 +1537,7 @@ Deno.serve(async (req) => {
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
     const { data, error } = await serviceDb()
       .from("profiles")
-      .select("teacher_id, email, name, school, region, marking_feedback, updated_at")
+      .select("teacher_id, email, name, school, region, marking_feedback, default_mode, default_harshness, updated_at")
       .eq("teacher_id", teacherId)
       .maybeSingle();
     if (error) return json({ error: error.message }, 500);

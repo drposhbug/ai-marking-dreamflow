@@ -84,7 +84,44 @@ Deno.serve(async (req) => {
       )`;
     await sql`alter table public.submissions_cloud enable row level security`;
     await sql`create index if not exists submissions_cloud_teacher_time_idx on public.submissions_cloud (teacher_id, created_at desc)`;
+    // Classes, students and student↔class links: one JSON array per teacher
+    // and kind, so a teacher's setup survives a wiped app or a new phone.
+    await sql`
+      create table if not exists public.collections_cloud (
+        teacher_id text not null,
+        kind text not null,
+        payload jsonb not null,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (teacher_id, kind)
+      )`;
+    await sql`alter table public.collections_cloud enable row level security`;
+    // Marking schemes: the legacy table predates per-class schemes.
+    await sql`
+      create table if not exists public.presets (
+        id text primary key,
+        teacher_id text not null,
+        class_id text,
+        name text,
+        grading_mode text,
+        criteria jsonb,
+        harshness int,
+        notes text,
+        is_default boolean not null default false,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      )`;
+    await sql`alter table public.presets add column if not exists class_id text`;
+    await sql`alter table public.presets add column if not exists grading_mode text`;
+    await sql`alter table public.presets add column if not exists criteria jsonb`;
+    await sql`alter table public.presets add column if not exists harshness int`;
+    await sql`alter table public.presets add column if not exists notes text`;
+    await sql`alter table public.presets add column if not exists is_default boolean not null default false`;
+    await sql`create index if not exists presets_teacher_idx on public.presets (teacher_id)`;
     await sql`alter table public.profiles add column if not exists plan text`;
+    // Marking defaults picked in Settings follow the account.
+    await sql`alter table public.profiles add column if not exists default_mode text`;
+    await sql`alter table public.profiles add column if not exists default_harshness int`;
     await sql`alter table public.profiles add column if not exists referral_code text`;
     await sql`alter table public.profiles add column if not exists referred_by text`;
     await sql`alter table public.profiles add column if not exists referral_count int not null default 0`;
