@@ -1053,7 +1053,7 @@ class _HeroGrade extends StatelessWidget {
       max = result!.maxScore;
       final totalPct = max > 0 ? raw / max * 100 : result!.percentage;
       final avgPct = ktca.length >= 2
-          ? ktca.map((c) => c.score / c.maxScore * 100).reduce((a, b) => a + b) / ktca.length
+          ? ktca.map((c) => c.maxScore > 0 ? c.score / c.maxScore * 100 : 0.0).reduce((a, b) => a + b) / ktca.length
           : result!.percentage;
       pct = (onToggleAverage != null && !useCategoryAverage) ? totalPct : (ktca.length >= 2 ? avgPct : result!.percentage);
     } else if (sub != null) {
