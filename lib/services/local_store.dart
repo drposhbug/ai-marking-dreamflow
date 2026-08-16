@@ -22,4 +22,15 @@ class LocalStore {
       debugPrint('LocalStore.setString failed ($key): $e');
     }
   }
+
+  /// Wipes everything this app has stored on the phone. Only account
+  /// deletion calls it — "delete my account" has to mean the device copy too.
+  Future<void> clear() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (e) {
+      debugPrint('LocalStore.clear failed: $e');
+    }
+  }
 }

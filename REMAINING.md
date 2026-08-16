@@ -105,3 +105,17 @@ reference it precisely. Delete anything already done; add anything missing.
 - Backend agent works in `/supabase` only.
 - Report back after each R-item — do not run the whole list unattended.
 - Return short summaries, not full histories.
+## R6 — Class item analysis (Shipaton demo feature)
+
+- [ ] **R6.1** After a class set completes, aggregate per-question results across
+      all papers in the batch: % correct, average score, most common wrong answer
+      or error pattern.
+- [ ] **R6.2** Class summary screen showing questions ranked worst→best, with the
+      KTCA category and a one-line "what went wrong" per question.
+- [ ] **R6.3** "Reteach" suggestion per weak question — one short paragraph the
+      teacher can use or ignore.
+- [ ] **R6.4** Per-student view: which questions this student missed that most of
+      the class got, and vice versa.
+- [ ] **R6.5** No new schema tables if avoidable — derive from existing per-mark
+      results. If a table is genuinely needed, propose it before creating it.
+- [ ] **R6.6** Must not add cost per mark — analysis runs once per batch, not per paper.

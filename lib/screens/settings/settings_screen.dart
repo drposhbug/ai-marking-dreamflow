@@ -9,6 +9,7 @@ import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
+import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/region_picker.dart';
@@ -45,6 +46,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
         debugPrint('SettingsScreen usage load failed: $e');
       }
     });
+  }
+
+  bool _deleting = false;
+
+  /// Erases the account everywhere — required by both app stores, and the
+  /// one action in the app that can't be undone, so it asks twice: once for
+  /// the consequences, once with the word DELETE typed out.
+  Future<void> _deleteAccount() async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete your account?'),
+        content: Text(
+          'This erases ${auth.email} for good: every marked test, class, student, '
+          'answer key and setting, on this phone and on our servers. Nobody can '
+          'bring it back — not even us.\n\n'
+          'Cancelling a subscription is separate: do that in the Play Store or App Store.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep my account')),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AiMarkerColors.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final typed = TextEditingController();
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Type DELETE to confirm'),
+        content: TextField(
+          controller: typed,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(hintText: 'DELETE'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AiMarkerColors.error),
+            onPressed: () => Navigator.pop(context, typed.text.trim().toUpperCase() == 'DELETE'),
+            child: const Text('Delete for good'),
+          ),
+        ],
+      ),
+    );
+    typed.dispose();
+    if (sure != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      // Server first: if it fails the teacher still has their account, which
+      // is the recoverable side of the mistake.
+      await AiGradingService().deleteAccountCloud(teacherId: auth.id);
+      await const LocalStore().clear();
+      if (!mounted) return;
+      await context.read<BillingService>().logOut();
+      if (!mounted) return;
+      await context.read<AuthService>().signOut();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your account and everything in it has been deleted.')),
+      );
+      context.go(AppRoutes.login);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Couldn\'t delete the account: ${e.toString().replaceFirst('Exception: ', '')}')),
+      );
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 
   /// Opt-in consent for automatic Drive export — requires a Google session
@@ -645,6 +726,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
               child: const Text('→ Sign Out'),
             ),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: AiMarkerColors.neutral, splashFactory: NoSplash.splashFactory),
+              onPressed: _deleting ? null : _deleteAccount,
+              child: _deleting
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Delete my account'),
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
