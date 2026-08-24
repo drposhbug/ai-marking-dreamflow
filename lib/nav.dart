@@ -13,6 +13,7 @@ import 'package:marking_prokect_v2/screens/grading/result_screen.dart';
 import 'package:marking_prokect_v2/screens/library/library_screen.dart';
 import 'package:marking_prokect_v2/screens/login/login_screen.dart';
 import 'package:marking_prokect_v2/screens/onboarding/onboarding_screen.dart';
+import 'package:marking_prokect_v2/screens/import/import_responses_screen.dart';
 import 'package:marking_prokect_v2/screens/planning/planning_screen.dart';
 import 'package:marking_prokect_v2/screens/plans/plans_screen.dart';
 import 'package:marking_prokect_v2/screens/settings/settings_screen.dart';
@@ -55,6 +56,7 @@ class AppRouter {
       ),
       GoRoute(path: AppRoutes.planning, name: 'planning', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PlanningScreen())),
       GoRoute(path: AppRoutes.plans, name: 'plans', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PlansScreen())),
+      GoRoute(path: AppRoutes.importResponses, name: 'importResponses', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ImportResponsesScreen())),
       GoRoute(path: AppRoutes.imagePreview, name: 'imagePreview', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ImagePreviewScreen())),
       GoRoute(path: AppRoutes.gradingContext, name: 'gradingContext', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: GradingContextScreen())),
       GoRoute(path: AppRoutes.result, name: 'result', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
