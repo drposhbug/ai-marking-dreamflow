@@ -1499,6 +1499,130 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  // ── Marking typed responses (CSV / Google Form import). No images: the
+  //    teacher uploads the form's response sheet, multiple choice is marked
+  //    on the phone for free, and only the written answers land here. All
+  //    answers to ONE question are marked in ONE call, so the whole class is
+  //    judged by the same reading of the question — and identical answers
+  //    can't earn different marks. ─────────────────────────────────────────
+  if (action === "mark_responses") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const questions = Array.isArray(payload?.questions) ? payload.questions : [];
+    if (questions.length === 0) return json({ error: "questions are required" }, 400);
+    const totalAnswers = questions.reduce(
+      (n: number, q: unknown) => n + ((q as { answers?: unknown[] })?.answers?.length ?? 0), 0);
+    if (totalAnswers === 0) return json({ error: "no answers to mark" }, 400);
+    if (totalAnswers > 600) return json({ error: "Too many answers in one import — split the class set." }, 400);
+
+    const gate = await budgetGate(teacherId, true);
+    if (gate) return gate;
+
+    const harshness = Math.min(10, Math.max(1, Number(payload?.harshness ?? 5) || 5));
+    const subject = String(payload?.subject ?? "").slice(0, 80);
+    const gradeLevel = Number(payload?.gradeLevel ?? 0) || null;
+
+    const MARK_SCHEMA = {
+      type: "object",
+      properties: {
+        marks: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              i: { type: "integer" },
+              score: { type: "number" },
+              correct: { type: "boolean" },
+              feedback: { type: "string" },
+            },
+            required: ["i", "score", "correct", "feedback"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["marks"],
+      additionalProperties: false,
+    };
+
+    const rulesFor = (q: { prompt: string; maxMarks: number; keyAnswer?: string }, rows: { i: number; text: string }[]) => {
+      const key = String(q.keyAnswer ?? "").trim();
+      return `You are marking one question from a ${subject || "school"} assessment${gradeLevel ? ` for grade ${gradeLevel}` : ""}. Every student's typed answer is below — mark them ALL.
+
+QUESTION: ${String(q.prompt).slice(0, 600)}
+MARKS AVAILABLE: ${q.maxMarks}
+${key ? `MODEL ANSWER / RUBRIC: ${key.slice(0, 800)}` : "No model answer provided — judge against what the question asks."}
+HARSHNESS: ${harshness}/10 (5 = balanced; below = lenient on wording, above = strict on precision).
+
+RULES:
+- Score each answer 0 to ${q.maxMarks} in half-mark steps. "correct" = full marks.
+- Judge MEANING, not wording: an answer that says the right thing in the student's own words earns the marks. Spelling and grammar cost nothing unless the question is about them.
+- An empty answer, "idk", or off-topic filler scores 0 with feedback "No real attempt.".
+- BE CONSISTENT: answers that say the same thing must get the same score.
+- feedback: one sentence to the student, at most 15 words, specific to what THEY wrote.
+
+ANSWERS (mark every one, return the same "i" you were given):
+${rows.map((r) => `[${r.i}] ${r.text}`).join("\n")}`;
+    };
+
+    // deno-lint-ignore no-explicit-any
+    const results: any[] = [];
+    let usedProvider = "claude";
+    for (const q of questions) {
+      const label = String(q?.label ?? "Q").slice(0, 40);
+      const maxMarks = Math.max(0.5, Math.min(100, Number(q?.maxMarks ?? 1) || 1));
+      const kind = String(q?.kind ?? "short");
+      const answers = (Array.isArray(q?.answers) ? q.answers : [])
+        // deno-lint-ignore no-explicit-any
+        .map((a: any) => ({ i: Number(a?.i ?? -1), text: String(a?.text ?? "").slice(0, 2500) }))
+        .filter((a: { i: number }) => a.i >= 0);
+      // deno-lint-ignore no-explicit-any
+      const marks: any[] = [];
+      // Chunked so one huge class can't blow the output limit; each chunk
+      // still contains only this question, preserving cross-answer consistency.
+      for (let at = 0; at < answers.length; at += 25) {
+        const rows = answers.slice(at, at + 25);
+        const prompt = rulesFor({ prompt: String(q?.prompt ?? label), maxMarks, keyAnswer: q?.keyAnswer }, rows) +
+          `\n\nReturn ONLY JSON: {"marks":[{"i":int,"score":number,"correct":boolean,"feedback":string}]}`;
+        const usage = { inputTokens: 0, outputTokens: 0 };
+        // deno-lint-ignore no-explicit-any
+        let parsed: any = null;
+        // Short answers with a model answer are an objective check — the
+        // cheap text route handles them; paragraphs get the frontier model.
+        if (kind === "short" && Deno.env.get("DEEPSEEK_API_KEY")) {
+          try {
+            parsed = await callDeepSeek(prompt, usage);
+            usedProvider = "deepseek";
+            await logUsage(teacherId, "mark_responses", usage.inputTokens, usage.outputTokens, DEEPSEEK_PRICE_IN, DEEPSEEK_PRICE_OUT);
+          } catch (e) {
+            console.error("DeepSeek mark_responses failed, falling back to Claude:", e instanceof Error ? e.message : e);
+            parsed = null;
+          }
+        }
+        if (parsed == null) {
+          parsed = await callClaude([], "image/jpeg", { userText: prompt, schema: MARK_SCHEMA, usage });
+          await logUsage(teacherId, "mark_responses", usage.inputTokens, usage.outputTokens);
+        }
+        const got = Array.isArray(parsed?.marks) ? parsed.marks : [];
+        const byI = new Map(got.map((m: { i: number }) => [Number(m?.i), m]));
+        for (const r of rows) {
+          // deno-lint-ignore no-explicit-any
+          const m: any = byI.get(r.i);
+          const raw = Number(m?.score ?? 0) || 0;
+          // Snap to half marks inside 0..maxMarks no matter what came back.
+          const score = Math.min(maxMarks, Math.max(0, Math.round(raw * 2) / 2));
+          marks.push({
+            i: r.i,
+            score,
+            correct: m?.correct === true || score >= maxMarks,
+            feedback: String(m?.feedback ?? "").slice(0, 200),
+          });
+        }
+      }
+      results.push({ label, maxMarks, marks });
+    }
+    return json({ results, provider: usedProvider });
+  }
+
   // ── Setup lists (classes, students, student↔class links). Marked work
   //    already follows the account via submissions_cloud; these used to be
   //    phone-only, so clearing the app lost every class a teacher had made.

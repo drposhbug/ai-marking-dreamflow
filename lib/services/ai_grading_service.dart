@@ -575,6 +575,56 @@ class AiGradingService {
     );
   }
 
+  /// Marks typed answers from an imported response sheet (CSV / Google
+  /// Form). One entry per question; every student's answer to that question
+  /// is judged in the same call, so marking is consistent across the class.
+  /// Returns {label: {rowIndex: {score, correct, feedback}}}.
+  Future<Map<String, Map<int, Map<String, dynamic>>>> markResponses({
+    required String teacherId,
+    required List<Map<String, dynamic>> questions,
+    String? subject,
+    int? gradeLevel,
+    int harshness = 5,
+  }) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {
+        'action': 'mark_responses',
+        'teacherId': teacherId,
+        'harshness': harshness,
+        if (subject != null && subject.isNotEmpty) 'subject': subject,
+        if (gradeLevel != null) 'gradeLevel': gradeLevel,
+        'questions': questions,
+      },
+    );
+    final data = res.data;
+    if (data is Map && data['error'] != null) {
+      _maybeThrowUsageLimitMap(data);
+      throw Exception(data['error'].toString());
+    }
+    final out = <String, Map<int, Map<String, dynamic>>>{};
+    if (data is Map && data['results'] is List) {
+      for (final q in (data['results'] as List).whereType<Map>()) {
+        final label = (q['label'] ?? '').toString();
+        final byRow = <int, Map<String, dynamic>>{};
+        for (final m in (q['marks'] as List? ?? const []).whereType<Map>()) {
+          byRow[(m['i'] as num?)?.toInt() ?? -1] = m.cast<String, dynamic>();
+        }
+        out[label] = byRow;
+      }
+    }
+    return out;
+  }
+
+  /// Throws [UsageLimitException] when a response map is the budget gate's
+  /// 429 body rather than a marked result.
+  void _maybeThrowUsageLimitMap(Map data) {
+    if (data['error'] == 'usage_limit') {
+      throw UsageLimitException((data['scope'] ?? '').toString(), (data['message'] ?? 'Marking credits used up.').toString());
+    }
+  }
+
   /// Erases the account and everything in it, server-side. The function
   /// checks the caller's own signed-in token, so this only ever deletes the
   /// teacher who asked. Throws when anything is left behind.
