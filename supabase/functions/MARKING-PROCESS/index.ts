@@ -1073,6 +1073,19 @@ async function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
 // currently on a PAID plan adds bonus marking credits to the monthly cap —
 // the reward is the thing teachers run out of, and it can't be farmed with
 // free accounts because unpaid referrals add nothing.
+// Measured cost of one paper, used ONLY to show the teacher what a choice
+// will cost before they make it (the real bill is always metered from
+// actual tokens). From admin_stats, 2026-08-25.
+const TYPICAL_LIVE_USD = 0.039;
+const TYPICAL_OVERNIGHT_USD = 0.0078;
+
+// Marking a class set on the spot costs ~5x what marking it overnight does,
+// so it is what the paid tiers buy. Cheaper plans mark overnight — with one
+// carve-out enforced in the app: the PILOT paper of a set always marks live
+// on every plan, because approving the first result before the other 29 go
+// out is a safety check, not a premium feature.
+const INSTANT_MARKING_PLANS = ["pro", "pro_annual", "school", "preview"];
+
 // Bonus credits per PAID referral. Comes straight out of the 50% margin,
 // so it is sized against what marking actually costs now: $0.20 buys ~25
 // papers overnight, where $0.65 was priced for the old $0.026/mark era and
@@ -1564,6 +1577,12 @@ Deno.serve(async (req) => {
         dayPct: Math.min(100, Math.round((day / (monthlyCap * 0.25)) * 100)),
         weekPct: Math.min(100, Math.round((week / (monthlyCap * 0.5)) * 100)),
         monthPct: Math.min(100, Math.round((month / monthlyCap) * 100)),
+        // So the app can show what a choice costs BEFORE it is made:
+        // "mark now" against "mark overnight" as a share of the month.
+        monthlyCapUsd: Number(monthlyCap.toFixed(4)),
+        liveUsdPerPaper: TYPICAL_LIVE_USD,
+        overnightUsdPerPaper: TYPICAL_OVERNIGHT_USD,
+        instantMarking: INSTANT_MARKING_PLANS.includes(plan),
       });
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, 500);

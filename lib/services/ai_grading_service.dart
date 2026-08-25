@@ -154,12 +154,34 @@ class UsageSummary {
   final int dayPct;
   final int weekPct;
   final int monthPct;
+
+  /// Whether this plan may mark a class set on the spot. Cheaper plans mark
+  /// overnight; the pilot paper is always live regardless.
+  final bool instantMarking;
+
+  /// This month's credit allowance and what a paper typically costs, so a
+  /// choice can show its price before the teacher makes it.
+  final double monthlyCapUsd;
+  final double liveUsdPerPaper;
+  final double overnightUsdPerPaper;
+
   const UsageSummary({
     required this.planLabel,
     required this.dayPct,
     required this.weekPct,
     required this.monthPct,
+    this.instantMarking = true,
+    this.monthlyCapUsd = 0,
+    this.liveUsdPerPaper = 0.039,
+    this.overnightUsdPerPaper = 0.0078,
   });
+
+  /// What marking [papers] would cost, as a share of the month's credits.
+  int pctFor(int papers, {required bool overnight}) {
+    if (monthlyCapUsd <= 0) return 0;
+    final each = overnight ? overnightUsdPerPaper : liveUsdPerPaper;
+    return ((papers * each) / monthlyCapUsd * 100).clamp(0, 100).round();
+  }
 }
 
 class ReferralStatus {
@@ -553,6 +575,10 @@ class AiGradingService {
         dayPct: (data['dayPct'] as num?)?.toInt() ?? 0,
         weekPct: (data['weekPct'] as num?)?.toInt() ?? 0,
         monthPct: (data['monthPct'] as num?)?.toInt() ?? 0,
+        instantMarking: data['instantMarking'] != false,
+        monthlyCapUsd: (data['monthlyCapUsd'] as num?)?.toDouble() ?? 0,
+        liveUsdPerPaper: (data['liveUsdPerPaper'] as num?)?.toDouble() ?? 0.039,
+        overnightUsdPerPaper: (data['overnightUsdPerPaper'] as num?)?.toDouble() ?? 0.0078,
       );
     }
     throw Exception('Usage lookup failed: $data');
