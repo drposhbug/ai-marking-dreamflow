@@ -274,6 +274,33 @@ class _ImportResponsesScreenState extends State<ImportResponsesScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Card(
+          color: AiMarkerColors.secondary.withValues(alpha: 0.10),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.bolt_rounded, color: AiMarkerColors.secondary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('The fastest way to mark', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Nothing to photograph, nothing to line up, no handwriting to read. If you can set a quiz as a Google Form, this is the way to run it — a class set comes back marked in about a minute, and the multiple choice costs no credits.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.45),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
