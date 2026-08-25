@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,14 +11,19 @@ import 'package:marking_prokect_v2/services/id_factory.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 
-enum GradingJobStatus { marking, done, error }
+/// `held` = marked-pilot-first: the rest of a class set waits for the
+/// teacher to confirm the first paper marked correctly, so a bad key or the
+/// wrong mode costs one paper instead of thirty.
+enum GradingJobStatus { marking, held, done, error }
 
 /// One scan working its way through marking in the background.
 class GradingJob {
   final String id;
   final DateTime createdAt;
   final List<Uint8List> pages;
-  final AiGradeRequest req;
+  /// Mutable so a re-marked pilot keeps the corrected instructions for any
+  /// further re-mark.
+  AiGradeRequest req;
   String label;
   GradingJobStatus status;
   AiGradeResult? result;
@@ -84,12 +88,32 @@ class GradingQueueService extends ChangeNotifier {
     notifyListeners();
     _run(job, req, students, submissions); // deliberately not awaited
     return job;
+
+  }
+  /// Default job label when the teacher has not named the paper.
+  String _timeLabel(DateTime t) {
+    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    final m = t.minute.toString().padLeft(2, '0');
+    return 'Scan $h:$m ${t.hour >= 12 ? 'PM' : 'AM'}';
   }
 
-  /// Class-set marking, cost-aware: the FIRST paper marks alone (the pilot).
-  /// If it was keyless graded work, the AI saves the answers it derived as a
-  /// reusable key, and every remaining paper marks against that key on the
-  /// cheap deterministic route (~10× cheaper) — then they all run in parallel.
+  /// Asked after the pilot paper marks, before the rest of the set is sent.
+  /// Returning false holds the remaining papers instead of marking them.
+  /// Set by the UI layer, which is the only place that can show a dialog.
+  Future<bool> Function(GradingJob pilot, int remaining)? confirmFleet;
+
+  /// Papers waiting on the teacher's OK, in the order they were scanned.
+  List<GradingJob> get heldJobs => _jobs.where((j) => j.status == GradingJobStatus.held).toList();
+
+  /// Class-set marking, cost-aware and check-first: the FIRST paper marks
+  /// alone (the pilot). If it was keyless graded work, the AI saves the
+  /// answers it derived as a reusable key, and every remaining paper marks
+  /// against that key on the cheap deterministic route (~10× cheaper).
+  ///
+  /// The rest of the set only goes out once the teacher has seen that first
+  /// result. A wrong answer key, the wrong grading mode or a misread paper
+  /// then costs ONE paper and one credit, not thirty of each — and thirty
+  /// wrong marks are far more work to undo than one.
   Future<void> enqueueBatch({
     required List<AiGradeRequest> reqs,
     required List<List<Uint8List>> pagesList,
@@ -111,27 +135,139 @@ class GradingQueueService extends ChangeNotifier {
 
     final keyId = pilot.result?.learnedKeyId;
     final keyName = pilot.result?.learnedKeyName;
+
+    // Build the remaining jobs now, held, so their scanned pages are safely
+    // in the queue no matter what the teacher decides. Nothing is lost by
+    // saying "wait".
+    final held = <GradingJob>[];
     for (var i = 1; i < reqs.length; i++) {
       var r = reqs[i];
       if (keyId != null && (r.answerKeyId == null || r.answerKeyId!.isEmpty)) {
         r = r.withAnswerKey(keyId);
       }
-      enqueue(req: r, pages: pagesList[i], students: students, submissions: submissions, label: labels[i]);
+      final job = GradingJob(
+        id: 'job_${IdFactory.newId()}',
+        createdAt: DateTime.now(),
+        pages: pagesList[i],
+        req: r,
+        label: (labels[i] ?? '').trim().isNotEmpty ? labels[i]! : 'Paper ${i + 1}',
+        status: GradingJobStatus.held,
+      );
+      held.add(job);
+      _jobs.insert(0, job);
     }
+    notifyListeners();
+
     if (keyId != null) {
       messengerKey?.currentState?.showSnackBar(
         SnackBar(
           duration: const Duration(seconds: 6),
-          content: Text('Learned "$keyName" from the first paper — the rest of this set is marking against it (cheaper and more consistent). It\'s saved with your answer keys.'),
+          content: Text('Learned "$keyName" from the first paper — the rest of this set will mark against it (cheaper and more consistent). It\'s saved with your answer keys.'),
+        ),
+      );
+    }
+
+    // The pilot failing is the strongest possible signal not to send 29 more.
+    final ask = confirmFleet;
+    if (pilot.status == GradingJobStatus.error) {
+      messengerKey?.currentState?.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text('The first paper didn\'t mark, so the other ${held.length} are on hold. Fix the problem and release them from the tray — nothing was lost.'),
+        ),
+      );
+      return;
+    }
+    if (ask == null) {
+      // No UI attached to ask: mark them rather than stranding the set.
+      releaseHeld(students: students, submissions: submissions, jobs: held);
+      return;
+    }
+    final go = await ask(pilot, held.length);
+    if (go) {
+      releaseHeld(students: students, submissions: submissions, jobs: held);
+    } else {
+      messengerKey?.currentState?.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text('${held.length} papers are on hold in the tray. Change what you need and release them when you\'re happy.'),
         ),
       );
     }
   }
 
-  static String _timeLabel(DateTime t) {
-    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-    final m = t.minute.toString().padLeft(2, '0');
-    return 'Scan $h:$m ${t.hour >= 12 ? 'PM' : 'AM'}';
+  /// The same request with extra standing instructions from the teacher —
+  /// the "mark it this way instead" notes typed on the pilot review screen.
+  static AiGradeRequest _withFeedback(AiGradeRequest r, List<String> extra) {
+    if (extra.isEmpty) return r;
+    final merged = <String>[...(r.teacherFeedback ?? const []), ...extra];
+    return AiGradeRequest(
+      teacherId: r.teacherId,
+      studentId: r.studentId,
+      classId: r.classId,
+      presetId: r.presetId,
+      subject: r.subject,
+      mode: r.mode,
+      criteria: r.criteria,
+      harshness: r.harshness,
+      overrideUsed: r.overrideUsed,
+      imageBytes: r.imageBytes,
+      pageImages: r.pageImages,
+      notes: r.notes,
+      studentGrade: r.studentGrade,
+      gradeLevel: r.gradeLevel,
+      region: r.region,
+      teacherFeedback: merged,
+      formatOverride: r.formatOverride,
+      studentName: r.studentName,
+      answerKeyId: r.answerKeyId,
+      includeTranscription: r.includeTranscription,
+    );
+  }
+
+  /// Marks the pilot paper again with the teacher's correction applied.
+  /// Same pages, same everything else — only the instructions change — so
+  /// the teacher can see whether their note actually fixed what bothered
+  /// them before the whole class is marked the same way.
+  Future<void> remarkPilot({
+    required GradingJob job,
+    required List<String> extraFeedback,
+    required StudentsService students,
+    required SubmissionsService submissions,
+  }) async {
+    final revised = _withFeedback(job.req, extraFeedback);
+    job.status = GradingJobStatus.marking;
+    job.error = null;
+    notifyListeners();
+    // Replaces the job's request so a further re-mark builds on this one.
+    _jobs[_jobs.indexOf(job)] = job;
+    await _run(job, revised, students, submissions, replaceSubmission: true);
+  }
+
+  /// Sends held papers off to be marked. Called when the teacher approves
+  /// the pilot, or later from the tray.
+  /// [extraFeedback] carries the corrections the teacher typed while
+  /// reviewing the pilot, so the rest of the class is marked the way they
+  /// just asked for — not the way the first attempt got it wrong.
+  void releaseHeld({
+    required StudentsService students,
+    required SubmissionsService submissions,
+    List<GradingJob>? jobs,
+    List<String> extraFeedback = const [],
+  }) {
+    final list = jobs ?? heldJobs;
+    for (final job in list) {
+      if (job.status != GradingJobStatus.held) continue;
+      job.status = GradingJobStatus.marking;
+      _run(job, _withFeedback(job.req, extraFeedback), students, submissions); // deliberately not awaited
+    }
+    if (list.isNotEmpty) notifyListeners();
+  }
+
+  /// Drops held papers the teacher has decided not to mark.
+  void discardHeld() {
+    _jobs.removeWhere((j) => j.status == GradingJobStatus.held);
+    notifyListeners();
   }
 
   /// The same request with different page images — used to swap in the
@@ -159,7 +295,9 @@ class GradingQueueService extends ChangeNotifier {
         includeTranscription: r.includeTranscription,
       );
 
-  Future<void> _run(GradingJob job, AiGradeRequest req, StudentsService students, SubmissionsService submissions) async {
+  Future<void> _run(GradingJob job, AiGradeRequest req, StudentsService students, SubmissionsService submissions, {bool replaceSubmission = false}) async {
+    // A re-marked pilot keeps its corrected instructions for the next round.
+    job.req = req;
     try {
       final ai = AiGradingService();
 
@@ -230,11 +368,20 @@ class GradingQueueService extends ChangeNotifier {
         region: req.region,
       );
       var submission = ai.toSubmission(req: saveReq, res: res);
+      // Re-marking the pilot REPLACES its result. Without this, correcting
+      // the marking three times would leave the student with three
+      // submissions and the teacher deleting two of them by hand.
+      final priorId = replaceSubmission ? job.submissionId : null;
+      if (priorId != null) submission = submission.copyWith(id: priorId);
       // Keep the scanned pages on-device so the teacher can reopen the
       // original and annotated views later (too heavy for the cloud copy).
       final imagePaths = await _savePagesLocally(submission.id, job.pages);
       if (imagePaths.isNotEmpty) submission = submission.copyWith(pageImagePaths: imagePaths);
-      await submissions.create(submission);
+      if (priorId != null) {
+        await submissions.update(submission);
+      } else {
+        await submissions.create(submission);
+      }
 
       job.status = GradingJobStatus.done;
       job.result = res;

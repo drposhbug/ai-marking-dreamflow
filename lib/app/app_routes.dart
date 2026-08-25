@@ -16,6 +16,7 @@ class AppRoutes {
   static const imagePreview = '/grading/image-preview';
   static const gradingContext = '/grading/context';
   static const result = '/grading/result';
+  static const pilotReview = '/grading/pilot-review';
 
   static const classHub = '/classes/hub';
   static const studentProfile = '/students/profile';
