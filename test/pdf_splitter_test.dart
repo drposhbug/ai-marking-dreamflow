@@ -6,6 +6,7 @@ PageSignals cont() => const PageSignals(firstPageScore: 0, sawText: true);
 PageSignals blind() => const PageSignals(firstPageScore: 0, sawText: false);
 
 void main() {
+  _stackWarningTests();
   group('fixed-length splitting', () {
     test('divides a stack evenly', () {
       expect(PdfSplitter.groupByFixed(9, 3), [
@@ -82,6 +83,62 @@ void main() {
     test('a real class set is usable', () {
       final signals = [first(), cont(), first(), cont(), first(), cont()];
       expect(PdfSplitter.detectionUnusable(signals), isFalse);
+    });
+  });
+}
+
+// ── The copier's quiet failure ────────────────────────────────────────────
+// A double-feed pulls two sheets through as one. Nothing errors; a page is
+// simply gone and every boundary after it shifts. Arithmetic is the only
+// way to notice, so these cases matter more than the happy path.
+void _stackWarningTests() {
+  group('stack sanity check', () {
+    test('says nothing when a clean stack matches the class size', () {
+      expect(
+        PdfSplitter.stackWarning(groupLengths: [3, 3, 3, 3], expectedStudents: 4),
+        isNull,
+      );
+    });
+
+    test('says nothing about a tidy stack with no expectation given', () {
+      expect(PdfSplitter.stackWarning(groupLengths: [3, 3, 3]), isNull);
+    });
+
+    test('flags a missing paper against the expected count', () {
+      final w = PdfSplitter.stackWarning(groupLengths: [3, 3, 3], expectedStudents: 4);
+      expect(w, contains('Only 3 papers'));
+      expect(w, contains('two sheets through at once'));
+    });
+
+    test('flags too many papers as a boundary problem, not a missing page', () {
+      final w = PdfSplitter.stackWarning(groupLengths: [3, 3, 2, 1], expectedStudents: 3);
+      expect(w, contains('split in two'));
+    });
+
+    test('spots the one paper that came out short', () {
+      final w = PdfSplitter.stackWarning(groupLengths: [3, 3, 2, 3, 3]);
+      expect(w, contains('Most papers are 3 pages'));
+      expect(w, contains('1 is not'));
+    });
+
+    test('stays quiet when lengths genuinely vary, with no normal length', () {
+      // An essay task where everyone wrote a different amount: there is no
+      // majority length, so "most papers are N" would be a lie.
+      expect(PdfSplitter.stackWarning(groupLengths: [1, 2, 3, 4]), isNull);
+    });
+
+    test('does not cry wolf on a two-paper stack', () {
+      expect(PdfSplitter.stackWarning(groupLengths: [3, 2]), isNull);
+    });
+
+    test('an explicit expectation beats the ragged-length check', () {
+      final w = PdfSplitter.stackWarning(groupLengths: [3, 3, 2], expectedStudents: 3);
+      // Count matches, so it falls through to the short-paper warning.
+      expect(w, contains('Most papers are 3 pages'));
+    });
+
+    test('handles an empty stack', () {
+      expect(PdfSplitter.stackWarning(groupLengths: []), isNull);
     });
   });
 }

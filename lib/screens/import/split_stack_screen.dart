@@ -47,6 +47,11 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
   int? _fixedPerStudent;
   bool _detectionUsable = true;
 
+  /// How many students the teacher expects. Optional, but it is the only
+  /// way to catch a double-feed: the copier silently pulls two sheets
+  /// through as one, a page vanishes, and every split after it shifts.
+  int? _expectedStudents;
+
   Future<void> _pickPdf() async {
     try {
       final res = await FilePicker.pickFiles(type: FileType.any, withData: true);
@@ -165,6 +170,12 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
     setState(() => _groups[groupIndex].name = name.isEmpty ? null : name);
   }
 
+  /// Delegates to the splitter so the arithmetic can be tested on its own.
+  String? get _stackWarning => PdfSplitter.stackWarning(
+        groupLengths: [for (final g in _groups) g.pages.length],
+        expectedStudents: _expectedStudents,
+      );
+
   void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   void _startMarking() {
@@ -247,6 +258,26 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
             icon: const Icon(Icons.upload_file_rounded),
             label: const Text('Choose the scanned PDF'),
           ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Getting a clean scan', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  Text(
+                    '• Take the staples out first. A feeder will jam or tear on one, and that is the only part that really costs you time.\n'
+                    '• Flatten badly crumpled corners. Ordinary creases, pencil smudge and eraser dust all scan fine.\n'
+                    '• Check the page count when it finishes. If 30 three-page tests came out as 89 pages, the feeder pulled two sheets through together and a page is missing — tell it how many students you expect below and it will flag that for you.\n'
+                    '• Big stack? Scan in batches of about ten students, so one jam does not spoil the whole run.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 10),
           Text(
             'Your phone finds where each paper starts by reading the name fields itself — nothing is uploaded to work out the split, and you get to check it before any marking happens.',
@@ -301,6 +332,43 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
           ),
         const SizedBox(height: 12),
         _splitModeCard(),
+        if (_stackWarning != null) ...[
+          const SizedBox(height: 10),
+          Card(
+            color: AiMarkerColors.warning.withValues(alpha: 0.12),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.report_problem_rounded, size: 18, color: AiMarkerColors.warning),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(_stackWarning!, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: Text('Students expected (optional)',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+            ),
+            SizedBox(
+              width: 78,
+              child: TextField(
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), hintText: '—'),
+                onChanged: (v) => setState(() => _expectedStudents = int.tryParse(v.trim())),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         Text('CHECK THE SPLIT', style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
         const SizedBox(height: 4),
