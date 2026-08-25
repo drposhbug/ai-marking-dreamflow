@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
@@ -35,6 +36,23 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
   /// Corrections given so far, oldest first — each re-mark builds on the last.
   final List<String> _corrections = [];
   bool _remarking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // The plan and allowance, so each button can show what it costs before
+    // it is pressed rather than after the credits are gone.
+    Future.microtask(() async {
+      final auth = context.read<AuthService>().currentUser;
+      if (auth == null) return;
+      try {
+        final u = await AiGradingService().getUsage(teacherId: auth.id);
+        if (mounted) setState(() => _usage = u);
+      } catch (e) {
+        debugPrint('PilotReview usage load failed: $e');
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -82,6 +100,23 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Saved — Mark will follow this on every test from now on.')),
     );
+  }
+
+  UsageSummary? _usage;
+
+  /// True when this plan may mark a whole set on the spot. The PILOT paper
+  /// always marks live regardless — approving the first result before the
+  /// rest go out is a safety check, not a premium feature.
+  bool get _canMarkNow => _usage?.instantMarking ?? true;
+
+  /// " · about 4% of this month" — the credit price of a choice, shown
+  /// before it's made rather than discovered at the end of the month.
+  String _costHint({required bool overnight, required int papers}) {
+    final u = _usage;
+    if (u == null || papers <= 0) return '';
+    final pct = u.pctFor(papers, overnight: overnight);
+    if (pct <= 0) return '';
+    return ' · ~$pct% of credits';
   }
   bool _sending = false;
 
@@ -311,26 +346,56 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Overnight leads: it costs the teacher about a fifth of the
+                // credits and costs us about a fifth of the money, so the
+                // cheap route is the one the button points at.
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: (_remarking || _sending || job?.status != GradingJobStatus.done) ? null : _approve,
-                    icon: const Icon(Icons.check_rounded),
-                    label: Text('Looks right — mark $remaining now'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
                     onPressed: (_remarking || _sending || job?.status != GradingJobStatus.done) ? null : _overnight,
                     icon: _sending
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.bedtime_rounded, size: 18),
-                    label: const Text('Mark overnight — half price'),
+                    label: Text('Mark $remaining overnight${_costHint(overnight: true, papers: remaining)}'),
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
+                if (_canMarkNow)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: (_remarking || _sending || job?.status != GradingJobStatus.done) ? null : _approve,
+                      icon: const Icon(Icons.bolt_rounded, size: 18),
+                      label: Text('Mark $remaining now${_costHint(overnight: false, papers: remaining)}'),
+                    ),
+                  )
+                else
+                  // Instant marking is what the paid tiers buy. Say so
+                  // plainly rather than showing a button that fails.
+                  InkWell(
+                    onTap: () => context.push(AppRoutes.plans),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.bolt_rounded, size: 16, color: AiMarkerColors.neutral),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Marking a whole set on the spot is part of Pro — it uses about five times the credits.',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
+                            ),
+                          ),
+                          Text('See plans',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                  )),
+                        ],
+                      ),
+                    ),
+                  ),
                 TextButton(onPressed: _sending ? null : _hold, child: const Text('Not yet — hold them')),
               ],
             ),
