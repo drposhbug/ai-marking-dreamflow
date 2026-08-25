@@ -669,6 +669,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            Text('PRIVACY', style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
+            const SizedBox(height: 10),
+            Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ToggleRow(
+                    title: 'Hide student names before marking',
+                    value: appState.anonymizeUploads,
+                    onChanged: (v) async {
+                      final auth = context.read<AuthService>().currentUser;
+                      if (auth == null) return;
+                      await context.read<AppState>().setAnonymizeUploads(teacherId: auth.id, on: v);
+                    },
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                    child: Text(
+                      'Your phone reads the name off each paper and blacks it out before the page is sent to be marked — so the work is marked, not the student. The name never leaves this device; it is what files the result under the right student here. You still see the original paper, name and all.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
             Text('GOOGLE DRIVE', style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
             const SizedBox(height: 10),
             Card(

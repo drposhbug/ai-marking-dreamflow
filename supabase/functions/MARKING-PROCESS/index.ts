@@ -33,7 +33,7 @@
 //
 // Request body (sent by the Flutter app's AiGradingService.grade):
 //   { imagesBase64: string[] (or legacy imageBase64), mediaType, mode, maxScore,
-//     criteria: [{name}], harshness, studentName?, studentGrade?,
+//     criteria: [{name}], studentGrade?,
 //     formatOverride?, provider?, answerKeyId?, includeTranscription? }
 //
 // Response body matches AiGradingService._parseResponse exactly (plus `cached`).
@@ -713,7 +713,9 @@ function buildContext(p: {
   maxScore: number;
   harshness: number;
   criteria: string[];
-  studentName?: string;
+  // studentName is intentionally absent: the app no longer sends it, so a
+  // marking request carries no identifiable data about the student beyond
+  // the work itself (and names on the page are blacked out client-side).
   studentGrade?: number | null;
   expectationGrade?: number | null;
   pageCount: number;
@@ -726,7 +728,6 @@ function buildContext(p: {
     `- Fallback total marks: ${p.maxScore} (use ONLY if the paper does not show its own marks — see rule 5)`,
     `- Strictness: ${p.harshness}/10 (${strictnessWord(p.harshness)})`,
     `- Criteria to grade on: ${p.criteria.length ? p.criteria.join(", ") : "overall quality"}`,
-    `- Student name (reference only, never grade on it): ${p.studentName || "unknown"}`,
     `- Student grade level: ${p.studentGrade ?? "unknown — detect it from the work if possible"}`,
   ];
   if (p.expectationGrade) {

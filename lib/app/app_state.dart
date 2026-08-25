@@ -148,6 +148,12 @@ class AppState extends ChangeNotifier {
   List<String> _markingFeedback = const [];
   List<String> get markingFeedback => _markingFeedback;
 
+  /// Black out the student's name on a page before it is sent for marking.
+  /// On by default: the marker grades the work, never the person, so the
+  /// name is read on this device and kept here.
+  bool _anonymizeUploads = true;
+  bool get anonymizeUploads => _anonymizeUploads;
+
   AppState({LocalStore? store}) : _store = store ?? const LocalStore();
 
   String _defaultModeKey(String teacherId) => 'ai_marker.default_mode.v1.$teacherId';
@@ -155,6 +161,7 @@ class AppState extends ChangeNotifier {
   String _regionKey(String teacherId) => 'ai_marker.region.v1.$teacherId';
   String _schoolKey(String teacherId) => 'ai_marker.school.v1.$teacherId';
   String _markingFeedbackKey(String teacherId) => 'ai_marker.marking_feedback.v1.$teacherId';
+  String _anonymizeKey(String teacherId) => 'ai_marker.anonymize_uploads.v1.$teacherId';
 
   Future<void> initForUser({required String teacherId}) async {
     try {
@@ -179,6 +186,9 @@ class AppState extends ChangeNotifier {
       if (rawFeedback != null && rawFeedback.isNotEmpty) {
         _markingFeedback = (jsonDecode(rawFeedback) as List).whereType<String>().toList(growable: false);
       }
+
+      final rawAnon = await _store.getString(_anonymizeKey(teacherId));
+      if (rawAnon != null && rawAnon.isNotEmpty) _anonymizeUploads = rawAnon == '1';
 
       _draft = _draft.copyWith(mode: _defaultMode, harshness: _defaultHarshness);
       notifyListeners();
@@ -220,6 +230,12 @@ class AppState extends ChangeNotifier {
     _draft = _draft.copyWith(harshness: v);
     notifyListeners();
     await _store.setString(_defaultHarshnessKey(teacherId), v.toString());
+  }
+
+  Future<void> setAnonymizeUploads({required String teacherId, required bool on}) async {
+    _anonymizeUploads = on;
+    notifyListeners();
+    await _store.setString(_anonymizeKey(teacherId), on ? '1' : '0');
   }
 
   void resetDraft() {

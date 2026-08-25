@@ -33,6 +33,7 @@ int enqueueStudentGroups({
   final students = context.read<StudentsService>();
   final submissions = context.read<SubmissionsService>();
   final queue = context.read<GradingQueueService>();
+  queue.anonymizeUploads = app.anonymizeUploads;
 
   final reqs = <AiGradeRequest>[];
   final pagesList = <List<Uint8List>>[];
