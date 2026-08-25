@@ -140,7 +140,8 @@ class _ImportResponsesScreenState extends State<ImportResponsesScreen> {
             }
           ],
         );
-        final byRow = res[q.header] ?? const <int, Map<String, dynamic>>{};
+        // One question per call, so the marks come back as the only entry.
+        final byRow = res.isEmpty ? const <int, Map<String, dynamic>>{} : res.first;
         for (var r = 0; r < sheet.rows.length; r++) {
           final m = byRow[r];
           marksByRow[r]![q.index] = (

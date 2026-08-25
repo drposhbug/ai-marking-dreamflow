@@ -1566,9 +1566,15 @@ ${rows.map((r) => `[${r.i}] ${r.text}`).join("\n")}`;
 
     // deno-lint-ignore no-explicit-any
     const results: any[] = [];
-    let usedProvider = "claude";
-    for (const q of questions) {
-      const label = String(q?.label ?? "Q").slice(0, 40);
+    // Which models actually ran — a mixed import (short answers cheap,
+    // paragraphs frontier) must not report just the last one used.
+    const usedProviders = new Set<string>();
+    for (let qi = 0; qi < questions.length; qi++) {
+      const q = questions[qi];
+      // Echoed back untruncated, and matched by index on the client — a
+      // label-keyed lookup silently zeroed every question whose title ran
+      // past the old 40-char slice.
+      const label = String(q?.label ?? "Q").slice(0, 300);
       const maxMarks = Math.max(0.5, Math.min(100, Number(q?.maxMarks ?? 1) || 1));
       const kind = String(q?.kind ?? "short");
       const answers = (Array.isArray(q?.answers) ? q.answers : [])
@@ -1591,7 +1597,7 @@ ${rows.map((r) => `[${r.i}] ${r.text}`).join("\n")}`;
         if (kind === "short" && Deno.env.get("DEEPSEEK_API_KEY")) {
           try {
             parsed = await callDeepSeek(prompt, usage);
-            usedProvider = "deepseek";
+            usedProviders.add("deepseek");
             await logUsage(teacherId, "mark_responses", usage.inputTokens, usage.outputTokens, DEEPSEEK_PRICE_IN, DEEPSEEK_PRICE_OUT);
           } catch (e) {
             console.error("DeepSeek mark_responses failed, falling back to Claude:", e instanceof Error ? e.message : e);
@@ -1600,6 +1606,7 @@ ${rows.map((r) => `[${r.i}] ${r.text}`).join("\n")}`;
         }
         if (parsed == null) {
           parsed = await callClaude([], "image/jpeg", { userText: prompt, schema: MARK_SCHEMA, usage });
+          usedProviders.add("claude");
           await logUsage(teacherId, "mark_responses", usage.inputTokens, usage.outputTokens);
         }
         const got = Array.isArray(parsed?.marks) ? parsed.marks : [];
@@ -1618,9 +1625,9 @@ ${rows.map((r) => `[${r.i}] ${r.text}`).join("\n")}`;
           });
         }
       }
-      results.push({ label, maxMarks, marks });
+      results.push({ qi, label, maxMarks, marks });
     }
-    return json({ results, provider: usedProvider });
+    return json({ results, provider: [...usedProviders].join("+") || "claude" });
   }
 
   // ── Setup lists (classes, students, student↔class links). Marked work

@@ -162,19 +162,27 @@ class CsvImport {
       }
       if (values.isEmpty) continue;
       final distinct = values.toSet().length;
-      final avgLen = values.map((v) => v.length).reduce((a, b) => a + b) / values.length;
+      final lengths = values.map((v) => v.length).toList()..sort();
+      final avgLen = lengths.reduce((a, b) => a + b) / lengths.length;
+      final longest = lengths.last;
+      // 75th percentile: what a student who actually answered wrote.
+      final p75 = lengths[((lengths.length - 1) * 0.75).round()];
 
       ImportColumnKind kind;
       double marks;
       if (distinct <= 8 && avgLen <= 30 && values.length >= 3) {
         kind = ImportColumnKind.multipleChoice;
         marks = 1;
-      } else if (avgLen <= 120) {
-        kind = ImportColumnKind.shortAnswer;
-        marks = 2;
-      } else {
+      } else if (longest >= 150 || p75 >= 100) {
+        // ~150 chars is about 25 words — past a "short answer" by any
+        // reading. Judge by the students who actually wrote something, not
+        // the average: two one-line answers must not demote an essay
+        // question to "short" and mark the whole class out of 2, not 5.
         kind = ImportColumnKind.paragraph;
         marks = 5;
+      } else {
+        kind = ImportColumnKind.shortAnswer;
+        marks = 2;
       }
       questions.add(ImportColumn(index: c, header: h, kind: kind, marks: marks));
     }
