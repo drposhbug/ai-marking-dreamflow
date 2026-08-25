@@ -1,0 +1,190 @@
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
+import 'package:marking_prokect_v2/services/word_locator.dart';
+
+/// Splits one scanned stack — a whole class fed through the photocopier as a
+/// single PDF — back into one paper per student.
+///
+/// The hard part is knowing where one student's paper ends and the next
+/// begins. Two answers, both offered:
+///
+///  * **Fixed length** — every paper is the same test, so every Nth page
+///    starts a new student. Free, exact, and right for most class sets.
+///  * **Detect** — read each page with the phone's own text recognition and
+///    look for the marks of a cover page (a "Name:" field near the top, a
+///    "Page 1 of 4"). Handles papers that ran to different lengths.
+///
+/// Detection runs ENTIRELY on the device. Nothing is uploaded to find the
+/// boundaries, which matters where a board forbids sending student work to
+/// a third party; the split is proposed to the teacher and only what they
+/// confirm is ever marked.
+class PageSignals {
+  /// How strongly this page reads as the START of a new student's paper.
+  final double firstPageScore;
+
+  /// Name read out of a "Name: ____" field, when the field was filled in.
+  final String? studentName;
+
+  /// Any text at all was recognised — a photo too dark or too skewed for
+  /// OCR scores nothing, and should not be mistaken for "no name field".
+  final bool sawText;
+
+  const PageSignals({required this.firstPageScore, required this.sawText, this.studentName});
+
+  bool get looksLikeFirstPage => firstPageScore >= 1.0;
+}
+
+class PdfSplitter {
+  /// A "Name:" field, in the languages a page around here is likely to use.
+  static final _nameLabel = RegExp(r'^(?:student\s+)?(?:name|nom|full\s+name)\s*[:.\-]', caseSensitive: false);
+  static final _pageOne = RegExp(r'\bpage\s*(?:1|one)\b(?:\s*(?:of|/)\s*\d+)?', caseSensitive: false);
+  static final _dateLabel = RegExp(r'^(?:date|due)\s*[:.\-]', caseSensitive: false);
+
+  /// Words the OCR may pick up from the name line that are not a name.
+  static final _notAName = RegExp(r'^(?:date|class|period|block|section|grade|teacher|subject|score|mark|total)\b', caseSensitive: false);
+
+  /// Reads every page and scores it. Reports progress because a 90-page
+  /// class set takes real time on a phone.
+  static Future<List<PageSignals>> scan(
+    List<Uint8List> pages, {
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final out = <PageSignals>[];
+    for (var i = 0; i < pages.length; i++) {
+      out.add(await _scanPage(pages[i]));
+      onProgress?.call(i + 1, pages.length);
+    }
+    return out;
+  }
+
+  static Future<PageSignals> _scanPage(Uint8List bytes) async {
+    final words = await WordLocator.recognize(bytes);
+    if (words.isEmpty) return const PageSignals(firstPageScore: 0, sawText: false);
+
+    // Rebuild lines from the recognised words, in reading order.
+    final byLine = <int, List<RecognizedWord>>{};
+    for (final w in words) {
+      (byLine[w.lineId] ??= <RecognizedWord>[]).add(w);
+    }
+    var pageTop = double.infinity;
+    var pageBottom = 0.0;
+    for (final w in words) {
+      if (w.rect.top < pageTop) pageTop = w.rect.top;
+      if (w.rect.bottom > pageBottom) pageBottom = w.rect.bottom;
+    }
+    final height = (pageBottom - pageTop).abs();
+    // A page with a single line of text gives no usable geometry.
+    final usableHeight = height < 1 ? 1.0 : height;
+
+    var score = 0.0;
+    String? name;
+    for (final entry in byLine.entries) {
+      final lineWords = entry.value..sort((a, b) => a.rect.left.compareTo(b.rect.left));
+      final text = lineWords.map((w) => w.text).join(' ').trim();
+      if (text.isEmpty) continue;
+      // Where this line sits down the page, 0 = top.
+      final top = lineWords.first.rect.top;
+      final depth = ((top - pageTop) / usableHeight).clamp(0.0, 1.0);
+      final nearTop = depth <= 0.3;
+
+      if (_nameLabel.hasMatch(text)) {
+        // A name field anywhere is suggestive; at the top of the page it is
+        // the single strongest sign of a cover page.
+        score += nearTop ? 1.5 : 0.5;
+        name ??= _nameAfterLabel(text);
+      } else if (_dateLabel.hasMatch(text) && nearTop) {
+        score += 0.4;
+      }
+      if (_pageOne.hasMatch(text)) score += 1.0;
+    }
+    return PageSignals(firstPageScore: score, sawText: true, studentName: name);
+  }
+
+  /// "Name: Ana Lopez" → "Ana Lopez". Returns null when the field was left
+  /// blank or the words after it are another field's label.
+  static String? _nameAfterLabel(String line) {
+    final m = RegExp(r'[:.\-]\s*(.+)$').firstMatch(line);
+    var rest = (m?.group(1) ?? '').trim();
+    if (rest.isEmpty) return null;
+    // Cut at a second field on the same line ("Name: Ana Lopez  Date: ...").
+    final cut = RegExp(r'\s{2,}|\s(?=(?:date|class|period|block|section|grade)\s*[:.\-])', caseSensitive: false).firstMatch(rest);
+    if (cut != null) rest = rest.substring(0, cut.start).trim();
+    // Strip the underscores of an unfilled line.
+    rest = rest.replaceAll(RegExp(r'[_\.]{2,}'), ' ').trim();
+    if (rest.isEmpty || _notAName.hasMatch(rest)) return null;
+    if (rest.length < 2 || rest.length > 40) return null;
+    // Needs at least one letter — "Name: ______" can OCR as punctuation.
+    if (!RegExp(r'[A-Za-z]').hasMatch(rest)) return null;
+    return rest;
+  }
+
+  /// Every [perStudent] pages is one paper. The last group keeps whatever
+  /// is left over rather than being dropped.
+  static List<List<int>> groupByFixed(int pageCount, int perStudent) {
+    final per = perStudent < 1 ? 1 : perStudent;
+    final groups = <List<int>>[];
+    for (var i = 0; i < pageCount; i += per) {
+      groups.add([for (var p = i; p < i + per && p < pageCount; p++) p]);
+    }
+    return groups;
+  }
+
+  /// Groups from detected cover pages. Page 0 always starts a paper, even if
+  /// it scored nothing — a stack has to begin somewhere.
+  static List<List<int>> groupBySignals(List<PageSignals> signals) {
+    if (signals.isEmpty) return const [];
+    final starts = <int>[0];
+    for (var i = 1; i < signals.length; i++) {
+      if (signals[i].looksLikeFirstPage) starts.add(i);
+    }
+    final groups = <List<int>>[];
+    for (var s = 0; s < starts.length; s++) {
+      final end = s + 1 < starts.length ? starts[s + 1] : signals.length;
+      groups.add([for (var p = starts[s]; p < end; p++) p]);
+    }
+    return groups;
+  }
+
+  /// The page count that best explains the detected cover pages — offered as
+  /// the default for fixed-length splitting so the teacher rarely has to
+  /// count pages themselves. Null when the gaps are inconsistent.
+  static int? suggestPagesPerStudent(List<PageSignals> signals) {
+    final starts = [for (var i = 0; i < signals.length; i++) if (signals[i].looksLikeFirstPage) i];
+    if (starts.length < 2) return null;
+    final gaps = <int>[for (var i = 1; i < starts.length; i++) starts[i] - starts[i - 1]];
+    final counts = <int, int>{};
+    for (final g in gaps) {
+      counts[g] = (counts[g] ?? 0) + 1;
+    }
+    final best = counts.entries.reduce((a, b) => b.value > a.value ? b : a);
+    // Needs a STRICT majority of gaps agreeing. Two papers that ran 2 and 5
+    // pages have no common length, and guessing one there splits somebody's
+    // work in half — better to ask than to be confidently wrong.
+    if (best.value <= gaps.length / 2 && gaps.length > 1) return null;
+    if (best.key < 1 || best.key > 20) return null;
+    return best.key;
+  }
+
+  /// True when detection found nothing to go on — no name fields, no page
+  /// numbers, or OCR couldn't read the scan at all. The UI falls back to
+  /// asking for a page count rather than proposing a bogus split.
+  static bool detectionUnusable(List<PageSignals> signals) {
+    if (signals.isEmpty) return true;
+    final readable = signals.where((s) => s.sawText).length;
+    if (readable == 0) return true;
+    final firsts = signals.where((s) => s.looksLikeFirstPage).length;
+    if (firsts < 2) return true;
+    // Every page looking like a cover page means the signal is meaningless
+    // (a header repeated on every page, say).
+    if (firsts == signals.length && signals.length > 2) return true;
+    return false;
+  }
+
+  static void debugSummary(List<PageSignals> signals) {
+    if (!kDebugMode) return;
+    for (var i = 0; i < signals.length; i++) {
+      debugPrint('page $i score=${signals[i].firstPageScore} name=${signals[i].studentName}');
+    }
+  }
+}
