@@ -1768,7 +1768,7 @@ Deno.serve(async (req) => {
 
     const { data: row } = await serviceDb()
       .from("marking_batches")
-      .select("meta, teacher_id")
+      .select("meta, teacher_id, status")
       .eq("batch_id", batchId)
       .maybeSingle();
     // A batch belongs to the teacher who created it, and to nobody else.
@@ -1822,7 +1822,13 @@ Deno.serve(async (req) => {
           out.push({ customId, error: e instanceof Error ? e.message : String(e) });
         }
       }
-      if (spentIn > 0 || spentOut > 0) await logUsage(teacherId, "grade_batch", spentIn, spentOut);
+      // Bill ONCE. Polling an already-settled batch used to re-log its full
+      // spend every time, so a teacher who refreshed twice paid twice — the
+      // credit meter would drain without a single extra paper being marked.
+      const alreadyBilled = String(row.status ?? "") === "ended";
+      if (!alreadyBilled && (spentIn > 0 || spentOut > 0)) {
+        await logUsage(teacherId, "grade_batch", spentIn, spentOut);
+      }
       await serviceDb()
         .from("marking_batches")
         .update({ status: "ended", updated_at: new Date().toISOString() })
