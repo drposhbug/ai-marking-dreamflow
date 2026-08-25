@@ -17,6 +17,7 @@ import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
+import 'package:marking_prokect_v2/services/overnight_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
@@ -562,6 +563,58 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                 ),
               ),
             ),
+            if (context.watch<OvernightService>().batches.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Card(
+                color: AiMarkerColors.tertiary.withValues(alpha: 0.10),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.bedtime_rounded, color: AiMarkerColors.tertiary, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text('${context.watch<OvernightService>().pendingPapers} papers marking overnight',
+                                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      for (final b in context.watch<OvernightService>().batches)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text('• ${b.label} — ${b.papers.length} papers',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'You can close the app. They land on your dashboard when they finish — usually well before morning.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: context.watch<OvernightService>().checking
+                            ? null
+                            : () async {
+                                final filed = await checkOvernight(context);
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(filed > 0
+                                      ? '$filed papers came back — they\'re on your dashboard.'
+                                      : 'Still marking. Nothing to file yet.'),
+                                ));
+                              },
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Check now'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
             if (queue.jobs.isNotEmpty) ...[
               Row(

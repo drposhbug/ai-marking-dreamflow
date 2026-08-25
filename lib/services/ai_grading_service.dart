@@ -575,6 +575,62 @@ class AiGradingService {
     );
   }
 
+  /// Queues a class set for overnight marking on the Batch API — half the
+  /// price of marking live, back within 24h (usually much sooner). Returns
+  /// the batch id to poll with [batchStatus].
+  Future<String> batchSubmit({
+    required String teacherId,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'batch_submit', 'teacherId': teacherId, 'items': items},
+    );
+    final data = res.data;
+    if (data is Map && data['batchId'] != null) return data['batchId'].toString();
+    if (data is Map) {
+      _maybeThrowUsageLimitMap(data);
+      throw Exception((data['error'] ?? 'Could not queue overnight marking').toString());
+    }
+    throw Exception('Could not queue overnight marking');
+  }
+
+  /// Polls an overnight batch. `ended` means every paper is finished and
+  /// [BatchOutcome.results] holds them; anything else means keep waiting.
+  Future<BatchOutcome> batchStatus({required String teacherId, required String batchId}) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {'action': 'batch_status', 'teacherId': teacherId, 'batchId': batchId},
+    );
+    final data = res.data;
+    if (data is! Map) throw Exception('Could not check overnight marking');
+    if (data['error'] != null) throw Exception(data['error'].toString());
+    final status = (data['status'] ?? '').toString();
+    final results = <String, AiGradeResult>{};
+    final failures = <String, String>{};
+    for (final r in (data['results'] as List? ?? const []).whereType<Map>()) {
+      final id = (r['customId'] ?? '').toString();
+      if (id.isEmpty) continue;
+      if (r['result'] is Map) {
+        try {
+          results[id] = parseGradeMap((r['result'] as Map).cast<String, dynamic>());
+        } catch (e) {
+          failures[id] = 'Result unreadable: $e';
+        }
+      } else {
+        failures[id] = (r['error'] ?? 'failed').toString();
+      }
+    }
+    final counts = (data['counts'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return BatchOutcome(status: status, results: results, failures: failures, counts: counts);
+  }
+
+  /// Turns a marked-response map into a result. Public so overnight batches,
+  /// which arrive hours after the request, parse exactly like a live mark.
+  AiGradeResult parseGradeMap(Map<String, dynamic> map) => _parseResponse(map, null);
+
   /// Marks typed answers from an imported response sheet (CSV / Google
   /// Form). One entry per question; every student's answer to that question
   /// is judged in the same call, so marking is consistent across the class.
@@ -975,10 +1031,14 @@ class AiGradingService {
     }
   }
 
-  AiGradeResult _parseResponse(Map<String, dynamic> map, AiGradeRequest req) {
+  /// [req] is null for overnight results, which arrive long after the
+  /// request object is gone — the server always sends maxScore back, so it
+  /// is only ever needed as a fallback for a live call.
+  AiGradeResult _parseResponse(Map<String, dynamic> map, AiGradeRequest? req) {
     final percentage = (map['percentage'] as num?)?.toDouble() ?? 0;
     final rawScore = (map['rawScore'] as num?)?.toDouble() ?? 0;
-    final maxScore = (map['maxScore'] as num?)?.toDouble() ?? _maxScoreForMode(req.mode).toDouble();
+    final maxScore = (map['maxScore'] as num?)?.toDouble() ??
+        (req == null ? 100.0 : _maxScoreForMode(req.mode).toDouble());
     final level = (map['level'] as num?)?.toInt();
     final gradingFormat = (map['gradingFormat'] ?? 'percentage').toString();
 
@@ -1077,4 +1137,25 @@ class AiGradingService {
       resultJson: res.toJson(),
     );
   }
+}
+
+/// What an overnight batch looks like when polled.
+class BatchOutcome {
+  /// "in_progress" until every paper is finished, then "ended".
+  final String status;
+
+  /// Marked papers, keyed by the customId the app sent.
+  final Map<String, AiGradeResult> results;
+
+  /// Papers that failed, keyed the same way — reported rather than dropped,
+  /// so a teacher never silently ends up with 29 of 30 marked.
+  final Map<String, String> failures;
+
+  /// Progress counts while still running (processing/succeeded/errored/...).
+  final Map<String, dynamic> counts;
+
+  const BatchOutcome({required this.status, required this.results, required this.failures, required this.counts});
+
+  bool get isEnded => status == 'ended';
+  int get processing => (counts['processing'] as num?)?.toInt() ?? 0;
 }

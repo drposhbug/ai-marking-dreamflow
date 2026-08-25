@@ -1,12 +1,17 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
+import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
+import 'package:marking_prokect_v2/services/id_factory.dart';
+import 'package:marking_prokect_v2/services/overnight_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:provider/provider.dart';
@@ -93,4 +98,97 @@ void attachFleetConfirmation(BuildContext context) {
     // Returning true here would mark them a second time, uncorrected.
     return false;
   };
+}
+
+/// Sends the papers a teacher has approved off for overnight marking
+/// instead of marking them one at a time now.
+///
+/// Everything the server needs is built from the same held jobs the live
+/// path would have used, so an overnight paper is marked identically to a
+/// live one — only the timing and the price differ.
+Future<int> sendHeldOvernight({
+  required BuildContext context,
+  required String label,
+  List<String> extraFeedback = const [],
+}) async {
+  final auth = context.read<AuthService>().currentUser;
+  final queue = context.read<GradingQueueService>();
+  final overnight = context.read<OvernightService>();
+  final app = context.read<AppState>();
+  if (auth == null) return 0;
+
+  final held = queue.heldJobs;
+  if (held.isEmpty) return 0;
+
+  final items = <Map<String, dynamic>>[];
+  final papers = <OvernightPaper>[];
+  for (final job in held) {
+    final customId = 'ov_${IdFactory.newId()}';
+    // Redact names before the pages ever leave, exactly as the live path
+    // does — an overnight paper must not be less private than a live one.
+    var pages = job.pages;
+    String? localName = job.req.studentName;
+    if (app.anonymizeUploads) {
+      final (clean, found) = await Anonymizer.pages(job.pages);
+      pages = clean;
+      localName ??= found;
+    }
+    final paths = await overnight.stashPages(customId, job.pages);
+    if (paths.isEmpty) continue;
+
+    final r = job.req;
+    items.add({
+      'customId': customId,
+      'imagesBase64': pages.map(base64Encode).toList(growable: false),
+      'mediaType': 'image/jpeg',
+      'mode': r.mode.name,
+      'maxScore': _maxScoreFor(r.mode),
+      'harshness': r.harshness,
+      'criteria': const <String>[],
+      if (r.studentGrade != null) 'studentGrade': r.studentGrade,
+      if (r.gradeLevel != null) 'expectationGrade': r.gradeLevel,
+      if (r.region != null && r.region!.isNotEmpty) 'region': r.region,
+      'teacherFeedback': [...(r.teacherFeedback ?? const <String>[]), ...extraFeedback],
+      if (r.answerKeyId != null && r.answerKeyId!.isNotEmpty) 'answerKeyId': r.answerKeyId,
+    });
+    papers.add(OvernightPaper(
+      customId: customId,
+      label: job.label,
+      pagePaths: paths,
+      classId: r.classId,
+      presetId: r.presetId,
+      subject: r.subject,
+      mode: r.mode,
+      studentName: localName,
+    ));
+  }
+  if (items.isEmpty) return 0;
+
+  await overnight.submit(teacherId: auth.id, label: label, items: items, papers: papers);
+  // The queue copies are done with — the batch owns these papers now, and
+  // their pages are safely on disk.
+  queue.discardHeld();
+  return items.length;
+}
+
+/// Mirrors the server's fallback totals so an overnight request carries the
+/// same maxScore the live path would have used.
+int _maxScoreFor(GradingMode mode) => switch (mode) {
+      GradingMode.homework => 100,
+      GradingMode.testQuiz => 25,
+      GradingMode.labReport => 40,
+      GradingMode.englishEssay => 25,
+    };
+
+/// Files any overnight marking that finished while the app was closed.
+/// Called on launch — this is how a teacher wakes up to marked papers.
+Future<int> checkOvernight(BuildContext context) async {
+  final auth = context.read<AuthService>().currentUser;
+  if (auth == null) return 0;
+  final overnight = context.read<OvernightService>();
+  return overnight.checkNow(
+    teacherId: auth.id,
+    students: context.read<StudentsService>(),
+    submissions: context.read<SubmissionsService>(),
+  );
 }

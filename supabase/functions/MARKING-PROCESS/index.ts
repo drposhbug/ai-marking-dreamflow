@@ -1282,6 +1282,80 @@ async function callGemini(imagesBase64: string[], mediaType: string, prompt: str
   return JSON.parse(cleaned);
 }
 
+/// Assembles the exact prompt a marking request runs on.
+///
+/// BOTH the live grade path and the overnight batch path go through this.
+/// If they built their prompt separately the two would drift, and the same
+/// paper would score differently depending on whether the teacher pressed
+/// "mark now" or "mark overnight" — which is indefensible.
+// deno-lint-ignore no-explicit-any
+function buildMarkingPrompt(p: {
+  mode: string;
+  maxScore: number;
+  harshness: number;
+  criteria: string[];
+  studentGrade: number | null;
+  expectationGrade: number | null;
+  pageCount: number;
+  includeTranscription: boolean;
+  regionText: string | null;
+  feedbackText: string | null;
+  // deno-lint-ignore no-explicit-any
+  answerKey: any;
+  // deno-lint-ignore no-explicit-any
+}): { systemBlocks: any[]; contextText: string; schema: any; geminiPrompt: string; shape: string; effort: "low" | "medium" } {
+  const contextText = buildContext({
+    mode: p.mode,
+    maxScore: p.maxScore,
+    harshness: p.harshness,
+    criteria: p.criteria,
+    studentGrade: p.studentGrade,
+    expectationGrade: p.expectationGrade,
+    pageCount: p.pageCount,
+    includeTranscription: p.includeTranscription,
+  });
+  const keyText = p.answerKey ? `OFFICIAL ANSWER KEY:\n${JSON.stringify(p.answerKey)}` : null;
+
+  // Static rules, the region's curriculum expectations, and the answer key go
+  // in the system prompt with cache breakpoints (rules → region → key, from
+  // most-shared to least-shared): every grade re-reads them at ~10% input
+  // cost, and grading a whole class against one key shares all three.
+  // deno-lint-ignore no-explicit-any
+  const systemBlocks: any[] = [
+    { type: "text", text: STATIC_SYSTEM, cache_control: { type: "ephemeral", ttl: "1h" } },
+  ];
+  if (p.regionText) {
+    systemBlocks.push({ type: "text", text: p.regionText, cache_control: { type: "ephemeral", ttl: "1h" } });
+  }
+  if (p.feedbackText) {
+    systemBlocks.push({ type: "text", text: p.feedbackText, cache_control: { type: "ephemeral", ttl: "1h" } });
+  }
+  // Max 4 cache breakpoints per request — rules + region + feedback + key is
+  // exactly 4. Don't add a fifth cached block without merging two of these.
+  if (keyText) {
+    systemBlocks.push({ type: "text", text: keyText, cache_control: { type: "ephemeral", ttl: "1h" } });
+  }
+
+  const schema = gradeSchema(p.includeTranscription);
+  const shape = gradeShape(p.includeTranscription);
+  const geminiPrompt = STATIC_SYSTEM +
+    (p.regionText ? `\n\n${p.regionText}` : "") +
+    (p.feedbackText ? `\n\n${p.feedbackText}` : "") +
+    (keyText ? `\n\n${keyText}` : "") +
+    "\n\n" + contextText;
+
+  return {
+    systemBlocks,
+    contextText,
+    schema,
+    geminiPrompt,
+    shape,
+    // Marking against a key is comparison, not deduction — the key already
+    // holds the reasoning, so buy less thinking (thinking bills as output).
+    effort: p.answerKey ? "low" : "medium",
+  };
+}
+
 // ---------- Handler ----------
 
 Deno.serve(async (req) => {
@@ -1499,6 +1573,209 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     return json({ submissions: (data ?? []).map((r: any) => r.payload) });
   }
+  // ── Overnight marking ──────────────────────────────────────────────────
+  // "Scan the lot at 9pm, wake up to marked papers." Papers go to the
+  // Anthropic Batch API, which costs half as much as marking them live and
+  // returns within 24h (usually far sooner). The teacher has already seen
+  // the pilot paper for each set, so nothing goes out unchecked.
+  //
+  // Several class sets can be in flight at once — English tonight, Physics
+  // ten minutes later — each as its own batch.
+  if (action === "batch_submit") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    if (items.length === 0) return json({ error: "items are required" }, 400);
+    if (items.length > 200) return json({ error: "Too many papers in one batch — split the set." }, 400);
+
+    const gate = await budgetGate(teacherId, true);
+    if (gate) return gate;
+
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!apiKey) return json({ error: "Missing ANTHROPIC_API_KEY secret" }, 500);
+    const anthropic = new Anthropic({ apiKey });
+
+    // deno-lint-ignore no-explicit-any
+    const requests: any[] = [];
+    // What normalize() needs when the results come back, per paper.
+    const meta: Record<string, unknown> = {};
+
+    for (let i = 0; i < items.length; i++) {
+      // deno-lint-ignore no-explicit-any
+      const it: any = items[i];
+      const customId = String(it?.customId ?? ("p" + i)).slice(0, 60);
+      const imagesBase64: string[] = (Array.isArray(it?.imagesBase64) ? it.imagesBase64 : [])
+        .map((s: unknown) => String(s ?? ""))
+        .filter((s: string) => s.length > 0);
+      if (imagesBase64.length === 0) continue;
+
+      const itMode = String(it?.mode ?? "homework");
+      const itMax = Math.round(clamp(it?.maxScore, 1, 10000, 100));
+      const itHarsh = Math.round(clamp(it?.harshness, 1, 10, 5));
+      // deno-lint-ignore no-explicit-any
+      const itCriteria = (Array.isArray(it?.criteria) ? it.criteria : [])
+        .map((c: any) => String(c?.name ?? c ?? "").trim())
+        .filter((s: string) => s.length > 0);
+      const itGrade = Number.isFinite(Number(it?.studentGrade)) ? Number(it.studentGrade) : null;
+      const itExpectation = Number.isFinite(Number(it?.expectationGrade))
+        ? Math.round(clamp(it.expectationGrade, 1, 13, 6))
+        : null;
+      const itRegion = String(it?.region ?? "").trim();
+      const itFeedback: string[] = (Array.isArray(it?.teacherFeedback) ? it.teacherFeedback : [])
+        .map((s: unknown) => String(s ?? "").trim())
+        .filter((s: string) => s.length > 0)
+        .map((s: string) => s.slice(0, 300))
+        .slice(0, 20);
+
+      // deno-lint-ignore no-explicit-any
+      let itKey: any = null;
+      const keyId = String(it?.answerKeyId ?? "").trim();
+      if (keyId) {
+        const { data } = await serviceDb().from("answer_keys").select("key_json").eq("id", keyId).maybeSingle();
+        itKey = data?.key_json ?? null;
+      }
+
+      const plan = buildMarkingPrompt({
+        mode: itMode,
+        maxScore: itMax,
+        harshness: itHarsh,
+        criteria: itCriteria,
+        studentGrade: itGrade,
+        expectationGrade: itExpectation,
+        pageCount: imagesBase64.length,
+        includeTranscription: false,
+        regionText: itRegion ? regionBlock(itRegion) : null,
+        feedbackText: itFeedback.length > 0
+          ? "TEACHER MARKING PREFERENCES — standing corrections this teacher has given about how to mark. Follow each one whenever it applies; they override default marking style but NEVER override the OFFICIAL ANSWER KEY:\n" +
+            itFeedback.map((s) => "- " + s).join("\n")
+          : null,
+        answerKey: itKey,
+      });
+
+      // deno-lint-ignore no-explicit-any
+      const content: any[] = [];
+      imagesBase64.forEach((img, n) => {
+        content.push({ type: "text", text: "Page " + (n + 1) + " of " + imagesBase64.length + ":" });
+        content.push({
+          type: "image",
+          source: { type: "base64", media_type: String(it?.mediaType ?? "image/jpeg"), data: img },
+        });
+      });
+      content.push({ type: "text", text: plan.contextText });
+
+      requests.push({
+        custom_id: customId,
+        params: {
+          model: "claude-sonnet-5",
+          max_tokens: 16000,
+          thinking: { type: "adaptive" },
+          output_config: { effort: plan.effort, format: { type: "json_schema", schema: plan.schema } },
+          system: plan.systemBlocks,
+          messages: [{ role: "user", content }],
+        },
+      });
+      meta[customId] = {
+        maxScore: itMax,
+        expectationGrade: itExpectation,
+        formatOverride: it?.formatOverride ? String(it.formatOverride) : null,
+      };
+    }
+
+    if (requests.length === 0) return json({ error: "no usable papers in the batch" }, 400);
+
+    try {
+      // deno-lint-ignore no-explicit-any
+      const batch: any = await (anthropic as any).messages.batches.create({ requests });
+      await serviceDb().from("marking_batches").insert({
+        batch_id: batch.id,
+        teacher_id: teacherId,
+        status: String(batch.processing_status ?? "in_progress"),
+        meta,
+      });
+      return json({ batchId: batch.id, count: requests.length, status: batch.processing_status ?? "in_progress" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("batch_submit failed:", msg);
+      return json({ error: "Couldn't queue overnight marking: " + msg }, 500);
+    }
+  }
+
+  // Poll a batch. Results come back only once the whole batch has ended;
+  // the app then files each one under the right student.
+  if (action === "batch_status") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    const batchId = String(payload?.batchId ?? "").trim();
+    if (!teacherId || !batchId) return json({ error: "teacherId and batchId are required" }, 400);
+
+    const { data: row } = await serviceDb()
+      .from("marking_batches")
+      .select("meta, teacher_id")
+      .eq("batch_id", batchId)
+      .maybeSingle();
+    // A batch belongs to the teacher who created it, and to nobody else.
+    if (!row || String(row.teacher_id) !== teacherId) return json({ error: "not found" }, 404);
+
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!apiKey) return json({ error: "Missing ANTHROPIC_API_KEY secret" }, 500);
+    const anthropic = new Anthropic({ apiKey });
+
+    try {
+      // deno-lint-ignore no-explicit-any
+      const batch: any = await (anthropic as any).messages.batches.retrieve(batchId);
+      const status = String(batch?.processing_status ?? "in_progress");
+      if (status !== "ended") {
+        return json({ status, counts: batch?.request_counts ?? {} });
+      }
+
+      const meta = (row.meta ?? {}) as Record<
+        string,
+        { maxScore: number; expectationGrade: number | null; formatOverride: string | null }
+      >;
+      // deno-lint-ignore no-explicit-any
+      const out: any[] = [];
+      let spentIn = 0;
+      let spentOut = 0;
+      // deno-lint-ignore no-explicit-any
+      const stream: any = await (anthropic as any).messages.batches.results(batchId);
+      for await (const entry of stream) {
+        const customId = String(entry?.custom_id ?? "");
+        const m = meta[customId] ?? { maxScore: 100, expectationGrade: null, formatOverride: null };
+        const result = entry?.result;
+        if (result?.type !== "succeeded") {
+          out.push({ customId, error: String(result?.error?.message ?? result?.type ?? "failed") });
+          continue;
+        }
+        try {
+          const msg = result.message;
+          const usage = msg?.usage ?? {};
+          // Batch tokens bill at half price — meter what was actually spent.
+          spentIn += ((usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) * 0.1) * 0.5;
+          spentOut += (usage.output_tokens ?? 0) * 0.5;
+          // deno-lint-ignore no-explicit-any
+          const text = (msg?.content ?? []).find((b: any) => b?.type === "text")?.text ?? "";
+          if (!text) throw new Error("no text in result");
+          const raw = JSON.parse(text);
+          const stats: CodeUse[] = [];
+          const normalized = normalize(raw, "claude", m.maxScore, m.formatOverride ?? undefined, stats, m.expectationGrade);
+          await logCodeUsage(stats);
+          out.push({ customId, result: normalized });
+        } catch (e) {
+          out.push({ customId, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      if (spentIn > 0 || spentOut > 0) await logUsage(teacherId, "grade_batch", spentIn, spentOut);
+      await serviceDb()
+        .from("marking_batches")
+        .update({ status: "ended", updated_at: new Date().toISOString() })
+        .eq("batch_id", batchId);
+      return json({ status: "ended", results: out });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("batch_status failed:", msg);
+      return json({ error: msg }, 500);
+    }
+  }
+
 
   // ── Account deletion. Required by the App Store (5.1.1(v)) and Play:
   //    a teacher who can create an account must be able to erase it from
@@ -2110,46 +2387,21 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     answerKey = data?.key_json ?? null;
   }
 
-  const contextText = buildContext({
+  // Shared with the overnight batch path so both mark identically.
+  const plan = buildMarkingPrompt({
     mode,
     maxScore,
     harshness,
     criteria,
-    studentName: payload?.studentName ? String(payload.studentName) : undefined,
     studentGrade,
     expectationGrade,
     pageCount: imagesBase64.length,
     includeTranscription,
+    regionText,
+    feedbackText,
+    answerKey,
   });
-  const keyText = answerKey ? `OFFICIAL ANSWER KEY:\n${JSON.stringify(answerKey)}` : null;
-
-  // Static rules, the region's curriculum expectations, and the answer key go
-  // in the system prompt with cache breakpoints (rules → region → key, from
-  // most-shared to least-shared): every grade re-reads them at ~10% input
-  // cost, and grading a whole class against one key shares all three.
-  // deno-lint-ignore no-explicit-any
-  const systemBlocks: any[] = [
-    { type: "text", text: STATIC_SYSTEM, cache_control: { type: "ephemeral", ttl: "1h" } },
-  ];
-  if (regionText) {
-    systemBlocks.push({ type: "text", text: regionText, cache_control: { type: "ephemeral", ttl: "1h" } });
-  }
-  if (feedbackText) {
-    systemBlocks.push({ type: "text", text: feedbackText, cache_control: { type: "ephemeral", ttl: "1h" } });
-  }
-  // Max 4 cache breakpoints per request — rules + region + feedback + key is
-  // exactly 4. Don't add a fifth cached block without merging two of these.
-  if (keyText) {
-    systemBlocks.push({ type: "text", text: keyText, cache_control: { type: "ephemeral", ttl: "1h" } });
-  }
-
-  const schema = gradeSchema(includeTranscription);
-  const shape = gradeShape(includeTranscription);
-  const geminiPrompt = STATIC_SYSTEM +
-    (regionText ? `\n\n${regionText}` : "") +
-    (feedbackText ? `\n\n${feedbackText}` : "") +
-    (keyText ? `\n\n${keyText}` : "") +
-    "\n\n" + contextText;
+  const { systemBlocks, contextText, schema, geminiPrompt, shape } = plan;
 
   // Claude grades by default; Gemini is the fallback (or primary when
   // the request asks for it with "provider": "gemini").
@@ -2210,15 +2462,12 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     try {
       const usage = { inputTokens: 0, outputTokens: 0 };
       const raw = name === "claude"
-        // Marking against a key is comparison, not deduction — the key
-        // already holds the reasoning, so buy less thinking (thinking bills
-        // as output). Keyless marking keeps the default depth.
         ? await callClaude(imagesBase64, mediaType, {
             systemBlocks,
             userText: contextText,
             schema,
             usage,
-            effort: answerKey ? "low" : "medium",
+            effort: plan.effort,
           })
         : await callGemini(imagesBase64, mediaType, geminiPrompt, shape);
       if (name === "gemini") {
