@@ -13,8 +13,8 @@ import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
-import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
@@ -321,49 +321,17 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   /// marked while the teacher does something else. Students auto-link from
   /// the name on each paper; class/key/grade come from the current draft.
   void _enqueueBatch(List<List<ScannedPage>> groups) {
-    final auth = context.read<AuthService>().currentUser;
-    if (auth == null) return;
-    final app = context.read<AppState>();
-    final draft = app.draft;
-    final students = context.read<StudentsService>();
-    final submissions = context.read<SubmissionsService>();
-    final queue = context.read<GradingQueueService>();
-
-    final reqs = <AiGradeRequest>[];
-    final pagesList = <List<Uint8List>>[];
-    final labels = <String?>[];
-    for (final group in groups) {
-      final bytes = group.map((p) => p.bytes).toList(growable: false);
-      reqs.add(AiGradeRequest(
-        teacherId: auth.id,
-        studentId: '',
-        classId: draft.classId ?? '',
-        presetId: draft.presetId ?? '',
-        subject: draft.detectedSubject ?? 'Subject',
-        mode: draft.mode,
-        criteria: const {},
-        harshness: draft.harshness,
-        notes: null,
-        overrideUsed: draft.oneTimeOverride,
-        imageBytes: bytes.first,
-        pageImages: bytes,
-        studentName: null,
-        studentGrade: null,
-        gradeLevel: draft.gradeLevel,
-        region: app.region,
-        teacherFeedback: app.markingFeedback,
-        answerKeyId: draft.answerKeyId.isEmpty ? null : draft.answerKeyId,
-      ));
-      pagesList.add(bytes);
-      labels.add(group.first.fileName.replaceAll(RegExp(r'\s*\(page \d+\)$'), ''));
-    }
-    // Pilot-then-fleet: with no key chosen, the first paper learns one and
-    // the rest mark against it on the cheap route.
-    queue.enqueueBatch(reqs: reqs, pagesList: pagesList, labels: labels, students: students, submissions: submissions);
+    final n = enqueueStudentGroups(
+      context: context,
+      groups: [for (final g in groups) g.map((p) => p.bytes).toList(growable: false)],
+      labels: [for (final g in groups) g.first.fileName.replaceAll(RegExp(r'\s*\(page \d+\)$'), '')],
+    );
+    if (n == 0) return;
+    final draft = context.read<AppState>().draft;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(draft.answerKeyId.isEmpty
-          ? 'Marking ${groups.length} students — the first paper goes ahead to learn the answer key, then the rest follow.'
-          : 'Marking ${groups.length} students in the background — results land in the tray as they finish.'),
+          ? 'Marking $n students — the first paper goes ahead to learn the answer key, then the rest follow.'
+          : 'Marking $n students in the background — results land in the tray as they finish.'),
     ));
   }
 
@@ -462,6 +430,39 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                       ],
                     ),
                   ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: InkWell(
+                splashFactory: NoSplash.splashFactory,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                onTap: () => context.push(AppRoutes.splitStack),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: AiMarkerColors.tertiary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                        child: const Icon(Icons.print_rounded, color: AiMarkerColors.tertiary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Split a scanned stack', style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 2),
+                            Text('Feed the class set through the photocopier once — one PDF in, one paper per student out.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                    ],
+                  ),
                 ),
               ),
             ),
