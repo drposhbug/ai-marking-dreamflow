@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
@@ -82,6 +83,45 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
       const SnackBar(content: Text('Saved — Mark will follow this on every test from now on.')),
     );
   }
+  bool _sending = false;
+
+  /// Half price, and the teacher isn't waiting for it. They've just seen the
+  /// pilot, so the set isn't going out unchecked.
+  Future<void> _overnight() async {
+    final queue = context.read<GradingQueueService>();
+    final n = queue.heldJobs.length;
+    if (n == 0) return;
+    setState(() => _sending = true);
+    try {
+      final sent = await sendHeldOvernight(
+        context: context,
+        label: _job?.req.subject ?? 'Class set',
+        extraFeedback: _corrections,
+      );
+      if (!mounted) return;
+      if (sent == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Couldn\'t queue those for overnight marking — they\'re still held in the tray.')),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text('$sent papers are marking overnight. They\'ll be on your dashboard in the morning — you can close the app.'),
+        ),
+      );
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
 
   void _approve() {
     context.read<GradingQueueService>().releaseHeld(
@@ -268,23 +308,30 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
         bottomNavigationBar: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _hold,
-                    child: const Text('Not yet'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
+                SizedBox(
+                  width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: (_remarking || job?.status != GradingJobStatus.done) ? null : _approve,
+                    onPressed: (_remarking || _sending || job?.status != GradingJobStatus.done) ? null : _approve,
                     icon: const Icon(Icons.check_rounded),
-                    label: Text('Looks right — mark $remaining more'),
+                    label: Text('Looks right — mark $remaining now'),
                   ),
                 ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: (_remarking || _sending || job?.status != GradingJobStatus.done) ? null : _overnight,
+                    icon: _sending
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.bedtime_rounded, size: 18),
+                    label: const Text('Mark overnight — half price'),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TextButton(onPressed: _sending ? null : _hold, child: const Text('Not yet — hold them')),
               ],
             ),
           ),

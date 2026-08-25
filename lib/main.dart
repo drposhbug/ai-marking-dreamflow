@@ -7,6 +7,7 @@ import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
+import 'package:marking_prokect_v2/services/overnight_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:marking_prokect_v2/services/student_class_links_service.dart';
@@ -63,6 +64,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PresetsService()),
         ChangeNotifierProvider(create: (_) => SubmissionsService()),
         ChangeNotifierProvider(create: (_) => SupabaseHook()),
+        ChangeNotifierProvider(create: (_) => OvernightService()),
         ChangeNotifierProvider(create: (_) => GradingQueueService(messengerKey: rootMessengerKey)),
       ],
       child: AppBootstrap(

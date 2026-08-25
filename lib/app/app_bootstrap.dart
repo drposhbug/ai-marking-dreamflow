@@ -2,7 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
+import 'package:marking_prokect_v2/main.dart' show rootMessengerKey;
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/batch_marking.dart';
+import 'package:marking_prokect_v2/services/overnight_service.dart';
 import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
@@ -145,6 +148,24 @@ class _AppBootstrapState extends State<AppBootstrap> {
       classIds: classes.classes.map((e) => e.id).toList(),
       presetIds: presets.presets.map((e) => e.id).toList(),
     );
+    if (!mounted) return;
+
+    // Overnight marking that finished while the app was closed gets filed
+    // now — this is the "wake up to marked papers" half of the feature.
+    final overnight = context.read<OvernightService>();
+    await overnight.init();
+    if (!mounted) return;
+    if (overnight.batches.isNotEmpty) {
+      final filed = await checkOvernight(context);
+      if (filed > 0) {
+        rootMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 6),
+            content: Text('$filed papers finished marking overnight — they\'re on your dashboard.'),
+          ),
+        );
+      }
+    }
   }
 
   @override

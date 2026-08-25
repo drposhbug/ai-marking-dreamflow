@@ -118,6 +118,19 @@ Deno.serve(async (req) => {
     await sql`alter table public.presets add column if not exists notes text`;
     await sql`alter table public.presets add column if not exists is_default boolean not null default false`;
     await sql`create index if not exists presets_teacher_idx on public.presets (teacher_id)`;
+    // Overnight (Batch API) marking runs in flight. `meta` holds what
+    // normalize() needs per paper when the results land hours later.
+    await sql`
+      create table if not exists public.marking_batches (
+        batch_id text primary key,
+        teacher_id text not null,
+        status text not null default 'in_progress',
+        meta jsonb,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      )`;
+    await sql`alter table public.marking_batches enable row level security`;
+    await sql`create index if not exists marking_batches_teacher_idx on public.marking_batches (teacher_id, created_at desc)`;
     await sql`alter table public.profiles add column if not exists plan text`;
     // Marking defaults picked in Settings follow the account.
     await sql`alter table public.profiles add column if not exists default_mode text`;
