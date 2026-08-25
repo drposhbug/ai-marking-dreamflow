@@ -39,7 +39,10 @@ function planFromEvent(productId: string, entitlementIds: string[]): string {
   const ents = entitlementIds.join(" ").toLowerCase();
   if (p.includes("school") || ents.includes("school")) return "school";
   if (p.includes("starter") || ents.includes("starter")) return "starter";
-  // Everything else entitled is Pro — monthly and annual share the tier.
+  // Annual bills $119.99/yr = $10.00/mo, well under the $14.99 monthly
+  // price, so it CANNOT carry the monthly Pro allowance — that would be a
+  // guaranteed loss on every annual subscriber. It gets its own tier.
+  if (p.includes("annual") || p.includes("year") || p.includes("yr") || ents.includes("annual")) return "pro_annual";
   return "pro";
 }
 

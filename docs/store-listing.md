@@ -79,7 +79,8 @@ PLANS
 Start on a free trial. Starter, Pro and School plans are credit-based: credits
 scale with how much work a paper actually takes, so a short multiple-choice quiz
 costs a fraction of a six-page problem set, and re-marking the same paper is
-free. Cancel any time in the store.
+free. Marking overnight goes about five times further than marking on the spot.
+Cancel any time in the store.
 
 PRIVACY
 

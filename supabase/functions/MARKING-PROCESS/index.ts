@@ -1008,13 +1008,47 @@ const PRICE_OUT_PER_M = 15; // USD per 1M output tokens
 // multiple-choice quiz uses far fewer credits than a 6-page problem set.
 // The app only ever shows percentages. Cache hits are free. Daily pacing =
 // 25% of the month, weekly = 50%, so a test day fits but the month lasts.
-// Budgets ≈ old mark caps × typical cost/mark.
+//
+// ── THE MARGIN RULE ────────────────────────────────────────────────────
+// Every cap below is derived, not guessed. A subscription must NEVER lose
+// money, and must clear 50% profit after the charity give-back even from a
+// teacher who burns their whole allowance:
+//
+//   store commission   15%   (Apple/Google Small Business Program — this
+//                             MUST be enrolled in; standard rate is 30%)
+//   charity give-back  10%
+//   RevenueCat          1%   (free under $2.5k/mo, 1% after)
+//   target profit      50%
+//   ------------------------------
+//   left for AI        24%   of the gross price
+//
+//   monthlyUsd = price × 0.24
+//
+// So the cap IS the profit guarantee: budgetGate() refuses to mark past it,
+// which means the worst possible subscriber still returns 50%. Change a
+// price and you must re-derive its cap with the same 24%, or the guarantee
+// silently stops holding. If the Small Business Program is ever lost, the
+// share left for AI drops from 24% to 9% and every cap here must be recut.
+//
+// Measured costs behind the paper counts (2026-08-25, admin_stats):
+//   overnight batch  ~$0.008/paper   (half price + shared prompt cache)
+//   live single mark ~$0.039/paper   (cold cache; cheaper inside a set)
+//   Form/CSV text    ~$0.001/question set
 const PLAN_CAPS: Record<string, { monthlyUsd: number; plans: number; label: string }> = {
-  trial: { monthlyUsd: 0.75, plans: 5, label: "Free Trial" },
-  starter: { monthlyUsd: 3.0, plans: 10, label: "Starter" },
-  pro: { monthlyUsd: 10.0, plans: 30, label: "Pro" },
-  school: { monthlyUsd: 22.5, plans: 60, label: "School" },
-  // Pre-launch preview accounts get Pro-level room.
+  // Trial is customer acquisition, not a subscription — this is the only
+  // row allowed to lose money, and it is capped tightly on purpose.
+  trial: { monthlyUsd: 0.4, plans: 5, label: "Free Trial" },
+  // $6.99 × 0.24 = $1.68 → ~210 papers overnight
+  starter: { monthlyUsd: 1.65, plans: 10, label: "Starter" },
+  // $14.99 × 0.24 = $3.60 → ~455 papers overnight
+  pro: { monthlyUsd: 3.55, plans: 30, label: "Pro" },
+  // Annual bills $119.99/yr = $10.00/mo, so it CANNOT carry the monthly
+  // Pro cap — that was a guaranteed loss on every annual subscriber.
+  // $10.00 × 0.24 = $2.40 → ~300 papers overnight
+  pro_annual: { monthlyUsd: 2.35, plans: 30, label: "Pro Annual" },
+  // $24.99 × 0.24 = $6.00 → ~760 papers overnight
+  school: { monthlyUsd: 5.95, plans: 60, label: "School" },
+  // Pre-launch founder accounts. Not a paid tier; not bound by the rule.
   preview: { monthlyUsd: 10.0, plans: 30, label: "Preview" },
 };
 
@@ -1039,8 +1073,14 @@ async function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
 // currently on a PAID plan adds bonus marking credits to the monthly cap —
 // the reward is the thing teachers run out of, and it can't be farmed with
 // free accounts because unpaid referrals add nothing.
-const REFERRAL_BONUS_USD = 0.65; // ≈ 25 typical marks of credits
-const PAID_PLANS = ["starter", "pro", "school"];
+// Bonus credits per PAID referral. Comes straight out of the 50% margin,
+// so it is sized against what marking actually costs now: $0.20 buys ~25
+// papers overnight, where $0.65 was priced for the old $0.026/mark era and
+// would quietly eat a third of the profit on a well-referred Pro account.
+// Capped in total so no account can refer its way past break-even.
+const REFERRAL_BONUS_USD = 0.2;
+const MAX_REFERRAL_BONUS_USD = 1.0;
+const PAID_PLANS = ["starter", "pro", "pro_annual", "school"];
 
 async function paidReferralCount(teacherId: string): Promise<number> {
   try {
@@ -1123,7 +1163,7 @@ async function budgetGate(teacherId: string, pacing: boolean): Promise<Response 
       spendSince(teacherId, p.month),
       paidReferralCount(teacherId),
     ]);
-    const monthlyCap = caps.monthlyUsd + paidRefs * REFERRAL_BONUS_USD;
+    const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
     const block = (scope: string, message: string): Response =>
       json({ error: "usage_limit", scope, plan, message }, 429);
     if (month >= monthlyCap) {
@@ -1516,7 +1556,7 @@ Deno.serve(async (req) => {
         spendSince(teacherId, p.month),
         paidReferralCount(teacherId),
       ]);
-      const monthlyCap = caps.monthlyUsd + paidRefs * REFERRAL_BONUS_USD;
+      const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
       return json({
         plan,
         planLabel: caps.label,
