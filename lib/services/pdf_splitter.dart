@@ -181,6 +181,38 @@ class PdfSplitter {
     return false;
   }
 
+  /// What the arithmetic says about a split stack, or null when it looks
+  /// fine. This is the only defence against the copier's quiet failure: it
+  /// pulls two sheets through as one, a page disappears with no error, and
+  /// every boundary after it shifts by one.
+  static String? stackWarning({required List<int> groupLengths, int? expectedStudents}) {
+    if (groupLengths.isEmpty) return null;
+    final papers = groupLengths.length;
+    if (expectedStudents != null && expectedStudents > 0 && papers != expectedStudents) {
+      final diff = (papers - expectedStudents).abs();
+      return papers < expectedStudents
+          ? 'Only $papers papers, but you expected $expectedStudents. $diff ${diff == 1 ? 'paper is' : 'papers are'} missing — the feeder may have pulled two sheets through at once, or a paper never went in.'
+          : '$papers papers, but you expected $expectedStudents. A paper has probably been split in two — check the boundaries below.';
+    }
+    // Ragged lengths in a same-test stack are the fingerprint of a
+    // double-feed: one paper comes out a page short.
+    if (papers > 2) {
+      final counts = <int, int>{};
+      for (final len in groupLengths) {
+        counts[len] = (counts[len] ?? 0) + 1;
+      }
+      if (counts.length > 1) {
+        final common = counts.entries.reduce((a, b) => b.value > a.value ? b : a);
+        final odd = papers - common.value;
+        // Only worth saying when there IS a normal length to be odd against.
+        if (odd > 0 && common.value > papers / 2) {
+          return 'Most papers are ${common.key} pages, but $odd ${odd == 1 ? 'is' : 'are'} not. If everyone wrote the same test, check ${odd == 1 ? 'that one' : 'those'} — a page may have been missed by the feeder.';
+        }
+      }
+    }
+    return null;
+  }
+
   static void debugSummary(List<PageSignals> signals) {
     if (!kDebugMode) return;
     for (var i = 0; i < signals.length; i++) {

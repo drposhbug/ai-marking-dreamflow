@@ -85,6 +85,9 @@ class AiMarkerColors {
   static const tertiary = Color(0xFF7C3AED);
   static const error = Color(0xFFDC2626);
   static const neutral = Color(0xFF6B7280);
+  /// Amber: something needs a look but nothing is broken — a stack whose
+  /// page count does not add up, a result flagged for teacher review.
+  static const warning = Color(0xFFD97706);
 
   static const bg = Color(0xFFF4F7FB);
   static const card = Color(0xFFFFFFFF);
