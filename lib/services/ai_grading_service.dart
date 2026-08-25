@@ -578,8 +578,12 @@ class AiGradingService {
   /// Marks typed answers from an imported response sheet (CSV / Google
   /// Form). One entry per question; every student's answer to that question
   /// is judged in the same call, so marking is consistent across the class.
-  /// Returns {label: {rowIndex: {score, correct, feedback}}}.
-  Future<Map<String, Map<int, Map<String, dynamic>>>> markResponses({
+  ///
+  /// Returns one entry per question IN THE ORDER SENT, each mapping row
+  /// index → {score, correct, feedback}. Matched by position, never by
+  /// question text: the server trims long labels, so a title-keyed lookup
+  /// would quietly return nothing and score the whole class zero.
+  Future<List<Map<int, Map<String, dynamic>>>> markResponses({
     required String teacherId,
     required List<Map<String, dynamic>> questions,
     String? subject,
@@ -603,15 +607,17 @@ class AiGradingService {
       _maybeThrowUsageLimitMap(data);
       throw Exception(data['error'].toString());
     }
-    final out = <String, Map<int, Map<String, dynamic>>>{};
+    final out = List<Map<int, Map<String, dynamic>>>.generate(questions.length, (_) => <int, Map<String, dynamic>>{});
     if (data is Map && data['results'] is List) {
-      for (final q in (data['results'] as List).whereType<Map>()) {
-        final label = (q['label'] ?? '').toString();
-        final byRow = <int, Map<String, dynamic>>{};
+      final results = (data['results'] as List).whereType<Map>().toList();
+      for (var n = 0; n < results.length; n++) {
+        final q = results[n];
+        // Prefer the echoed index; fall back to arrival order.
+        final qi = (q['qi'] as num?)?.toInt() ?? n;
+        if (qi < 0 || qi >= out.length) continue;
         for (final m in (q['marks'] as List? ?? const []).whereType<Map>()) {
-          byRow[(m['i'] as num?)?.toInt() ?? -1] = m.cast<String, dynamic>();
+          out[qi][(m['i'] as num?)?.toInt() ?? -1] = m.cast<String, dynamic>();
         }
-        out[label] = byRow;
       }
     }
     return out;
