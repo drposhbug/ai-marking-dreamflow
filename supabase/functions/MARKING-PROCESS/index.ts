@@ -939,6 +939,11 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
   // Out-param: billable token equivalents for this call (cache reads count
   // at 10%, cache writes at 125%) so the caller can meter spend.
   usage?: { inputTokens: number; outputTokens: number };
+  // Thinking depth. Thinking tokens bill as OUTPUT — the expensive side —
+  // so marking against an answer key runs "low": the key already did the
+  // reasoning and the model is comparing, not deducing. Keyless and essay
+  // marking, where judgement IS the work, stays at "medium".
+  effort?: "low" | "medium" | "high";
 }) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY secret");
@@ -963,7 +968,7 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
     // "medium" keeps grading well inside the edge-function time limit;
     // raise to "high" if you can tolerate slower, deeper marking.
     output_config: {
-      effort: "medium",
+      effort: o.effort ?? "medium",
       format: { type: "json_schema", schema: o.schema },
     },
     ...(o.systemBlocks ? { system: o.systemBlocks } : {}),
@@ -1167,28 +1172,59 @@ const DEEPSEEK_PRICE_OUT = 0.28; // USD per 1M output tokens
 const GEMINI_PARSE_PRICE_IN = 1.5;
 const GEMINI_PARSE_PRICE_OUT = 9.0;
 
+// Where the cheap text route runs. DeepSeek publishes open weights, so the
+// same model can be served by a host that is NOT in China and does not
+// train on what we send: DeepInfra (Delaware corp, US data centres, zero
+// retention, SOC 2 / ISO 27001) at roughly half the first-party price.
+//
+// Set DEEPINFRA_API_KEY and it is used. DEEPSEEK_API_KEY still works as a
+// fallback so nothing breaks before the key is swapped, but it sends
+// student answers to servers in the PRC under terms permitting training —
+// see docs/security-and-compliance.md.
+function cheapTextRoute(): { url: string; key: string; model: string; host: string } | null {
+  const di = Deno.env.get("DEEPINFRA_API_KEY");
+  if (di) {
+    return {
+      url: "https://api.deepinfra.com/v1/openai/chat/completions",
+      key: di,
+      model: Deno.env.get("DEEPINFRA_MODEL") ?? "deepseek-ai/DeepSeek-V4-Flash",
+      host: "deepinfra",
+    };
+  }
+  const ds = Deno.env.get("DEEPSEEK_API_KEY");
+  if (ds) {
+    return { url: "https://api.deepseek.com/chat/completions", key: ds, model: "deepseek-chat", host: "deepseek" };
+  }
+  return null;
+}
+
+/// True when the cheap route is available at all.
+function cheapRouteAvailable(): boolean {
+  return cheapTextRoute() !== null;
+}
+
 async function callDeepSeek(userText: string, usage?: { inputTokens: number; outputTokens: number }) {
-  const apiKey = Deno.env.get("DEEPSEEK_API_KEY");
-  if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY secret");
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
+  const route = cheapTextRoute();
+  if (!route) throw new Error("No cheap-route key set (DEEPINFRA_API_KEY or DEEPSEEK_API_KEY)");
+  const res = await fetch(route.url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${route.key}` },
     body: JSON.stringify({
-      model: "deepseek-chat",
+      model: route.model,
       messages: [{ role: "user", content: userText }],
       temperature: 0,
       max_tokens: 4000,
       response_format: { type: "json_object" },
     }),
   });
-  if (!res.ok) throw new Error(`DeepSeek ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) throw new Error(`${route.host} ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const data = await res.json();
   if (usage) {
     usage.inputTokens = data?.usage?.prompt_tokens ?? 0;
     usage.outputTokens = data?.usage?.completion_tokens ?? 0;
   }
   const text = data?.choices?.[0]?.message?.content ?? "";
-  if (!text) throw new Error("DeepSeek returned no text");
+  if (!text) throw new Error(`${route.host} returned no text`);
   const cleaned = text.trim().replace(/^```(?:json)?/, "").replace(/```$/, "").trim();
   return JSON.parse(cleaned);
 }
@@ -1595,7 +1631,7 @@ ${rows.map((r) => `[${r.i}] ${r.text}`).join("\n")}`;
         let parsed: any = null;
         // Short answers with a model answer are an objective check — the
         // cheap text route handles them; paragraphs get the frontier model.
-        if (kind === "short" && Deno.env.get("DEEPSEEK_API_KEY")) {
+        if (kind === "short" && cheapRouteAvailable()) {
           try {
             parsed = await callDeepSeek(prompt, usage);
             usedProviders.add("deepseek");
@@ -2137,7 +2173,7 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
   const keyedObjective = !!answerKey && (mode === "homework" || mode === "testQuiz");
   const elementaryKeyless = !answerKey && mode === "homework" &&
     expectationGrade != null && expectationGrade <= 6;
-  const hasDeepSeekKey = !!Deno.env.get("DEEPSEEK_API_KEY");
+  const hasDeepSeekKey = cheapRouteAvailable();
   if (keyedObjective && !preferGemini && !hasDeepSeekKey) {
     console.warn("keyed cheap route skipped: DEEPSEEK_API_KEY is missing — this keyed request is paying frontier prices instead of the cheap deterministic route.");
   }
@@ -2174,7 +2210,16 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     try {
       const usage = { inputTokens: 0, outputTokens: 0 };
       const raw = name === "claude"
-        ? await callClaude(imagesBase64, mediaType, { systemBlocks, userText: contextText, schema, usage })
+        // Marking against a key is comparison, not deduction — the key
+        // already holds the reasoning, so buy less thinking (thinking bills
+        // as output). Keyless marking keeps the default depth.
+        ? await callClaude(imagesBase64, mediaType, {
+            systemBlocks,
+            userText: contextText,
+            schema,
+            usage,
+            effort: answerKey ? "low" : "medium",
+          })
         : await callGemini(imagesBase64, mediaType, geminiPrompt, shape);
       if (name === "gemini") {
         // Gemini doesn't report through the same path — conservative estimate.

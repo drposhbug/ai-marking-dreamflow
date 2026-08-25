@@ -571,25 +571,72 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                     Text('${queue.markingCount} in progress', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                 ],
               ),
+              if (queue.heldJobs.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Card(
+                    color: AiMarkerColors.warning.withValues(alpha: 0.10),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${queue.heldJobs.length} papers waiting on you',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Open the first marked paper. If it marked the way you would, release the rest — if not, fix the answer key or mode first and nothing has been wasted.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              FilledButton.icon(
+                                onPressed: () {
+                                  final n = queue.heldJobs.length;
+                                  queue.releaseHeld(
+                                    students: context.read<StudentsService>(),
+                                    submissions: context.read<SubmissionsService>(),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Marking the remaining $n papers.')),
+                                  );
+                                },
+                                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                                label: Text('Mark all ${queue.heldJobs.length}'),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                onPressed: queue.discardHeld,
+                                child: const Text('Discard'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 10),
               Card(
                 child: Column(
                   children: [
                     for (final job in queue.jobs.take(8))
                       ListTile(
-                        leading: job.status == GradingJobStatus.marking
-                            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4))
-                            : Icon(
-                                job.status == GradingJobStatus.done ? Icons.check_circle_rounded : Icons.error_rounded,
-                                color: job.status == GradingJobStatus.done ? AiMarkerColors.secondary : AiMarkerColors.error,
-                              ),
+                        leading: switch (job.status) {
+                          GradingJobStatus.marking => const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
+                          GradingJobStatus.held => const Icon(Icons.pause_circle_rounded, color: AiMarkerColors.warning),
+                          GradingJobStatus.done => const Icon(Icons.check_circle_rounded, color: AiMarkerColors.secondary),
+                          GradingJobStatus.error => const Icon(Icons.error_rounded, color: AiMarkerColors.error),
+                        },
                         title: Text(job.label, style: Theme.of(context).textTheme.titleSmall),
                         subtitle: Text(
-                          job.status == GradingJobStatus.marking
-                              ? 'Marking…'
-                              : job.status == GradingJobStatus.done
-                                  ? '${job.result?.primaryDisplay ?? 'Done'} — tap to view'
-                                  : 'Failed — tap to retry',
+                          switch (job.status) {
+                            GradingJobStatus.marking => "Marking…",
+                            GradingJobStatus.held => "Waiting for your OK — check the first result",
+                            GradingJobStatus.done => "${job.result?.primaryDisplay ?? "Done"} — tap to view",
+                            GradingJobStatus.error => "Failed — tap to retry",
+                          },
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),

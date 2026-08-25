@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
@@ -34,6 +36,7 @@ int enqueueStudentGroups({
   final submissions = context.read<SubmissionsService>();
   final queue = context.read<GradingQueueService>();
   queue.anonymizeUploads = app.anonymizeUploads;
+  attachFleetConfirmation(context);
 
   final reqs = <AiGradeRequest>[];
   final pagesList = <List<Uint8List>>[];
@@ -70,4 +73,24 @@ int enqueueStudentGroups({
 
   queue.enqueueBatch(reqs: reqs, pagesList: pagesList, labels: jobLabels, students: students, submissions: submissions);
   return reqs.length;
+}
+
+/// The check-the-first-one gate. Once the pilot paper has marked, the
+/// teacher is taken to a screen showing what it actually did, where they can
+/// approve the set or type a correction and have it marked again.
+///
+/// Wired here rather than in the queue because only the UI layer can
+/// navigate. Returns false when they close it — the remaining papers stay
+/// held in the tray rather than being marked or thrown away.
+void attachFleetConfirmation(BuildContext context) {
+  final queue = context.read<GradingQueueService>();
+  final navContext = context;
+  queue.confirmFleet = (pilot, remaining) async {
+    if (!navContext.mounted) return true;
+    await navContext.push<bool>("${AppRoutes.pilotReview}?jobId=${pilot.id}");
+    // Always false: the screen releases the set itself on approval, so the
+    // teacher's typed corrections travel with the remaining papers.
+    // Returning true here would mark them a second time, uncorrected.
+    return false;
+  };
 }
