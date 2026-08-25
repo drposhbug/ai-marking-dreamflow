@@ -27,7 +27,7 @@ Mark less. Teach more.
 ## Short description — Play (80 max)
 
 ```
-Mark a class set in minutes. Scan, and get marks with real feedback.
+Google Form or paper — mark a whole class set in minutes, with real feedback.
 ```
 
 ---
@@ -37,12 +37,19 @@ Mark a class set in minutes. Scan, and get marks with real feedback.
 ```
 Marking eats your evenings. Markless gives them back.
 
-Photograph a test, a homework sheet, a lab report or an essay — Markless reads
+Fastest of all: if your quiz is a Google Form, upload the responses and the
+whole class comes back marked in about a minute — nothing to photograph.
+
+Or photograph a test, a homework sheet, a lab report or an essay — Markless reads
 the actual handwriting, marks it against your expectations, and writes feedback
 a student can act on. A class set takes minutes.
 
 WHAT IT DOES
 
+• FASTEST: already using Google Forms? Upload the responses CSV and the whole
+  class is marked in about a minute — no photographs at all. Multiple choice is
+  marked on your phone for free; written answers are AI-marked, every student's
+  answer to a question judged together so the marking stays consistent.
 • Scan from your camera, your gallery, or Google Drive — single papers or a
   whole class set at once.
 • Real marking, not a vibe check. Question-by-question scores, half and quarter
@@ -88,7 +95,8 @@ Markless is built by a teacher, for teachers.
 ## Promotional text — App Store (170 max, updatable without review)
 
 ```
-Scan a class set and get real marks with feedback students actually read.
+Google Form quiz? Upload the responses and the class comes back marked in a
+minute. Or scan paper — real marks with feedback students actually read.
 Answer keys, KTCA categories, Drive export — and 10% of every plan goes to
 charities helping kids learn.
 ```

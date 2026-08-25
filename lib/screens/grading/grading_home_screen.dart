@@ -486,9 +486,21 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Import a Google Form', style: Theme.of(context).textTheme.titleMedium),
+                            Row(
+                              children: [
+                                Flexible(child: Text('Import a Google Form', style: Theme.of(context).textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(999)),
+                                  child: Text('FASTEST', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AiMarkerColors.secondary, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 2),
-                            Text('Upload the responses CSV — multiple choice marks itself, written answers are AI-marked.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                            // The real pitch: setting the quiz as a Form skips
+                            // scanning altogether, so nothing is faster.
+                            Text('The quickest way to mark — no scanning at all. Multiple choice marks itself; written answers are AI-marked.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                           ],
                         ),
                       ),
