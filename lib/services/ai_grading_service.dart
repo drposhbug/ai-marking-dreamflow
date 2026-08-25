@@ -949,7 +949,10 @@ class AiGradingService {
           'maxScore': _maxScoreForMode(req.mode),
           'criteria': enabledCriteria,
           'harshness': req.harshness.clamp(1, 10),
-          'studentName': req.studentName,
+          // The student's name is deliberately NOT sent. The marker grades
+          // the work, not the person, and the prompt itself said 'never
+          // grade on it' — so it was pure identifiable data with no use.
+          // Names are read and kept on the device (see Anonymizer).
           'studentGrade': req.studentGrade,
           if (req.gradeLevel != null) 'expectationGrade': req.gradeLevel,
           if (req.region != null && req.region!.isNotEmpty) 'region': req.region,

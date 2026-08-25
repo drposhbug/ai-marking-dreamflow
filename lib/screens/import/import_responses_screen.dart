@@ -10,6 +10,7 @@ import 'package:marking_prokect_v2/models/student.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/csv_import.dart';
@@ -119,9 +120,17 @@ class _ImportResponsesScreenState extends State<ImportResponsesScreen> {
       for (var w = 0; w < written.length; w++) {
         final q = written[w];
         if (mounted) setState(() => _progress = 'Marking "${q.header}" (${w + 1} of ${written.length})…');
+        // Answers are already anonymous — they go up keyed by row number,
+        // never by name. Scrub any name a student typed into their own
+        // answer (signing an essay, naming a classmate) as well.
+        final rosterNames = [
+          for (var r = 0; r < sheet.rows.length; r++) sheet.studentName(r),
+          ...students.byClass(classId).map((s) => s.name),
+        ];
         final answers = <Map<String, dynamic>>[];
         for (var r = 0; r < sheet.rows.length; r++) {
-          final text = q.index < sheet.rows[r].length ? sheet.rows[r][q.index].trim() : '';
+          final raw = q.index < sheet.rows[r].length ? sheet.rows[r][q.index].trim() : '';
+          final text = appState.anonymizeUploads ? Anonymizer.scrubNames(raw, rosterNames) : raw;
           answers.add({'i': r, 'text': text.isEmpty ? '(no answer)' : text});
         }
         final res = await ai.markResponses(

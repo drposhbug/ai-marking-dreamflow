@@ -444,6 +444,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       // Marking runs in the background so the teacher can keep scanning —
       // the queue auto-links the student, saves the submission, and notifies
       // when the result is ready in the home-screen tray.
+      context.read<GradingQueueService>().anonymizeUploads = context.read<AppState>().anonymizeUploads;
       context.read<GradingQueueService>().enqueue(
             req: req,
             pages: pages,

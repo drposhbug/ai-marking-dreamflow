@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
@@ -54,6 +55,10 @@ class GradingQueueService extends ChangeNotifier {
   final GlobalKey<ScaffoldMessengerState>? messengerKey;
 
   GradingQueueService({this.messengerKey});
+  /// Whether names get blacked out before upload. Set from AppState when a
+  /// job is queued, so the queue does not need a BuildContext.
+  bool anonymizeUploads = true;
+
 
   final List<GradingJob> _jobs = [];
   List<GradingJob> get jobs => List.unmodifiable(_jobs);
@@ -129,17 +134,57 @@ class GradingQueueService extends ChangeNotifier {
     return 'Scan $h:$m ${t.hour >= 12 ? 'PM' : 'AM'}';
   }
 
+  /// The same request with different page images — used to swap in the
+  /// redacted copies without disturbing anything else about the job.
+  static AiGradeRequest _withPages(AiGradeRequest r, List<Uint8List> pages) => AiGradeRequest(
+        teacherId: r.teacherId,
+        studentId: r.studentId,
+        classId: r.classId,
+        presetId: r.presetId,
+        subject: r.subject,
+        mode: r.mode,
+        criteria: r.criteria,
+        harshness: r.harshness,
+        overrideUsed: r.overrideUsed,
+        imageBytes: pages.isEmpty ? r.imageBytes : pages.first,
+        pageImages: pages.isEmpty ? r.pageImages : pages,
+        notes: r.notes,
+        studentGrade: r.studentGrade,
+        gradeLevel: r.gradeLevel,
+        region: r.region,
+        teacherFeedback: r.teacherFeedback,
+        formatOverride: r.formatOverride,
+        studentName: r.studentName,
+        answerKeyId: r.answerKeyId,
+        includeTranscription: r.includeTranscription,
+      );
+
   Future<void> _run(GradingJob job, AiGradeRequest req, StudentsService students, SubmissionsService submissions) async {
     try {
       final ai = AiGradingService();
-      final res = await ai.grade(req);
+
+      // Read the name on this device and black it out of the copy that goes
+      // up for marking. The marker grades the work; who wrote it stays here.
+      // job.pages keeps the ORIGINAL pages so the teacher still sees the
+      // real paper, name and all, when they open the result.
+      var uploadReq = req;
+      String? localName;
+      if (anonymizeUploads) {
+        final (clean, nameFound) = await Anonymizer.pages(job.pages);
+        localName = nameFound;
+        uploadReq = _withPages(req, clean);
+      }
+
+      final res = await ai.grade(uploadReq);
 
       // Auto-link by the name read off the paper when no student was chosen.
       // Class students are tried first, full name then first name — a lone
       // "Oscar" on the page still links when the class has exactly one Oscar.
       var studentId = req.studentId;
       var classId = req.classId;
-      final paperName = res.studentNameOnPaper?.trim() ?? '';
+      // The name read HERE wins: with redaction on, the marker never saw
+      // one. Falls back to the model's read for un-redacted pages.
+      final paperName = (localName?.trim().isNotEmpty ?? false) ? localName!.trim() : (res.studentNameOnPaper?.trim() ?? '');
       if (studentId.isEmpty && paperName.isNotEmpty) {
         String norm(String s) => s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
         final target = norm(paperName);
@@ -261,6 +306,8 @@ class GradingQueueService extends ChangeNotifier {
       final drive = DriveService();
       if (!await drive.autoSaveEnabled(job.req.teacherId)) return;
       if (!drive.isConnected) return;
+      // job.label already carries the name read off the paper (set in _run),
+      // which is the only place it exists once redaction is on.
       final paperName = res.studentNameOnPaper?.trim() ?? '';
       await drive.uploadMarkedResult(result: res, studentName: paperName.isNotEmpty ? paperName : job.label);
       messengerKey?.currentState?.showSnackBar(
