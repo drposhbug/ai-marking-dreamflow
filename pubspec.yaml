@@ -14,6 +14,9 @@ dependencies:
   supabase_flutter: ^2.8.0
   http: ^1.2.0
   pdfx: ^2.6.0
+  # On-device PDF authoring for pre-coded test copies. Generation is local:
+  # no API cost, and it removes the credits a mis-split stack would burn.
+  pdf: ^3.11.0
   share_plus: ^10.0.0
   path_provider: ^2.1.0
   shared_preferences: ^2.0.0
