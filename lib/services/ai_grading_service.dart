@@ -228,6 +228,12 @@ class QuestionAnnotation {
   // ("different method", "advanced method", "steps skipped") — marks are
   // awarded, but the teacher decides if their class rules allow it.
   final String methodNote;
+  /// Multiple choice by POSITION: 1 = first option, 2 = second... 0 when
+  /// the question isn't multiple choice, nothing was marked, or more than
+  /// one option was. Reading a position costs far less than transcribing
+  /// the option text, and it lets a key be stored as a list of digits.
+  final int chosenOption;
+
   final int pageIndex;       // which scanned page this mark belongs to (0-based)
   final double positionTop;  // 0.0–1.0 fraction of image height
   final double positionLeft; // 0.0–1.0 fraction of image width
@@ -241,6 +247,7 @@ class QuestionAnnotation {
     required this.positionTop,
     required this.positionLeft,
     this.methodNote = '',
+    this.chosenOption = 0,
     this.pageIndex = 0,
   });
 
@@ -252,6 +259,7 @@ class QuestionAnnotation {
       correct: j['correct'] == true,
       feedback: (j['feedback'] ?? '').toString(),
       methodNote: (j['methodNote'] ?? '').toString(),
+      chosenOption: (j['chosenOption'] as num?)?.toInt() ?? 0,
       pageIndex: (j['pageIndex'] as num?)?.toInt() ?? 0,
       positionTop: (j['positionTop'] as num?)?.toDouble() ?? 0.0,
       positionLeft: (j['positionLeft'] as num?)?.toDouble() ?? 0.0,
@@ -265,6 +273,7 @@ class QuestionAnnotation {
         'correct': correct,
         'feedback': feedback,
         'methodNote': methodNote,
+        'chosenOption': chosenOption,
         'pageIndex': pageIndex,
         'positionTop': positionTop,
         'positionLeft': positionLeft,

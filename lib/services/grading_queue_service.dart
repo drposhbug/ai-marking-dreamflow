@@ -8,6 +8,7 @@ import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
+import 'package:marking_prokect_v2/services/page_fingerprint.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 
@@ -377,6 +378,11 @@ class GradingQueueService extends ChangeNotifier {
       // original and annotated views later (too heavy for the cloud copy).
       final imagePaths = await _savePagesLocally(submission.id, job.pages);
       if (imagePaths.isNotEmpty) submission = submission.copyWith(pageImagePaths: imagePaths);
+      // Fingerprints travel with the result so a later rescan of the same
+      // class set can recognise this paper and skip re-marking it.
+      final prints = await PageFingerprint.ofAll(job.pages);
+      final hashes = [for (final p in prints) if (p != null && !p.isBlankish) p.hex];
+      if (hashes.isNotEmpty) submission = submission.copyWith(pageHashes: hashes);
       if (priorId != null) {
         await submissions.update(submission);
       } else {
