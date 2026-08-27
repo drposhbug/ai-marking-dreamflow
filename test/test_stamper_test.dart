@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:marking_prokect_v2/services/test_stamper.dart';
 
 void main() {
+  _asciiOnlyTest();
   group('the code itself', () {
     test('avoids characters that get misread off a scan', () {
       // 0/O, 1/I/L, 5/S, 8/B are the pairs that ruin a scanned code.
@@ -102,5 +103,20 @@ void main() {
       expect(g.isUsable, isFalse);
       expect(g.unstamped.length, 3);
     });
+  });
+}
+
+// The stamp is the one string the whole feature rests on, and it has to
+// survive both a non-embedded PDF font and being read back off a 7pt grey
+// footer. Keeping it ASCII removes both risks at once.
+void _asciiOnlyTest() {
+  test('the stamp is printable ASCII, or it prints as boxes', () {
+    final s = TestStamper.stampFor(testCode: '7F3A', copyNumber: 4, pageNumber: 1, pageCount: 3);
+    for (final unit in s.codeUnits) {
+      expect(unit, greaterThanOrEqualTo(0x20), reason: 'control character in "$s"');
+      expect(unit, lessThan(0x7F), reason: 'non-ASCII character in stamp "$s" — Helvetica cannot render it');
+    }
+    // And it must still survive its own round trip.
+    expect(TestStamper.readStamp(s)?.copyNumber, 4);
   });
 }
