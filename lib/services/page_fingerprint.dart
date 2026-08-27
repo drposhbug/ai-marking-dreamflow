@@ -114,6 +114,46 @@ enum PaperFault {
 
   /// This exact paper appears elsewhere in the same stack.
   duplicateOfAnotherPaper,
+
+  /// Pages inside this one paper carry DIFFERENT students' names. The
+  /// page numbering can still read 1, 2, 3 while a page from somebody
+  /// else sits in the middle — which is exactly the mistake a page-number
+  /// footer alone would hide, so the name on each page is what catches it.
+  mixedNames,
+}
+
+/// Are these two names, read by OCR off two pages, the same person?
+///
+/// Deliberately forgiving: recognition drops letters, and a teacher writing
+/// "Ana L." on page 2 and "Ana Lopez" on page 1 is one student. It only
+/// says "different" when they clearly are — a false alarm on every paper
+/// would train teachers to ignore the flag.
+bool sameStudentName(String a, String b) {
+  String norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z ]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+  final x = norm(a);
+  final y = norm(b);
+  if (x.isEmpty || y.isEmpty) return true; // no evidence either way
+  if (x == y) return true;
+  // One being the start of the other covers "Ana" vs "Ana Lopez".
+  if (x.startsWith(y) || y.startsWith(x)) return true;
+  // Same first name is enough — a class rarely has two Anas, and when it
+  // does the teacher is the one to sort it out.
+  final fx = x.split(' ').first;
+  final fy = y.split(' ').first;
+  if (fx == fy && fx.length >= 3) return true;
+  // A misread letter lands anywhere in a name, not just the first word, so
+  // compare the WHOLE string: "ana lopez" against "anq lopez" is one
+  // student with one bad character, and the matching surname says so.
+  // Deliberately NOT applied to first names alone — "Ana" and "Ann" are
+  // one letter apart and are two different children.
+  if (x.length == y.length && x.length >= 6) {
+    var diff = 0;
+    for (var i = 0; i < x.length; i++) {
+      if (x[i] != y[i]) diff++;
+    }
+    if (diff <= (x.length >= 12 ? 2 : 1)) return true;
+  }
+  return false;
 }
 
 class PaperCheck {
@@ -143,6 +183,10 @@ class StackCheck {
     required List<List<int>> groups,
     required List<PageFingerprint?> fingerprints,
     required List<bool> coverPage,
+    /// The name read off each page, where one was found. This is what
+    /// catches a page from another student sitting inside a paper whose
+    /// page numbers still read 1, 2, 3.
+    List<String?> names = const [],
   }) {
     final checks = <PaperCheck>[];
     // First page of each paper, for spotting the same paper twice in a stack.
@@ -164,6 +208,18 @@ class StackCheck {
             faults.add(PaperFault.duplicatePage);
           }
         }
+      }
+
+      // Pages naming DIFFERENT students inside one paper.
+      final seenNames = <String>[];
+      for (final p in pages) {
+        final n = (p < names.length ? names[p] : null)?.trim() ?? '';
+        if (n.isEmpty) continue;
+        if (seenNames.any((s) => !sameStudentName(s, n))) {
+          faults.add(PaperFault.mixedNames);
+          break;
+        }
+        seenNames.add(n);
       }
 
       // Two cover pages inside one paper.

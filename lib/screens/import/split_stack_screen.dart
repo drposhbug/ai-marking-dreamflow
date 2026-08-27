@@ -59,6 +59,10 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
         groups: [for (final g in _groups) g.pages],
         fingerprints: _fingerprints,
         coverPage: [for (var i = 0; i < _pages.length; i++) i < _signals.length && _signals[i].looksLikeFirstPage],
+        // The name read off each page. With a name field printed on EVERY
+        // page this is what catches a shuffled page whose numbering still
+        // reads 1, 2, 3.
+        names: [for (var i = 0; i < _pages.length; i++) i < _signals.length ? _signals[i].studentName : null],
       );
 
 
@@ -224,6 +228,7 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
       if (faults.contains(PaperFault.duplicatePage)) 'the same page appears twice',
       if (faults.contains(PaperFault.twoCoverPages)) 'two papers look stuck together',
       if (faults.contains(PaperFault.duplicateOfAnotherPaper)) 'this paper also appears elsewhere in the stack',
+      if (faults.contains(PaperFault.mixedNames)) 'pages here name different students',
     ];
     return '${bits.join('; ')} — check before marking.';
   }
@@ -445,6 +450,7 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
                   Text('Getting a clean scan', style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: 8),
                   Text(
+                    '• Put a name line on EVERY page, not just the front: "Name: ______   p1/3". One footer, one print run — and it is what catches a shuffled page, because page numbers alone still read 1, 2, 3 when somebody else\'s page is in the middle.\n'
                     '• Take the staples out first. A feeder will jam or tear on one, and that is the only part that really costs you time.\n'
                     '• Flatten badly crumpled corners. Ordinary creases, pencil smudge and eraser dust all scan fine.\n'
                     '• Check the page count when it finishes. If 30 three-page tests came out as 89 pages, the feeder pulled two sheets through together and a page is missing — tell it how many students you expect below and it will flag that for you.\n'
