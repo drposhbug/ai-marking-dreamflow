@@ -8,6 +8,7 @@ import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/capture_feedback.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
@@ -29,7 +30,14 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  int _step = 0; // 0 = welcome, 1 = name + school (required), 2 = classes
+  // 0 = welcome, 1 = how you can mark, 2 = capture alert, 3 = name + school
+  // (required), 4 = classes. The two new steps sit early on purpose: a
+  // teacher who learns the fast routes before their first scan never
+  // spends an evening photographing thirty papers one at a time.
+  int _step = 0;
+
+  final CaptureFeedback _feedback = CaptureFeedback();
+  CaptureAlert _alert = CaptureAlert.sound;
 
   final _subject = TextEditingController();
   final _period = TextEditingController();
@@ -349,7 +357,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
     if (!mounted) return;
     if (_regionLabel.isEmpty && _regionCandidates.isEmpty) _inferRegionFromSchool();
-    setState(() => _step = 2);
+    setState(() => _step = 4);
   }
 
   @override
@@ -357,18 +365,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: Text(switch (_step) { 0 => 'Welcome', 1 => 'About you', _ => 'Set up your classes' }),
+        title: Text(switch (_step) {
+          0 => 'Welcome',
+          1 => 'Ways to mark',
+          2 => 'While you scan',
+          3 => 'About you',
+          _ => 'Set up your classes',
+        }),
         actions: [
           // Only the welcome step gets a top-right skip, and it only skips
           // the tour — the About-you info (name, title, school) is required.
           if (_step == 0)
-            TextButton(onPressed: () => setState(() => _step = 1), child: const Text('Skip')),
+            TextButton(onPressed: () => setState(() => _step = 3), child: const Text('Skip')),
         ],
       ),
       body: SafeArea(
         child: switch (_step) {
           0 => _buildWelcome(context),
-          1 => _buildProfile(context),
+          1 => _buildWays(context),
+          2 => _buildAlerts(context),
+          3 => _buildProfile(context),
           _ => _buildClassSetup(context),
         },
       ),
@@ -497,6 +513,155 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
+  /// The four routes a test can take through Markless, with honest times.
+  ///
+  /// This exists because the fastest route is the one nobody guesses: most
+  /// teachers reach for the camera, which is the slowest of the four. Ten
+  /// seconds reading this saves them an evening.
+  Widget _buildWays(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Four ways to mark a class set',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text(
+            'Times are for a class of thirty. You can mix and match — most teachers end up using two of these.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral, height: 1.45),
+          ),
+          const SizedBox(height: 18),
+          _WayCard(
+            icon: Icons.assignment_turned_in_rounded,
+            colour: cs.primary,
+            title: 'Google Form or spreadsheet',
+            time: 'about 2 minutes',
+            body: 'Students answer online. Multiple choice is marked on your phone for free; only written '
+                'answers use credits. Nothing to scan at all.',
+            best: 'Best for quizzes and anything typed.',
+          ),
+          _WayCard(
+            icon: Icons.qr_code_2_rounded,
+            colour: AiMarkerColors.secondary,
+            title: 'Prepare, print, then photocopier-scan',
+            time: 'about 6 minutes',
+            body: 'Markless stamps each copy with a tiny code before you print. Feed the finished stack '
+                'through the copier once, and every paper sorts itself out — no mixing up students.',
+            best: 'Best for real tests on paper. The fastest paper route.',
+          ),
+          _WayCard(
+            icon: Icons.print_rounded,
+            colour: AiMarkerColors.tertiary,
+            title: 'Photocopier scan, no codes',
+            time: 'about 6 minutes',
+            body: 'Same trip to the copier, using a test you printed the ordinary way. Markless works out '
+                'the boundaries from name fields and page numbers, and tells you when something looks wrong.',
+            best: 'Best when the test is already printed.',
+          ),
+          _WayCard(
+            icon: Icons.photo_camera_rounded,
+            colour: AiMarkerColors.warning,
+            title: 'Photograph each paper',
+            time: 'about 15 minutes',
+            body: 'Prop your phone up and slide pages underneath — it shoots each one automatically and '
+                'tells you when to slide the next. Slowest, but needs nothing except your phone.',
+            best: 'Best for a handful of papers, or a late submission.',
+          ),
+          const SizedBox(height: 8),
+          Card(
+            color: cs.primary.withValues(alpha: 0.08),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Text(
+                'Whichever route you use, the first paper is always marked on its own and shown to you before '
+                'the rest go ahead — so a wrong answer key costs one paper, never thirty.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.45),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => setState(() => _step = 2),
+              child: const Text('Next'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Which signal the teacher wants when a page is captured. Asked here
+  /// because the right answer depends on how they hold the phone, and a
+  /// teacher who is surprised by a noise in a silent staffroom turns the
+  /// whole feature off rather than changing it.
+  Widget _buildAlerts(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('How should Markless tell you a page went in?',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text(
+            'When you photograph papers, it captures each page by itself. This is how you know to slide the '
+            'next one in without watching the screen.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral, height: 1.45),
+          ),
+          const SizedBox(height: 18),
+          _AlertChoice(
+            mode: CaptureAlert.sound,
+            title: 'A short sound',
+            body: 'For a phone propped on a stand while you feed pages underneath with both hands.',
+            selected: _alert == CaptureAlert.sound,
+            onTap: () => _pickAlert(CaptureAlert.sound),
+          ),
+          _AlertChoice(
+            mode: CaptureAlert.buzz,
+            title: 'A small buzz',
+            body: 'For holding the phone in one hand and flipping pages with the other. Silent in a quiet room.',
+            selected: _alert == CaptureAlert.buzz,
+            onTap: () => _pickAlert(CaptureAlert.buzz),
+          ),
+          _AlertChoice(
+            mode: CaptureAlert.silent,
+            title: 'Neither',
+            body: 'The screen still flashes when a page is captured.',
+            selected: _alert == CaptureAlert.silent,
+            onTap: () => _pickAlert(CaptureAlert.silent),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Tap one to hear or feel it. You can change this on the scan screen any time — the button is right '
+            'at the top.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => setState(() => _step = 3),
+              child: const Text('Next'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickAlert(CaptureAlert mode) async {
+    final auth = context.read<AuthService>().currentUser;
+    await _feedback.setMode(auth?.id ?? 'local', mode);
+    if (!mounted) return;
+    setState(() => _alert = mode);
+    // Let them hear or feel the choice rather than guess at it.
+    await _feedback.pageCaptured();
+  }
+
   Widget _buildWelcome(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return SingleChildScrollView(
@@ -540,7 +705,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               const SizedBox(height: 10),
               // Skipping the tour is fine — but name, title, and school are
               // required, so the shortcut still lands on the About-you step.
-              OutlinedButton(onPressed: () => setState(() => _step = 1), child: const Text('Skip the tour')),
+              OutlinedButton(onPressed: () => setState(() => _step = 3), child: const Text('Skip the tour')),
             ],
           ),
         ),
@@ -751,6 +916,119 @@ class _FeatureRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One route a class set can take, with the honest time it takes.
+class _WayCard extends StatelessWidget {
+  final IconData icon;
+  final Color colour;
+  final String title;
+  final String time;
+  final String body;
+  final String best;
+
+  const _WayCard({
+    required this.icon,
+    required this.colour,
+    required this.title,
+    required this.time,
+    required this.body,
+    required this.best,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: colour.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: colour, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                      ),
+                      Text(time, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colour, fontWeight: FontWeight.w800)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(body, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4)),
+                  const SizedBox(height: 4),
+                  Text(best, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, fontStyle: FontStyle.italic)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One capture-alert option, played the moment it is chosen.
+class _AlertChoice extends StatelessWidget {
+  final CaptureAlert mode;
+  final String title;
+  final String body;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _AlertChoice({
+    required this.mode,
+    required this.title,
+    required this.body,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: selected ? BorderSide(color: cs.primary, width: 2) : BorderSide(color: cs.outlineVariant),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Icon(CaptureFeedback.iconFor(mode), color: selected ? cs.primary : AiMarkerColors.neutral),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 2),
+                    Text(body, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35)),
+                  ],
+                ),
+              ),
+              if (selected) Icon(Icons.check_circle_rounded, color: cs.primary, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }
