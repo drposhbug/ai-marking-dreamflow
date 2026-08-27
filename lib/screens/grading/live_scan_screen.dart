@@ -7,7 +7,10 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/app/app_state.dart' show ScannedPage;
+import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/capture_feedback.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
+import 'package:provider/provider.dart';
 
 /// A live "CamScanner-style" auto-capture screen.
 ///
@@ -38,6 +41,12 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
   CameraController? _controller;
   bool _ready = false;
   String? _error;
+
+  /// How the teacher wants to be told a page landed. Loaded from their
+  /// choice in onboarding; changeable right here on the scan screen,
+  /// because the right answer differs between a propped phone and a phone
+  /// held in one hand.
+  final CaptureFeedback _feedback = CaptureFeedback();
 
   _ScanState _state = _ScanState.idle;
   DateTime? _stillSince;
@@ -80,6 +89,27 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
   void initState() {
     super.initState();
     _init();
+    _loadFeedbackMode();
+  }
+
+  Future<void> _loadFeedbackMode() async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    await _feedback.load(auth.id);
+    if (mounted) setState(() {});
+  }
+
+  /// Cycles sound → buzz → silent. Sits on the scan screen rather than
+  /// buried in settings: a teacher realises the noise is wrong while the
+  /// noise is happening, not later.
+  Future<void> _cycleFeedback() async {
+    final auth = context.read<AuthService>().currentUser;
+    final next = _feedback.next();
+    await _feedback.setMode(auth?.id ?? 'local', next);
+    if (!mounted) return;
+    setState(() {});
+    // Play it so the teacher hears or feels what they just chose.
+    await _feedback.pageCaptured();
   }
 
   Future<void> _init() async {
@@ -465,6 +495,10 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
       if (!mounted) return;
 
       if (isDuplicate) {
+        // A different signal from a successful capture: the teacher is
+        // watching the paper, not the screen, and needs to know this page
+        // did NOT go in.
+        _feedback.pageRejected();
         setState(() {
           _dupSkipped = true;
           _state = _ScanState.cooldown;
@@ -476,6 +510,9 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
         });
       } else {
         if (thumb != null) _lastAcceptedThumb = thumb;
+        // Tell the teacher the page is in without making them look up —
+        // this is what lets a propped phone work as a scanner.
+        _feedback.pageCaptured();
         setState(() {
           _pages.add(page);
           _flash = true;
@@ -614,6 +651,25 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
           title: Text(widget.singleShot
               ? 'Retake Page'
               : 'Auto Scan · ${_pages.length} page${_pages.length == 1 ? '' : 's'}'),
+          actions: [
+            // Deliberately a labelled button rather than a bare icon. The
+            // teacher who wants this off wants it off NOW — usually because
+            // it just went off in a quiet staffroom — and hunting for an
+            // unlabelled speaker glyph is not the moment for a puzzle.
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                onPressed: _cycleFeedback,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.white.withValues(alpha: 0.14),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                icon: Icon(CaptureFeedback.iconFor(_feedback.mode), size: 18),
+                label: Text(CaptureFeedback.labelFor(_feedback.mode)),
+              ),
+            ),
+          ],
         ),
         body: _error != null
             ? Center(child: Text(_error!, style: const TextStyle(color: Colors.white)))
