@@ -722,6 +722,47 @@ class AiGradingService {
     }
   }
 
+  /// Last resort for a stack the device could tell was split wrongly: asks
+  /// the marker to work out which pages belong together from handwriting,
+  /// the name on the page and page numbering.
+  ///
+  /// Costs a marking call, so it only ever runs when the teacher chooses
+  /// it. Pages it isn't sure about come back unresolved rather than being
+  /// guessed into the wrong student's paper.
+  Future<GroupingOutcome> groupPages({
+    required String teacherId,
+    required List<Uint8List> pages,
+  }) async {
+    final client = Supabase.instance.client;
+    final res = await client.functions.invoke(
+      'MARKING-PROCESS',
+      body: {
+        'action': 'group_pages',
+        'teacherId': teacherId,
+        'mediaType': 'image/jpeg',
+        'imagesBase64': pages.map(base64Encode).toList(growable: false),
+      },
+    );
+    final data = res.data;
+    if (data is! Map) throw Exception('Could not piece the stack together');
+    if (data['error'] != null) {
+      _maybeThrowUsageLimitMap(data);
+      throw Exception(data['error'].toString());
+    }
+    final groups = <PageGroup>[];
+    for (final g in (data['groups'] as List? ?? const []).whereType<Map>()) {
+      groups.add(PageGroup(
+        pageIndexes: (g['pageIndexes'] as List? ?? const []).map((e) => (e as num).toInt()).toList(),
+        studentName: (g['studentName'] ?? '').toString(),
+        confidence: (g['confidence'] as num?)?.toInt() ?? 0,
+      ));
+    }
+    return GroupingOutcome(
+      groups: groups,
+      unresolved: (data['unresolved'] as List? ?? const []).map((e) => (e as num).toInt()).toList(),
+    );
+  }
+
   /// Erases the account and everything in it, server-side. The function
   /// checks the caller's own signed-in token, so this only ever deletes the
   /// teacher who asked. Throws when anything is left behind.
@@ -1193,4 +1234,22 @@ class BatchOutcome {
 
   bool get isEnded => status == 'ended';
   int get processing => (counts['processing'] as num?)?.toInt() ?? 0;
+}
+
+/// One student's pages, worked out from the pages themselves.
+class PageGroup {
+  final List<int> pageIndexes;
+  final String studentName;
+  final int confidence;
+  const PageGroup({required this.pageIndexes, required this.studentName, required this.confidence});
+}
+
+/// The result of piecing a mis-split stack back together.
+class GroupingOutcome {
+  final List<PageGroup> groups;
+
+  /// Pages it would not commit to. Left for the teacher rather than guessed
+  /// into somebody's paper.
+  final List<int> unresolved;
+  const GroupingOutcome({required this.groups, required this.unresolved});
 }

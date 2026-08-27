@@ -1651,6 +1651,110 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     return json({ submissions: (data ?? []).map((r: any) => r.payload) });
   }
+
+  // ── Piecing a mis-split stack back together ────────────────────────────
+  // Last resort, and only ever on the teacher's say-so: the on-device
+  // checks have already decided the split is wrong, so this looks at the
+  // pages themselves and works out which belong to the same student, from
+  // handwriting, the name written on the page, and any page numbering.
+  //
+  // It is allowed to say "I don't know". A confident wrong grouping would
+  // mark one student's work under another's name, which is worse than
+  // telling the teacher to sort the pile out by hand.
+  if (action === "group_pages") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const imagesBase64: string[] = (Array.isArray(payload?.imagesBase64) ? payload.imagesBase64 : [])
+      .map((s: unknown) => String(s ?? ""))
+      .filter((s: string) => s.length > 0);
+    if (imagesBase64.length < 2) return json({ error: "at least two pages are needed" }, 400);
+    if (imagesBase64.length > 40) return json({ error: "Too many pages to piece together at once — fix the order by hand." }, 400);
+
+    const gate = await budgetGate(teacherId, true);
+    if (gate) return gate;
+
+    const GROUP_SCHEMA = {
+      type: "object",
+      additionalProperties: false,
+      required: ["groups", "unresolved"],
+      properties: {
+        groups: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["pageIndexes", "studentName", "confidence"],
+            properties: {
+              pageIndexes: { type: "array", items: { type: "integer" } },
+              studentName: { type: "string" },
+              confidence: { type: "integer" },
+            },
+          },
+        },
+        unresolved: { type: "array", items: { type: "integer" } },
+      },
+    };
+
+    const prompt =
+      `These ${imagesBase64.length} pages come from ONE stack of student tests that was scanned in the wrong order, so the automatic split put the wrong pages together.\n\n` +
+      `Work out which pages belong to the SAME student. Use, in this order of trust:\n` +
+      `1. A name written on the page.\n` +
+      `2. Printed page numbering ("Page 2 of 3") and question numbers running on from one page to the next.\n` +
+      `3. Handwriting: letter shapes, slant, pen colour and pressure.\n\n` +
+      `Rules:\n` +
+      `- Page indexes are 0-based and refer to the order the pages were given to you.\n` +
+      `- Every page belongs to exactly one group, or to "unresolved".\n` +
+      `- Put a page in "unresolved" whenever you are NOT confident. Guessing puts one student's work under another student's name, which is far worse than admitting you cannot tell.\n` +
+      `- confidence is 0-100 for the whole group. Below 70, put those pages in unresolved instead.\n` +
+      `- studentName is the name as written on the page, or "" when no name is visible.\n` +
+      `- Order each group's pageIndexes as the paper reads (cover page first).\n\n` +
+      `Return ONLY JSON: {"groups":[{"pageIndexes":[int],"studentName":string,"confidence":int}],"unresolved":[int]}`;
+
+    try {
+      const usage = { inputTokens: 0, outputTokens: 0 };
+      const raw = await callClaude(imagesBase64, String(payload?.mediaType ?? "image/jpeg"), {
+        userText: prompt,
+        schema: GROUP_SCHEMA,
+        usage,
+        // Grouping IS the judgement here — don't buy less of it.
+        effort: "medium",
+      });
+      await logUsage(teacherId, "group_pages", usage.inputTokens, usage.outputTokens);
+
+      const seen = new Set<number>();
+      // deno-lint-ignore no-explicit-any
+      const groups = (Array.isArray(raw?.groups) ? raw.groups : []).map((g: any) => {
+        const pages = (Array.isArray(g?.pageIndexes) ? g.pageIndexes : [])
+          .map((n: unknown) => Math.round(Number(n)))
+          .filter((n: number) => Number.isFinite(n) && n >= 0 && n < imagesBase64.length)
+          // A page claimed by two groups is a contradiction — keep the first.
+          .filter((n: number) => (seen.has(n) ? false : (seen.add(n), true)));
+        return {
+          pageIndexes: pages,
+          studentName: String(g?.studentName ?? "").slice(0, 60),
+          confidence: Math.round(clamp(g?.confidence, 0, 100, 0)),
+        };
+      }).filter((g: { pageIndexes: number[]; confidence: number }) => g.pageIndexes.length > 0 && g.confidence >= 70);
+
+      // Anything not confidently placed comes back as unresolved, including
+      // pages the model forgot about entirely.
+      const placed = new Set<number>();
+      for (const g of groups) {
+        for (const p of g.pageIndexes) placed.add(p);
+      }
+      const unresolved: number[] = [];
+      for (let i = 0; i < imagesBase64.length; i++) {
+        if (!placed.has(i)) unresolved.push(i);
+      }
+
+      return json({ groups, unresolved });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("group_pages failed:", msg);
+      return json({ error: msg }, 500);
+    }
+  }
+
   // ── Overnight marking ──────────────────────────────────────────────────
   // "Scan the lot at 9pm, wake up to marked papers." Papers go to the
   // Anthropic Batch API, which costs half as much as marking them live and
