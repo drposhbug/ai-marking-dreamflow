@@ -4,12 +4,15 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
 import 'package:marking_prokect_v2/services/page_fingerprint.dart';
 import 'package:marking_prokect_v2/services/pdf_splitter.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:provider/provider.dart';
 
 /// How many pages a single copier stack may bring in — 40 students × 3 pages
 /// with room to spare. Far above the 15-page cap for a single test, because
@@ -63,6 +66,25 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
   /// way to catch a double-feed: the copier silently pulls two sheets
   /// through as one, a page vanishes, and every split after it shifts.
   int? _expectedStudents;
+
+  /// The teacher's allowance, so the cost of piecing a stack back together
+  /// can be shown before they agree to it.
+  UsageSummary? _usage;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() async {
+      final auth = context.read<AuthService>().currentUser;
+      if (auth == null) return;
+      try {
+        final u = await AiGradingService().getUsage(teacherId: auth.id);
+        if (mounted) setState(() => _usage = u);
+      } catch (e) {
+        debugPrint('SplitStack usage load failed: $e');
+      }
+    });
+  }
 
   Future<void> _pickPdf() async {
     try {
@@ -208,6 +230,106 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
 
 
   void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  /// Shown when the on-device checks say the split is wrong. Marking it as
+  /// it stands buys a class of wrong marks, so the teacher chooses: fix the
+  /// order themselves, have the pages pieced together from the handwriting,
+  /// or go ahead anyway because they know something the checks don't.
+  Future<String?> _askAboutBadSplit() {
+    final suspects = _check.suspects.length;
+    final pageCount = _check.suspects.fold<int>(0, (n, s) => n + _groups[s.paperIndex].pages.length);
+    final pct = _usage?.pctFor(pageCount, overnight: false) ?? 0;
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('This stack looks out of order'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$suspects ${suspects == 1 ? 'paper has' : 'papers have'} repeated or doubled-up pages. '
+              'Marking them as they are would put one student\'s work under another\'s name.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.45),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Markless can read the handwriting and page numbers on those $pageCount pages and work out '
+              'who wrote what${pct > 0 ? ' — about $pct% of this month\'s credits' : ''}. Anything it isn\'t '
+              'sure about is left flagged for you rather than guessed.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.45),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, 'fix'), child: const Text('I\'ll fix the order')),
+          TextButton(onPressed: () => Navigator.pop(context, 'anyway'), child: const Text('Mark anyway')),
+          FilledButton(onPressed: () => Navigator.pop(context, 'match'), child: const Text('Match by handwriting')),
+        ],
+      ),
+    );
+  }
+
+  /// Sends the flagged papers' pages off to be regrouped, then rebuilds the
+  /// split from what comes back. Pages it couldn't place stay where they
+  /// were and stay flagged.
+  Future<void> _matchByHandwriting() async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    // Only the suspect papers go up — the ones that split cleanly are fine
+    // and there is no reason to pay to re-examine them.
+    final pageIndexes = <int>[];
+    for (final s in _check.suspects) {
+      pageIndexes.addAll(_groups[s.paperIndex].pages);
+    }
+    if (pageIndexes.length < 2) return;
+
+    setState(() {
+      _stage = _Stage.working;
+      _progress = 'Reading the handwriting on ${pageIndexes.length} pages…';
+    });
+    try {
+      final outcome = await AiGradingService().groupPages(
+        teacherId: auth.id,
+        pages: [for (final i in pageIndexes) _pages[i]],
+      );
+      if (!mounted) return;
+
+      // Rebuild: keep the papers that were fine, replace the suspect ones
+      // with whatever came back.
+      final suspectSet = {for (final s in _check.suspects) s.paperIndex};
+      final kept = <_Group>[
+        for (var i = 0; i < _groups.length; i++)
+          if (!suspectSet.contains(i)) _groups[i],
+      ];
+      final rebuilt = <_Group>[];
+      for (final g in outcome.groups) {
+        // Indexes came back relative to what we sent — map them home.
+        final pages = [for (final n in g.pageIndexes) if (n >= 0 && n < pageIndexes.length) pageIndexes[n]];
+        if (pages.isEmpty) continue;
+        rebuilt.add(_Group(pages, g.studentName.trim().isEmpty ? null : g.studentName.trim()));
+      }
+      // Unplaced pages become single-page papers so nothing is lost; the
+      // teacher sees them flagged and decides.
+      final stranded = [for (final n in outcome.unresolved) if (n >= 0 && n < pageIndexes.length) pageIndexes[n]];
+      for (final p in stranded) {
+        rebuilt.add(_Group([p], null));
+      }
+
+      setState(() {
+        _groups = [...kept, ...rebuilt]..sort((a, b) => a.pages.first.compareTo(b.pages.first));
+        _fixedPerStudent = null;
+        _stage = _Stage.review;
+      });
+      _snack(stranded.isEmpty
+          ? 'Pieced back together into ${outcome.groups.length} papers — check the names and mark when you\'re happy.'
+          : 'Sorted ${outcome.groups.length} papers. ${stranded.length} pages couldn\'t be placed and are flagged — put those right yourself.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _stage = _Stage.review);
+      _snack('Couldn\'t piece the stack together: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
+  }
+
 
   Future<void> _startMarking() async {
     final groups = <List<Uint8List>>[];
@@ -218,6 +340,16 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
       names.add(g.name);
     }
     if (groups.isEmpty) return;
+    // Never mark a stack the checks say is out of order without asking.
+    if (_check.anySuspect) {
+      final choice = await _askAboutBadSplit();
+      if (!mounted || choice == null || choice == 'fix') return;
+      if (choice == 'match') {
+        await _matchByHandwriting();
+        return;
+      }
+    }
+
 
     // A teacher who fixed a bad split and rescanned the whole stack should
     // not pay again for the papers that came out fine the first time.
