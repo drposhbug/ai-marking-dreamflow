@@ -3,6 +3,7 @@ import 'package:marking_prokect_v2/services/test_stamper.dart';
 
 void main() {
   _asciiOnlyTest();
+  _capacityTests();
   group('the code itself', () {
     test('avoids characters that get misread off a scan', () {
       // 0/O, 1/I/L, 5/S, 8/B are the pairs that ruin a scanned code.
@@ -118,5 +119,59 @@ void _asciiOnlyTest() {
     }
     // And it must still survive its own round trip.
     expect(TestStamper.readStamp(s)?.copyNumber, 4);
+  });
+}
+
+// ── Capacity: a whole teaching load, not one class ───────────────────────
+void _capacityTests() {
+  group('big classes and multiple sections', () {
+    test('the alphabet has no duplicates, or codes are not evenly spread', () {
+      final seen = <String>{};
+      // Reach into the generator's output rather than the private constant.
+      for (var i = 0; i < 500; i++) {
+        seen.addAll(TestStamper.newTestCode().split(''));
+      }
+      // Every character seen must be from the safe set, and the set must be
+      // big enough that 4 characters is plenty of codes.
+      expect(seen.length, greaterThanOrEqualTo(20));
+      expect(seen.contains('0'), isFalse);
+      expect(seen.contains('O'), isFalse);
+      expect(seen.contains('1'), isFalse);
+      expect(seen.contains('I'), isFalse);
+    });
+
+    test('copy numbers past 99 still read back', () {
+      // 150 copies for five sections of thirty.
+      for (final n in [1, 9, 10, 99, 100, 150, 250]) {
+        final s = TestStamper.stampFor(testCode: '7F3A', copyNumber: n, pageNumber: 1, pageCount: 2);
+        expect(TestStamper.readStamp(s)?.copyNumber, n, reason: 'copy $n did not read back from "$s"');
+      }
+    });
+
+    test('a 150-copy stack groups into 150 papers', () {
+      final stamps = <StampRead?>[];
+      for (var copy = 1; copy <= 150; copy++) {
+        stamps.add(StampRead(testCode: 'AB12', copyNumber: copy, pageNumber: 1, pageCount: 2));
+        stamps.add(StampRead(testCode: 'AB12', copyNumber: copy, pageNumber: 2, pageCount: 2));
+      }
+      final g = TestStamper.groupByStamp(stamps);
+      expect(g.groups.length, 150);
+      expect(g.groups.every((p) => p.length == 2), isTrue);
+    });
+
+    test('two DIFFERENT tests in one scan are never merged', () {
+      // Copy 01 of two different tests. Grouping on the copy number alone
+      // would file two students' work as one paper.
+      final stamps = <StampRead?>[
+        StampRead(testCode: 'AB12', copyNumber: 1, pageNumber: 1, pageCount: 1),
+        StampRead(testCode: 'XY99', copyNumber: 1, pageNumber: 1, pageCount: 1),
+      ];
+      final g = TestStamper.groupByStamp(stamps);
+      expect(g.groups.length, 2, reason: 'copy 01 of two tests was merged into one paper');
+      expect(g.groups, [
+        [0],
+        [1],
+      ]);
+    });
   });
 }

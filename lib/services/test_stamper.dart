@@ -22,7 +22,13 @@ import 'package:pdf/widgets.dart' as pw;
 class TestStamper {
   /// Characters that survive being read back off a scan. No 0/O, 1/I/L,
   /// 5/S, 8/B — a code is worthless if it can be misread as another code.
-  static const _alphabet = 'ACDEFGHJKMNPQRTUVWXY2346793';
+  /// No duplicates either, or the generator quietly favours one character.
+  static const _alphabet = 'ACDEFGHJKMNPQRTUVWXY234679';
+
+  /// Copies one PDF may carry. A teacher printing the same test for five
+  /// sections of thirty wants every copy across all of them distinct, so
+  /// this is sized for a whole teaching load rather than one class.
+  static const int maxCopies = 250;
 
   /// A short code for one assessment, e.g. "7F3A". Four characters is one
   /// in ~530,000 per teacher, which is far beyond how many tests anyone
@@ -137,7 +143,12 @@ class TestStamper {
   /// splitting stops being a guess. Pages with no stamp are returned
   /// separately so the name/handwriting routes can still handle them.
   static StampGrouping groupByStamp(List<StampRead?> stamps) {
-    final byCopy = <int, List<int>>{};
+    // Keyed on the TEST code as well as the copy number. Grouping on the
+    // copy number alone would merge copy 01 of the Friday quiz with copy 01
+    // of the unit test if both ended up in one scan — two students' work
+    // filed as one paper, which is the exact failure this feature exists to
+    // prevent.
+    final byCopy = <String, List<int>>{};
     final unstamped = <int>[];
     for (var i = 0; i < stamps.length; i++) {
       final s = stamps[i];
@@ -145,13 +156,22 @@ class TestStamper {
         unstamped.add(i);
         continue;
       }
-      (byCopy[s.copyNumber] ??= <int>[]).add(i);
+      (byCopy['${s.testCode}-${s.copyNumber}'] ??= <int>[]).add(i);
     }
     // Order each paper by its printed page number where we have one, so a
     // stack fed in backwards still comes out reading correctly.
     final groups = <List<int>>[];
-    final copyNumbers = byCopy.keys.toList()..sort();
-    for (final c in copyNumbers) {
+    final keys = byCopy.keys.toList()
+      ..sort((a, b) {
+        // Papers come out in test order, then copy order.
+        final ca = int.tryParse(a.split('-').last) ?? 0;
+        final cb = int.tryParse(b.split('-').last) ?? 0;
+        final ta = a.substring(0, a.lastIndexOf('-'));
+        final tb = b.substring(0, b.lastIndexOf('-'));
+        return ta == tb ? ca.compareTo(cb) : ta.compareTo(tb);
+      });
+    final copyNumbers = [for (final k in keys) int.tryParse(k.split('-').last) ?? 0];
+    for (final c in keys) {
       final pages = byCopy[c]!
         ..sort((a, b) {
           final pa = stamps[a]?.pageNumber ?? 0;
