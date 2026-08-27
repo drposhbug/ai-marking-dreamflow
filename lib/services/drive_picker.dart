@@ -48,7 +48,12 @@ bool looksLikePdfFile(String name, String mime) =>
 /// Renders a PDF's pages to JPEG images sized for the marking pipeline
 /// (~1600px long side) using the platform's built-in PDF engine — no API
 /// cost. Throws when the bytes aren't a readable PDF.
-Future<List<Uint8List>> renderPdfPages(Uint8List bytes, {int maxPages = kMaxPdfPages}) async {
+/// [longSidePx] sets the render resolution. The 1600 default is sized for
+/// MARKING — plenty for a model to read, and small enough to upload. Work
+/// that will be PRINTED needs far more: 1600px across a letter page is
+/// about 145 DPI, which comes out visibly soft next to the original, and a
+/// teacher would rightly refuse to hand that to a class.
+Future<List<Uint8List>> renderPdfPages(Uint8List bytes, {int maxPages = kMaxPdfPages, int longSidePx = 1600}) async {
   final doc = await PdfDocument.openData(bytes);
   try {
     final out = <Uint8List>[];
@@ -56,7 +61,7 @@ Future<List<Uint8List>> renderPdfPages(Uint8List bytes, {int maxPages = kMaxPdfP
     for (var i = 1; i <= count; i++) {
       final page = await doc.getPage(i);
       try {
-        final scale = 1600 / math.max(page.width, page.height);
+        final scale = longSidePx / math.max(page.width, page.height);
         final rendered = await page.render(
           width: page.width * scale,
           height: page.height * scale,

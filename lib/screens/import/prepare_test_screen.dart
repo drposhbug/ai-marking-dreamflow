@@ -46,7 +46,10 @@ class _PrepareTestScreenState extends State<PrepareTestScreen> {
         _busy = true;
         _progress = 'Reading your test…';
       });
-      final images = await renderPdfPages(bytes, maxPages: 20);
+      // ~255 DPI on a letter page: prints indistinguishably from the
+      // original. Each page is embedded in the output PDF once, so the
+      // higher resolution costs a few MB in total, not per copy.
+      final images = await renderPdfPages(bytes, maxPages: 20, longSidePx: 2800);
       if (!mounted) return;
       if (images.isEmpty) {
         setState(() => _busy = false);
@@ -193,7 +196,7 @@ class _PrepareTestScreenState extends State<PrepareTestScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text('Test code', style: Theme.of(context).textTheme.titleSmall),
-                                    Text('Printed as  mk·$_code·01 · p1/${_pages.length}',
+                                    Text('Printed as  mk-$_code-01  p1/${_pages.length}',
                                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                                   ],
                                 ),

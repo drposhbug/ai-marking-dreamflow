@@ -9,8 +9,8 @@ import 'package:pdf/widgets.dart' as pw;
 /// A teacher hands in one test file and gets back a single PDF containing
 /// every copy, each stamped in the footer of EVERY page with its own code:
 ///
-///     mk·7F3A·01      on all pages of copy 1
-///     mk·7F3A·02      on all pages of copy 2
+///     mk-7F3A-01      on all pages of copy 1
+///     mk-7F3A-02      on all pages of copy 2
 ///
 /// Scanned back, pages sharing a code are one student's paper — printed
 /// text, machine-clean, and unaffected by handwriting, creases or a student
@@ -35,13 +35,19 @@ class TestStamper {
   /// The footer stamped on a page. Deliberately terse and lower-case so it
   /// reads as a print artefact rather than something a student should worry
   /// about — but still unambiguous to read back.
+  ///
+  /// ASCII ONLY. Two reasons, and neither is tidiness: the PDF ships with
+  /// the built-in Helvetica rather than an embedded font, so anything
+  /// outside its encoding is a risk not worth taking on the one string the
+  /// whole feature depends on; and a hyphen survives being read back off a
+  /// 7pt scan far more reliably than a middle dot, which OCR loves to drop.
   static String stampFor({
     required String testCode,
     required int copyNumber,
     required int pageNumber,
     required int pageCount,
   }) =>
-      'mk·$testCode·${copyNumber.toString().padLeft(2, '0')} · p$pageNumber/$pageCount';
+      'mk-$testCode-${copyNumber.toString().padLeft(2, '0')}  p$pageNumber/$pageCount';
 
   /// Reads a stamp back off a scanned page. Returns null when the page
   /// carries no Markless stamp — every other route (names, page numbers,
