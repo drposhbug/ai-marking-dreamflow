@@ -439,6 +439,39 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
               child: InkWell(
                 splashFactory: NoSplash.splashFactory,
                 borderRadius: BorderRadius.circular(AppRadius.lg),
+                onTap: () => context.push(AppRoutes.prepareTest),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                        child: const Icon(Icons.qr_code_2_rounded, color: AiMarkerColors.secondary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Prepare a test to print', style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 2),
+                            Text('Each copy gets a tiny code, so scanning it back never mixes students up.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: InkWell(
+                splashFactory: NoSplash.splashFactory,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 onTap: () => context.push(AppRoutes.splitStack),
                 child: Padding(
                   padding: const EdgeInsets.all(14),

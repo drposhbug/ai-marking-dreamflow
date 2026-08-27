@@ -15,6 +15,7 @@ import 'package:marking_prokect_v2/screens/library/library_screen.dart';
 import 'package:marking_prokect_v2/screens/login/login_screen.dart';
 import 'package:marking_prokect_v2/screens/onboarding/onboarding_screen.dart';
 import 'package:marking_prokect_v2/screens/import/import_responses_screen.dart';
+import 'package:marking_prokect_v2/screens/import/prepare_test_screen.dart';
 import 'package:marking_prokect_v2/screens/import/split_stack_screen.dart';
 import 'package:marking_prokect_v2/screens/planning/planning_screen.dart';
 import 'package:marking_prokect_v2/screens/plans/plans_screen.dart';
@@ -59,6 +60,7 @@ class AppRouter {
       GoRoute(path: AppRoutes.planning, name: 'planning', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PlanningScreen())),
       GoRoute(path: AppRoutes.plans, name: 'plans', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PlansScreen())),
       GoRoute(path: AppRoutes.importResponses, name: 'importResponses', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ImportResponsesScreen())),
+      GoRoute(path: AppRoutes.prepareTest, name: 'prepareTest', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PrepareTestScreen())),
       GoRoute(path: AppRoutes.splitStack, name: 'splitStack', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: SplitStackScreen())),
       GoRoute(path: AppRoutes.pilotReview, name: 'pilotReview', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final jobId = state.uri.queryParameters['jobId'] ?? '';

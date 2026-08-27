@@ -12,6 +12,7 @@ class AppRoutes {
   static const plans = '/plans';
   static const importResponses = '/import-responses';
   static const splitStack = '/split-stack';
+  static const prepareTest = '/prepare-test';
 
   static const imagePreview = '/grading/image-preview';
   static const gradingContext = '/grading/context';

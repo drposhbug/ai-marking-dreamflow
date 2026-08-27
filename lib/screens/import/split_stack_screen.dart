@@ -11,6 +11,7 @@ import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
 import 'package:marking_prokect_v2/services/page_fingerprint.dart';
 import 'package:marking_prokect_v2/services/pdf_splitter.dart';
+import 'package:marking_prokect_v2/services/test_stamper.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:provider/provider.dart';
 
@@ -159,6 +160,23 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
   }
 
   void _rebuildGroups() {
+    // A printed copy code outranks everything else: it is the only signal
+    // that says outright which pages are one paper, so when the stack was
+    // printed from Markless the split stops being a guess entirely.
+    final stamps = [for (var i = 0; i < _pages.length; i++) i < _signals.length ? _signals[i].stamp : null];
+    if (_fixedPerStudent == null && stamps.any((s) => s != null)) {
+      final byStamp = TestStamper.groupByStamp(stamps);
+      if (byStamp.isUsable) {
+        _groups = [
+          for (final g in byStamp.groups)
+            _Group(g, _signals.isEmpty ? null : _signals[g.first].studentName),
+          // Pages with no stamp keep their own place rather than being
+          // forced into somebody's paper.
+          for (final p in byStamp.unstamped) _Group([p], null),
+        ]..sort((a, b) => a.pages.first.compareTo(b.pages.first));
+        return;
+      }
+    }
     final indexGroups = _fixedPerStudent == null
         ? PdfSplitter.groupBySignals(_signals)
         : PdfSplitter.groupByFixed(_pages.length, _fixedPerStudent!);
