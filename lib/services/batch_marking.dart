@@ -12,6 +12,7 @@ import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
 import 'package:marking_prokect_v2/services/overnight_service.dart';
+import 'package:marking_prokect_v2/services/page_fingerprint.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:provider/provider.dart';
@@ -191,4 +192,40 @@ Future<int> checkOvernight(BuildContext context) async {
     students: context.read<StudentsService>(),
     submissions: context.read<SubmissionsService>(),
   );
+}
+
+/// Drops papers that were already marked for this class.
+///
+/// The case this exists for: a teacher whose stack split badly fixes the
+/// order and rescans the whole lot. Without this they pay to mark the
+/// papers that came out fine the first time, and then delete the duplicate
+/// results by hand. Matching is by page fingerprint, computed on the
+/// device — no credits, no uploads.
+///
+/// Returns the indexes of [groups] that are new.
+Future<List<int>> dropAlreadyMarked({
+  required BuildContext context,
+  required List<List<Uint8List>> groups,
+  String? classId,
+}) async {
+  final submissions = context.read<SubmissionsService>().submissions;
+  final known = <PageFingerprint>[];
+  for (final s in submissions) {
+    if (classId != null && classId.isNotEmpty && s.classId != classId) continue;
+    for (final h in s.pageHashes) {
+      // Detail isn't stored; assume a real page. A stored hash only exists
+      // because a paper was actually marked.
+      known.add(PageFingerprint(h, 32));
+    }
+  }
+  if (known.isEmpty) return [for (var i = 0; i < groups.length; i++) i];
+
+  final keep = <int>[];
+  for (var i = 0; i < groups.length; i++) {
+    if (groups[i].isEmpty) continue;
+    final first = await PageFingerprint.of(groups[i].first);
+    final seen = first != null && known.any((k) => k.matches(first));
+    if (!seen) keep.add(i);
+  }
+  return keep;
 }

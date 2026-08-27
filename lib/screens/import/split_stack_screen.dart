@@ -7,6 +7,7 @@ import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
+import 'package:marking_prokect_v2/services/page_fingerprint.dart';
 import 'package:marking_prokect_v2/services/pdf_splitter.dart';
 import 'package:marking_prokect_v2/theme.dart';
 
@@ -46,6 +47,17 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
   /// null = boundaries were detected; a number = every paper is that long.
   int? _fixedPerStudent;
   bool _detectionUsable = true;
+  /// One fingerprint per page, so a wrong split can be spotted before any
+  /// credits are spent on marking it.
+  List<PageFingerprint?> _fingerprints = const [];
+
+  /// Which papers look wrong, recomputed whenever the boundaries change.
+  StackCheck get _check => StackCheck.run(
+        groups: [for (final g in _groups) g.pages],
+        fingerprints: _fingerprints,
+        coverPage: [for (var i = 0; i < _pages.length; i++) i < _signals.length && _signals[i].looksLikeFirstPage],
+      );
+
 
   /// How many students the teacher expects. Optional, but it is the only
   /// way to catch a double-feed: the copier silently pulls two sheets
@@ -93,11 +105,18 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
       if (!mounted) return;
       PdfSplitter.debugSummary(signals);
 
+      // Fingerprint every page: this is what catches a double-feed, a
+      // missed boundary, or the same paper scanned twice.
+      setState(() => _progress = 'Checking the split…');
+      final prints = await PageFingerprint.ofAll(processed);
+      if (!mounted) return;
+
       final usable = !PdfSplitter.detectionUnusable(signals);
       final suggested = PdfSplitter.suggestPagesPerStudent(signals);
       setState(() {
         _pages = processed;
         _signals = signals;
+        _fingerprints = prints;
         _detectionUsable = usable;
         // Detection when it found something; otherwise fall back to a page
         // count rather than proposing a split we don't believe in.
@@ -175,10 +194,22 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
         groupLengths: [for (final g in _groups) g.pages.length],
         expectedStudents: _expectedStudents,
       );
+  /// Plain-English description of what looks wrong with one paper.
+  String _faultsFor(int groupIndex) {
+    final faults = _check.papers.length > groupIndex ? _check.papers[groupIndex].faults : const <PaperFault>{};
+    if (faults.isEmpty) return '';
+    final bits = <String>[
+      if (faults.contains(PaperFault.duplicatePage)) 'the same page appears twice',
+      if (faults.contains(PaperFault.twoCoverPages)) 'two papers look stuck together',
+      if (faults.contains(PaperFault.duplicateOfAnotherPaper)) 'this paper also appears elsewhere in the stack',
+    ];
+    return '${bits.join('; ')} — check before marking.';
+  }
+
 
   void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-  void _startMarking() {
+  Future<void> _startMarking() async {
     final groups = <List<Uint8List>>[];
     final names = <String?>[];
     for (final g in _groups) {
@@ -187,12 +218,26 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
       names.add(g.name);
     }
     if (groups.isEmpty) return;
-    final n = enqueueStudentGroups(context: context, groups: groups, studentNames: names);
+
+    // A teacher who fixed a bad split and rescanned the whole stack should
+    // not pay again for the papers that came out fine the first time.
+    final fresh = await dropAlreadyMarked(context: context, groups: groups);
+    if (!mounted) return;
+    final skipped = groups.length - fresh.length;
+    if (fresh.isEmpty) {
+      _snack('Every paper in this stack has already been marked — nothing to do.');
+      return;
+    }
+    final keptGroups = [for (final i in fresh) groups[i]];
+    final keptNames = [for (final i in fresh) names[i]];
+    final n = enqueueStudentGroups(context: context, groups: keptGroups, studentNames: keptNames);
     if (n == 0) {
       _snack('Couldn\'t start marking — try signing in again.');
       return;
     }
-    _snack('Marking $n papers in the background — results land in the tray as they finish.');
+    _snack(skipped > 0
+        ? 'Marking $n papers — $skipped had already been marked, so they were skipped.'
+        : 'Marking $n papers in the background — results land in the tray as they finish.');
     context.go(AppRoutes.grading);
   }
 
@@ -331,6 +376,36 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
             ),
           ),
         const SizedBox(height: 12),
+        if (_check.wholeStackLooksWrong) ...[
+          const SizedBox(height: 10),
+          Card(
+            color: AiMarkerColors.error.withValues(alpha: 0.10),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.error_rounded, size: 18, color: AiMarkerColors.error),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text('The order looks wrong',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${_check.suspects.length} of ${_groups.length} papers have repeated or doubled-up pages. That usually means the whole stack is split in the wrong places, not that individual papers are odd.\n\n'
+                    'Fix the split below, or rescan the stack — marking it like this would produce a class of wrong marks and cost you the credits to find out.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.45),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         _splitModeCard(),
         if (_stackWarning != null) ...[
           const SizedBox(height: 10),
@@ -514,6 +589,21 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
               ],
             ),
             const SizedBox(height: 8),
+            if (_faultsFor(i).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.flag_rounded, size: 15, color: AiMarkerColors.warning),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(_faultsFor(i),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.warning, height: 1.35)),
+                    ),
+                  ],
+                ),
+              ),
             SizedBox(
               height: 104,
               child: ListView.separated(

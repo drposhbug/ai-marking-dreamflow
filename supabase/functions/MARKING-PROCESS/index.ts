@@ -168,6 +168,10 @@ async function maybeStoreLearnedKey(teacherId: string, raw: any): Promise<{ id: 
         label: String(q?.label ?? ""),
         marks: Number(q?.marks) || 0,
         answer: String(q?.answer ?? ""),
+        // Multiple choice keys keep the POSITION of the right option, so
+        // the rest of the class is marked by comparing two digits rather
+        // than re-reading four printed options on every paper.
+        correctOption: Math.round(clamp(q?.correctOption, 0, 26, 0)),
       })),
     };
     const { data, error } = await serviceDb()
@@ -492,7 +496,7 @@ function gradeSchema(includeTranscription: boolean): any {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["questionLabel", "earnedMark", "outOfMark", "correct", "feedback", "methodNote", "pageIndex", "positionTop", "positionLeft"],
+        required: ["questionLabel", "earnedMark", "outOfMark", "correct", "feedback", "methodNote", "pageIndex", "positionTop", "positionLeft", "chosenOption"],
         properties: {
           questionLabel: { type: "string" },
           earnedMark: { type: "string" },
@@ -503,6 +507,12 @@ function gradeSchema(includeTranscription: boolean): any {
           pageIndex: { type: "integer" },
           positionTop: { type: "number" },
           positionLeft: { type: "number" },
+          // Multiple choice by POSITION: which option the student marked,
+          // 1 = first, 2 = second... 0 when the question is not multiple
+          // choice or nothing was marked. Reading a position is far less
+          // work than transcribing the option text, and it is what lets a
+          // teacher supply a key as "1:B, 2:C" instead of typing answers.
+          chosenOption: { type: "integer" },
         },
       },
     },
@@ -511,11 +521,16 @@ function gradeSchema(includeTranscription: boolean): any {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["label", "marks", "answer"],
+        required: ["label", "marks", "answer", "correctOption"],
         properties: {
           label: { type: "string" },
           marks: { type: "number" },
           answer: { type: "string" },
+          // For multiple choice, WHICH option is correct by position
+          // (1 = first). 0 for written questions. A key stored this way is
+          // a handful of digits, so marking the rest of the class against
+          // it is a comparison rather than a re-reading.
+          correctOption: { type: "integer" },
         },
       },
     },
@@ -697,6 +712,7 @@ Do all of the following:
 8. For graded tests/quizzes: summary is AT MOST 1 short sentence, and strengths and improvements are EMPTY arrays — the per-question marks ARE the feedback. For all other work: summary at most 2 short sentences addressed to the teacher (no per-question details, no KTCA scores — those are appended automatically), with 2-4 strengths and 2-4 improvements as feedback codes.
 
 9. LEARN THE KEY: when marking GRADED work with NO official answer key present, also fill derivedKey — one entry per question with its label, its printed marks, and the correct answer you worked out while marking (final answer with required units and common acceptable alternates, COMPACT — no working, no explanation). Skip teacher-only "?" questions. When an OFFICIAL ANSWER KEY is present, or markingStyle is "completion", derivedKey MUST be [].
+10. MULTIPLE CHOICE IS A POSITION, NOT A SENTENCE. When a question offers printed options (A/B/C/D, 1/2/3/4, or bullets) and the student has circled, ticked, shaded or lettered ONE of them, set chosenOption to WHICH option they picked counting from the top: 1 = first option, 2 = second, 3 = third, 4 = fourth. Do NOT transcribe the option's text into feedback — the position is the answer. Set chosenOption to 0 for any question that is not multiple choice, and 0 when the student marked nothing or marked more than one option (feedback then says which, e.g. "two options marked"). When learning a key on this kind of question, put the CORRECT option's position in derivedKey.correctOption and leave answer as the shortest possible label (e.g. "B"); that way the rest of the class is marked by comparing two numbers instead of re-reading the page.
 
 GRADE-LEVEL EXPECTATIONS — mark at the grade level given in CONTEXT when present; otherwise mark at the grade level you detected from the work itself. For work at Grades 1-8, report on the elementary Level scale by choosing gradingFormat "levels": Level 3 = meeting grade expectations, Level 4 = exceeding them, Level 4+ = outstanding. Percentages still back the levels, so compute rawScore/maxScore/percentage as usual.
 
@@ -834,6 +850,9 @@ function normalize(obj: any, provider: string, maxScoreDefault: number, formatOv
       correct: a?.correct === true,
       feedback: tinyLabel(String(a?.feedback ?? ""), stats),
       methodNote: capWords(fixEscapes(String(a?.methodNote ?? "")), 4),
+      // Which printed option was marked, 1-based. 0 = not multiple choice,
+      // nothing marked, or more than one marked.
+      chosenOption: Math.round(clamp(a?.chosenOption, 0, 26, 0)),
       pageIndex: Math.round(clamp(a?.pageIndex, 0, 999, 0)),
       positionTop: clamp(a?.positionTop, 0, 1, 0.1),
       positionLeft: clamp(a?.positionLeft, 0, 1, 0.1),
@@ -1211,8 +1230,8 @@ function gradeShape(includeTranscription: boolean): string {
   "strengths": string[],
   "improvements": string[],
   "criteriaBreakdown": [{"name": string, "score": number, "maxScore": number, "level": integer or null, "feedback": string}],
-  "annotations": [{"questionLabel": string, "earnedMark": string, "outOfMark": string, "correct": boolean, "feedback": string, "methodNote": string, "pageIndex": integer, "positionTop": number, "positionLeft": number}],
-  "derivedKey": [{"label": string, "marks": number, "answer": string}]${includeTranscription ? `,
+  "annotations": [{"questionLabel": string, "earnedMark": string, "outOfMark": string, "correct": boolean, "feedback": string, "methodNote": string, "pageIndex": integer, "positionTop": number, "positionLeft": number, "chosenOption": integer}],
+  "derivedKey": [{"label": string, "marks": number, "answer": string, "correctOption": integer}]${includeTranscription ? `,
   "rawText": string` : ""}
 }`;
 }
