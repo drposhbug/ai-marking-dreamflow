@@ -579,20 +579,36 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            // Replaces a passive "the assistant is clever" line with the
+            // one thing that actually changes how long an evening takes.
+            // Left to guess, most teachers reach for the camera — the
+            // slowest of the four routes — and conclude the app is slow.
             Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    Icon(Icons.auto_awesome_rounded, color: Theme.of(context).colorScheme.secondary),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Your assistant reads the assignment type, grade level, and whether to mark for completion or correctness — just scan.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+              child: InkWell(
+                splashFactory: NoSplash.splashFactory,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                onTap: () => context.push(AppRoutes.waysToMark),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Icon(Icons.speed_rounded, color: Theme.of(context).colorScheme.secondary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Four ways to mark a class set',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 2),
+                            Text('A form takes 2 minutes, the copier 6, photos 15. Tap for the steps.',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35)),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                    ],
+                  ),
                 ),
               ),
             ),

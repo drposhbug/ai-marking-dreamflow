@@ -581,7 +581,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          // Same guide as the home screen, so there is one place these
+          // steps live and one place to keep them true.
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => context.push(AppRoutes.waysToMark),
+              icon: const Icon(Icons.list_alt_rounded, size: 18),
+              label: const Text('See the steps for each'),
+            ),
+          ),
+          const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
