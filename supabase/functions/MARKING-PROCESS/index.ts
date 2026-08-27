@@ -1768,7 +1768,7 @@ Deno.serve(async (req) => {
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
     const items = Array.isArray(payload?.items) ? payload.items : [];
     if (items.length === 0) return json({ error: "items are required" }, 400);
-    if (items.length > 200) return json({ error: "Too many papers in one batch — split the set." }, 400);
+    if (items.length > 250) return json({ error: "Too many papers in one batch — split the set." }, 400);
 
     const gate = await budgetGate(teacherId, true);
     if (gate) return gate;

@@ -184,7 +184,7 @@ class _PrepareTestScreenState extends State<PrepareTestScreen> {
                               Text('$_copies', style: Theme.of(context).textTheme.titleMedium),
                               IconButton(
                                 icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
-                                onPressed: _copies >= 60 ? null : () => setState(() => _copies++),
+                                onPressed: _copies >= TestStamper.maxCopies ? null : () => setState(() => _copies++),
                               ),
                             ],
                           ),
