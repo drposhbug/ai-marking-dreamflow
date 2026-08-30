@@ -141,7 +141,9 @@ reference it precisely. Delete anything already done; add anything missing.
       the right moment (after the first batch is queued, not on first launch).
 - [x] **R7.2** External user id set to the teacher id, matching `Purchases.logIn` so
       RevenueCat and OneSignal address the same person.
-- [x] **R7.3** "Your class set is marked" — fired server-side from the overnight batch
+- [~] **R7.3** "Your class set is marked" — client side done; the SERVER half is
+      written (OVERNIGHT-SWEEPER) but NOT DEPLOYED, so no push fires yet.
+      Originally: fired server-side from the overnight batch
       completion path, deep-linking straight to the results.
 - [x] **R7.4** Trial-ending and approaching-mark-cap nudges. These are the upgrade
       triggers, so they feed the HAMM story as well as retention.
