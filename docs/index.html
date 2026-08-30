@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Markless — mark a class set in minutes, with real feedback</title>
+<meta name="description" content="Markless takes the first pass at marking. Import a Google Form or scan a stack of paper and get question-by-question marks, a justification for every deduction, and feedback students will read. Student names are blacked out on the phone before anything is uploaded.">
+<link rel="canonical" href="https://drposhbug.github.io/ai-marking-dreamflow/">
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="theme-color" content="#2563EB">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Markless">
+<meta property="og:url" content="https://drposhbug.github.io/ai-marking-dreamflow/">
+<meta property="og:title" content="Markless — mark a class set in minutes, with real feedback">
+<meta property="og:description" content="Marking eats your evenings. Markless takes the first pass: question-by-question marks, a justification for every deduction, and feedback students will read. The teacher decides the grade.">
+<meta property="og:image" content="https://drposhbug.github.io/ai-marking-dreamflow/icon.png">
+<meta property="og:image:alt" content="The Markless app icon.">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Markless — mark a class set in minutes, with real feedback">
+<meta name="twitter:description" content="Marking eats your evenings. Markless takes the first pass: question-by-question marks, a justification for every deduction, and feedback students will read. The teacher decides the grade.">
+<meta name="twitter:image" content="https://drposhbug.github.io/ai-marking-dreamflow/icon.png">
+<meta name="twitter:image:alt" content="The Markless app icon.">
+
+<style>
+  :root {
+    color-scheme: light dark;
+
+    --bg:         #f4f7fb;
+    --surface:    #ffffff;
+    --surface-2:  #eaf0f9;
+    --ink:        #0f172a;
+    --ink-2:      #334155;
+    --muted:      #55607a;
+    --line:       #dbe3ef;
+    --line-soft:  #e7edf6;
+    --brand:      #2563eb;
+    --brand-2:    #1d4ed8;
+    --brand-soft: #e5edfd;
+    --green-mark: #16a34a;
+    --green-soft: #e3f5e9;
+    --shadow:     0 1px 2px rgba(15, 23, 42, .05), 0 14px 32px -20px rgba(15, 23, 42, .35);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:         #0f172a;
+      --surface:    #162034;
+      --surface-2:  #1c2842;
+      --ink:        #e9eef8;
+      --ink-2:      #c6d1e4;
+      --muted:      #96a4bd;
+      --line:       #29354d;
+      --line-soft:  #223047;
+      --brand:      #7fa9ff;
+      --brand-2:    #a8c5ff;
+      --brand-soft: #18243c;
+      --green-mark: #4ade80;
+      --green-soft: #132a1d;
+      --shadow:     0 1px 2px rgba(0, 0, 0, .4), 0 14px 32px -20px rgba(0, 0, 0, .8);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 1rem/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { color: var(--ink); text-wrap: balance; }
+  p { text-wrap: pretty; }
+
+  a { color: var(--brand); text-underline-offset: 0.18em; }
+  a:hover { color: var(--brand-2); }
+
+  :where(a, button, [tabindex]):focus-visible {
+    outline: 3px solid var(--brand);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  .wrap {
+    max-width: 71rem;
+    margin-inline: auto;
+    padding-inline: clamp(1.15rem, 4vw, 2.75rem);
+  }
+
+  .skip { position: absolute; left: -9999px; }
+  .skip:focus {
+    position: fixed;
+    left: 1rem;
+    top: 1rem;
+    z-index: 10;
+    background: var(--surface);
+    color: var(--ink);
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────────── */
+
+  .site-header {
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg);
+  }
+  .site-header .wrap {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    min-height: 4.25rem;
+    flex-wrap: wrap;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-right: auto;
+    font-weight: 700;
+    font-size: 1.06rem;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .brand img { width: 28px; height: 28px; border-radius: 7px; display: block; }
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.9rem, 2.4vw, 1.75rem);
+    font-size: 0.94rem;
+  }
+  .site-nav a { color: var(--ink-2); text-decoration: none; }
+  .site-nav a:hover { color: var(--brand); text-decoration: underline; }
+
+  /* ── Buttons ────────────────────────────────────────────────────────── */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.8rem 1.35rem;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 620;
+    line-height: 1.2;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+
+  .btn-primary { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+  .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; color: #ffffff; }
+
+  .btn-ghost { background: var(--surface); border-color: var(--line); color: var(--ink); }
+  .btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
+
+  /* ── Hero ───────────────────────────────────────────────────────────── */
+
+  .hero { padding: clamp(3.25rem, 8vw, 6rem) 0 clamp(2.5rem, 5vw, 3.75rem); }
+
+  .eyebrow {
+    margin: 0 0 1.1rem;
+    font-size: 0.78rem;
+    font-weight: 680;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--brand);
+  }
+
+  .hero h1 {
+    margin: 0 0 1.15rem;
+    max-width: 19ch;
+    font-size: clamp(2.15rem, 5.4vw, 3.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.032em;
+    font-weight: 700;
+  }
+
+  .lede {
+    margin: 0 0 1.5rem;
+    max-width: 44rem;
+    font-size: clamp(1.06rem, 1.6vw, 1.26rem);
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+
+  .cta-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0 0 1.1rem; }
+  .cta-note { margin: 0; max-width: 34rem; font-size: 0.92rem; color: var(--muted); }
+
+  /* ── Time strip ─────────────────────────────────────────────────────── */
+
+  .strip {
+    margin-top: clamp(2.5rem, 5vw, 3.5rem);
+    border-top: 1px solid var(--line);
+    padding-top: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 1.25rem 1.75rem;
+  }
+  .strip div { min-width: 0; }
+  .strip .t {
+    font: 620 1.45rem/1.1 ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+          Consolas, "Liberation Mono", monospace;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .strip .l {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+
+  /* ── Sections ───────────────────────────────────────────────────────── */
+
+  section { padding: clamp(3.25rem, 7vw, 5.5rem) 0; }
+  section + section { border-top: 1px solid var(--line-soft); }
+
+  .section-head { max-width: 46rem; margin-bottom: clamp(2rem, 4vw, 2.75rem); }
+  .section-head h2 {
+    margin: 0 0 0.8rem;
+    font-size: clamp(1.5rem, 3.1vw, 2.1rem);
+    line-height: 1.15;
+    letter-spacing: -0.024em;
+    font-weight: 690;
+  }
+  .section-head p { margin: 0; font-size: 1.05rem; color: var(--muted); }
+
+  /* ── Cards ──────────────────────────────────────────────────────────── */
+
+  .grid-4 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.4rem 1.35rem;
+  }
+  .card h3 {
+    margin: 0.85rem 0 0.5rem;
+    font-size: 1.05rem;
+    line-height: 1.3;
+    font-weight: 660;
+    letter-spacing: -0.012em;
+  }
+  .card p { margin: 0 0 0.7rem; font-size: 0.945rem; color: var(--ink-2); }
+  .card p:last-child { margin-bottom: 0; }
+  .card .best { color: var(--muted); }
+
+  .time {
+    display: inline-block;
+    padding: 0.24rem 0.55rem;
+    border-radius: 999px;
+    background: var(--brand-soft);
+    color: var(--brand-2);
+    font: 640 0.82rem/1.3 ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+          Consolas, "Liberation Mono", monospace;
+  }
+
+  .callout {
+    margin-top: 1.25rem;
+    background: var(--green-soft);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.15rem 1.35rem;
+    color: var(--ink-2);
+    font-size: 0.965rem;
+  }
+  .callout p { margin: 0; }
+  .callout strong { color: var(--ink); }
+
+  /* ── Two-column blocks ──────────────────────────────────────────────── */
+
+  .cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+    gap: clamp(1.75rem, 3.5vw, 3rem);
+    align-items: start;
+  }
+
+  .ticks { list-style: none; margin: 0; padding: 0; }
+  .ticks li {
+    position: relative;
+    padding-left: 1.6rem;
+    margin-bottom: 0.85rem;
+    color: var(--ink-2);
+    font-size: 0.98rem;
+  }
+  .ticks li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.58em;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 2px;
+    background: var(--green-mark);
+  }
+  .ticks li strong { color: var(--ink); font-weight: 640; }
+  .ticks li:last-child { margin-bottom: 0; }
+
+  .rules { list-style: none; margin: 0; padding: 0; }
+  .rules li { margin-bottom: 1.5rem; }
+  .rules li:last-child { margin-bottom: 0; }
+  .rules h3 {
+    margin: 0 0 0.4rem;
+    font-size: 1.02rem;
+    font-weight: 660;
+    letter-spacing: -0.012em;
+  }
+  .rules p { margin: 0; color: var(--ink-2); font-size: 0.965rem; }
+
+  /* ── Limits panel ───────────────────────────────────────────────────── */
+
+  .limits {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: clamp(1.35rem, 2.5vw, 1.85rem);
+  }
+  .limits h3 {
+    margin: 0 0 0.85rem;
+    font-size: 1.02rem;
+    font-weight: 660;
+    letter-spacing: -0.012em;
+  }
+  .limits ul { margin: 0; padding-left: 1.15rem; }
+  .limits li { margin-bottom: 0.75rem; color: var(--ink-2); font-size: 0.945rem; }
+  .limits li:last-child { margin-bottom: 0; }
+  .limits .after { margin: 1.1rem 0 0; font-size: 0.945rem; color: var(--ink-2); }
+
+  /* ── Pricing ────────────────────────────────────────────────────────── */
+
+  .plan .name {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    margin: 0 0 0.55rem;
+    font-size: 1.05rem;
+    font-weight: 690;
+    letter-spacing: -0.012em;
+  }
+  .pill {
+    padding: 0.16rem 0.5rem;
+    border-radius: 999px;
+    background: var(--brand-soft);
+    color: var(--brand-2);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .price {
+    margin: 0 0 0.5rem;
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+  }
+  .price span {
+    font-size: 0.92rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--muted);
+  }
+  .plan .credits { margin: 0 0 1rem; font-size: 0.92rem; color: var(--muted); }
+  .plan ul { list-style: none; margin: 0; padding: 0; }
+  .plan li {
+    position: relative;
+    padding-left: 1.35rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.925rem;
+    color: var(--ink-2);
+  }
+  .plan li::before {
+    content: "";
+    position: absolute;
+    left: 0.15rem;
+    top: 0.52em;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--brand);
+  }
+  .plan.featured { border: 2px solid var(--brand); }
+
+  .give-back { margin: 0 0 1.75rem; max-width: 46rem; font-size: 1.02rem; color: var(--ink-2); }
+  .give-back strong { color: var(--ink); }
+
+  .fineprint { margin: 1.5rem 0 0; max-width: 52rem; font-size: 0.9rem; color: var(--muted); }
+
+  /* ── Closing band ───────────────────────────────────────────────────── */
+
+  .band {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: clamp(2rem, 4.5vw, 3.25rem);
+    box-shadow: var(--shadow);
+  }
+  .band h2 {
+    margin: 0 0 0.8rem;
+    max-width: 22ch;
+    font-size: clamp(1.45rem, 3vw, 2rem);
+    line-height: 1.15;
+    letter-spacing: -0.024em;
+    font-weight: 690;
+  }
+  .band p { margin: 0 0 1.5rem; max-width: 40rem; color: var(--ink-2); }
+
+  /* ── Footer ─────────────────────────────────────────────────────────── */
+
+  .site-footer {
+    border-top: 1px solid var(--line);
+    margin-top: clamp(3rem, 7vw, 5rem);
+    padding: 2.5rem 0 3.5rem;
+    font-size: 0.92rem;
+    color: var(--muted);
+  }
+  .site-footer nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.6rem;
+    margin-bottom: 1.5rem;
+  }
+  .site-footer p { margin: 0 0 0.6rem; max-width: 46rem; }
+  .site-footer p:last-child { margin-bottom: 0; }
+
+  @media (max-width: 34rem) {
+    .site-header .wrap { min-height: 0; padding-block: 0.9rem; }
+    .cta-row .btn { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="./">
+      <img src="icon.png" width="28" height="28" alt="The Markless app icon">
+      Markless
+    </a>
+    <nav class="site-nav" aria-label="Primary">
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#pricing">Pricing</a>
+      <a href="https://github.com/drposhbug/ai-marking-dreamflow">Source</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ── Hero ──────────────────────────────────────────────────────────── -->
+  <div class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Marking assistant for teachers</p>
+      <h1>Marking eats your evenings. Markless takes the first pass.</h1>
+      <p class="lede">Point it at a class set — a Google Form export, a scanned
+      stack from the photocopier, or photographs of individual papers — and get
+      back question-by-question marks with half and quarter marks, a written
+      justification for every deduction, and feedback short enough that a
+      fourteen-year-old will read it. You override anything you disagree with.
+      The app never has the last word on a grade.</p>
+
+      <div class="cta-row">
+        <!-- TODO: replace this mailto with the Google Play listing URL once the app is live — TODO: store URL -->
+        <a class="btn btn-primary" href="mailto:oscar.cs.lee@gmail.com?subject=Markless%20launch">Ask to be told when it launches</a>
+        <a class="btn btn-ghost" href="#how">See the four ways to mark</a>
+      </div>
+      <p class="cta-note">Markless is not yet released on any app store. It is
+      built with Flutter for Android and iOS, and the source is public.</p>
+
+      <div class="strip">
+        <div>
+          <span class="t">~2 min</span>
+          <span class="l">Google Form or spreadsheet</span>
+        </div>
+        <div>
+          <span class="t">~6 min</span>
+          <span class="l">Print, then scan the stack</span>
+        </div>
+        <div>
+          <span class="t">~6 min</span>
+          <span class="l">Scan a stack you already printed</span>
+        </div>
+        <div>
+          <span class="t">~15 min</span>
+          <span class="l">Photograph each paper</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Four ways to mark ─────────────────────────────────────────────── -->
+  <section id="how">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Four ways to mark, and the fastest is the one nobody guesses</h2>
+        <p>Times are for a class of thirty. Most teachers end up using two of
+        these — one for quizzes, one for real tests.</p>
+      </div>
+
+      <div class="grid-4">
+        <article class="card">
+          <span class="time">~2 min</span>
+          <h3>Google Form or spreadsheet</h3>
+          <p class="best">Quizzes, and anything students type. Nothing to scan
+          at all.</p>
+          <p>Export the responses to CSV, confirm the columns it found, and tap
+          the correct option for each multiple-choice question. Multiple choice
+          is marked on your phone for free — only the written answers use
+          credits, and every student's answer to one question is marked
+          together, so the whole class is judged the same way.</p>
+        </article>
+
+        <article class="card">
+          <span class="time">~6 min</span>
+          <h3>Prepare, print, then scan the stack</h3>
+          <p class="best">Real tests on paper. The fastest paper route, and the
+          only one that cannot mix students up.</p>
+          <p>Markless builds one print-ready PDF containing every copy, each
+          stamped in the footer of every page with its own code. Feed the
+          collected stack through the copier's document feeder as one PDF, and
+          pages sharing a code reassemble into one paper — shuffled, creased or
+          out of order. Stamping runs entirely on the device.</p>
+        </article>
+
+        <article class="card">
+          <span class="time">~6 min</span>
+          <h3>Scan a stack you already printed</h3>
+          <p class="best">A test that has already been written on, printed the
+          ordinary way.</p>
+          <p>Scan the stack to one PDF and it splits back into papers, either by
+          a fixed page length or by on-device detection of cover-page signals.
+          Detection uploads nothing; the split is shown to you first, and only
+          what you confirm is marked. Tell it how many students to expect and it
+          catches a page the feeder swallowed.</p>
+        </article>
+
+        <article class="card">
+          <span class="time">~15 min</span>
+          <h3>Photograph each paper</h3>
+          <p class="best">A handful of papers, a late submission, or anywhere
+          without a copier.</p>
+          <p>Prop the phone up and slide each page underneath. It shoots
+          automatically and tells you — with a sound or a buzz — when the page
+          has landed and it is time to slide the next one.</p>
+        </article>
+      </div>
+
+      <div class="callout">
+        <p><strong>The first paper is always marked on its own</strong> and
+        shown to you before the other twenty-nine go ahead. A wrong answer key
+        costs one paper, never thirty. This holds on every plan, including
+        free — approving the first result is a safety check, not a premium
+        feature.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── What comes back ───────────────────────────────────────────────── -->
+  <section id="marking">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Real marking, not a vibe check</h2>
+        <p>Two rules shape the whole product, and they do not bend at the
+        edges.</p>
+      </div>
+
+      <div class="cols">
+        <div>
+          <ul class="ticks">
+            <li><strong>Question-by-question scores</strong>, with half and
+            quarter marks, and a justification for every deduction.</li>
+            <li><strong>Feedback in your voice, not a robot's</strong> —
+            specific, kind, and short enough that a student will read it.</li>
+            <li><strong>Answer keys.</strong> Scan the key once and every paper
+            is marked against it, or let Markless learn the key from the first
+            paper of a stack.</li>
+            <li><strong>It flags what it should not decide alone.</strong> A
+            hand-drawn diagram, an unreadable page, a right answer reached by an
+            unexpected method — it says so and asks for you, instead of guessing
+            a score.</li>
+            <li><strong>Ontario KTCA categories</strong>, and curriculum
+            expectations for your region.</li>
+            <li><strong>Marks leave as a gradebook CSV</strong>, or as a Google
+            Doc in your Drive.</li>
+            <li><strong>Lesson planning</strong> — a quiz, worksheet or lesson
+            plan drafted from a topic.</li>
+            <li><strong>Your work follows your account.</strong> Sign in on a
+            new phone and your classes, students and every marked test are
+            there.</li>
+          </ul>
+        </div>
+
+        <div>
+          <ul class="rules">
+            <li>
+              <h3>The teacher decides the grade. Always.</h3>
+              <p>Markless produces a proposed mark. Every result opens in a
+              review screen showing the score, the per-question breakdown and
+              the reasoning behind each deduction. You can change any mark, and
+              an overridden result is flagged as such. Nothing is transmitted to
+              a gradebook, a student or a parent by Markless — you carry the
+              mark forward yourself.</p>
+            </li>
+            <li>
+              <h3>Student identity does not go to the AI.</h3>
+              <p>The marking model grades the work. It is not told, and does not
+              need to know, whose work it is. The name is read on the device and
+              blacked out before the page is uploaded; imported Form answers go
+              up keyed by row number, never by name.</p>
+            </li>
+            <li>
+              <h3>Overnight costs about a fifth of on the spot.</h3>
+              <p>A class set can be submitted to a batch queue and collected
+              later, which is roughly five times cheaper per paper. It is why
+              every plan goes so much further that way.</p>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Privacy ───────────────────────────────────────────────────────── -->
+  <section id="privacy">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>What leaves the phone, stated plainly</h2>
+        <p>You would be handing us other people's children's work. Here is what
+        happens to it, including the parts that are not perfect.</p>
+      </div>
+
+      <div class="cols">
+        <div>
+          <ul class="ticks">
+            <li><strong>The student's name stays on the device</strong>, on the
+            iOS and Android apps. On-device text recognition finds identity
+            fields — <em>Name:</em>,
+            <em>Student:</em>, <em>Student ID:</em> — and those regions are
+            painted solid black in the copy that is uploaded. The original,
+            unaltered page stays on your phone, so you still see the real paper.
+            The name is used locally to file the result under the right
+            student.</li>
+            <li><strong>Imported Form and CSV answers are sent keyed by row
+            number</strong>, never by name. The name column is never
+            transmitted, and known student names are scrubbed out of the answer
+            text itself. Multiple-choice questions are marked entirely on the
+            device and are never transmitted at all.</li>
+            <li><strong>Page images are not retained.</strong> They are passed
+            through for marking and discarded. What is stored is the result —
+            scores, comments, question breakdowns — plus a one-way hash of each
+            page, so re-marking an identical page is served from cache instead
+            of being processed again. A hash cannot be reversed into the
+            image.</li>
+            <li><strong>No ads, no tracking, no analytics SDK</strong>, no
+            device advertising identifier, no location, no contacts. There are
+            no student accounts and no student-facing surface at all.</li>
+            <li><strong>Delete your account from inside the app</strong> and the
+            profile, every marked result, every class and student, answer keys
+            and settings go with it, on the device and on the server. It is
+            irreversible.</li>
+          </ul>
+          <p class="fineprint">Redaction is controlled by Settings → Privacy →
+          "Hide student names before marking", and is on by default on iOS and
+          Android.</p>
+        </div>
+
+        <div class="limits">
+          <h3>Where the promise stops</h3>
+          <ul>
+            <li>Redaction covers name <em>fields</em>. It cannot cover a name
+            written somewhere unexpected, a name inside the body of an essay, or
+            a signature on artwork.</li>
+            <li>If the handwriting is unreadable to the recognizer, the field is
+            not found and the page uploads unredacted. The app reports when that
+            happened.</li>
+            <li>The on-device recognition this depends on is a native library,
+            and a browser has none. In the web version nothing is read off the
+            page and nothing is blacked out: photographed work is sent exactly
+            as it was picked, with whatever name is written on it. The setting
+            is disabled there and says why, and the first browser upload asks
+            the teacher to acknowledge it — but saying so is not the same as
+            fixing it. For photographed work, use the app, or the Form and CSV
+            route, which is unaffected.</li>
+            <li>Handwriting is itself arguably identifying, and nothing removes
+            that.</li>
+            <li>One cheap route, used for objective and short answers, goes to a
+            provider whose published terms permit training on submitted content
+            and store data in the People's Republic of China. It receives answer
+            text only — never images, never names — and it can be switched off,
+            but it does not meet the no-training bar the rest of the pipeline
+            holds to.</li>
+            <li>There is no SOC 2 report and no third-party security audit, and
+            no signed DPA template yet — one is available on request.</li>
+          </ul>
+          <p class="after">Markless reduces exposure substantially. It does not
+          make a scanned page anonymous, and no vendor should claim otherwise.
+          The full write-up — subprocessors, legal footing, retention and every
+          known gap — is in
+          <a href="https://github.com/drposhbug/ai-marking-dreamflow/blob/main/docs/security-and-compliance.md">Security
+          and Compliance</a>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Pricing ───────────────────────────────────────────────────────── -->
+  <section id="pricing">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Plans</h2>
+        <p>Start on a free trial. Paid plans are credit-based: credits scale
+        with how much work a paper actually takes, so a short multiple-choice
+        quiz costs a fraction of a six-page problem set, and re-marking the same
+        paper is free.</p>
+      </div>
+
+      <!-- TODO: name the charity before launch -->
+      <p class="give-back"><strong>Every paid plan gives 10% to charities that
+      help kids learn.</strong> Not a marketing line — it comes off the top.</p>
+
+      <div class="grid-4">
+        <article class="card plan">
+          <h3 class="name">Starter</h3>
+          <p class="price">$6.99 <span>/month</span></p>
+          <p class="credits">About 200 papers a month, marked overnight</p>
+          <ul>
+            <li>Marking on every subject</li>
+            <li>Answer keys and learned keys</li>
+            <li>Google Drive export</li>
+          </ul>
+        </article>
+
+        <article class="card plan featured">
+          <h3 class="name">Pro <span class="pill">Best value</span></h3>
+          <p class="price">$14.99 <span>/month</span></p>
+          <p class="credits">About 450 papers a month marked overnight, or 90 on
+          the spot</p>
+          <ul>
+            <li>Everything in Starter</li>
+            <li>Mark a whole class set on the spot</li>
+            <li>Lesson planning assistant</li>
+            <li>Priority marking queue</li>
+          </ul>
+        </article>
+
+        <article class="card plan">
+          <h3 class="name">Pro Annual</h3>
+          <p class="price">$119.99 <span>/year</span></p>
+          <p class="credits">About 300 papers a month, marked overnight</p>
+          <ul>
+            <li>Everything in Pro</li>
+            <li>Paid once a year instead of monthly</li>
+          </ul>
+        </article>
+
+        <article class="card plan">
+          <h3 class="name">School</h3>
+          <p class="price">$24.99 <span>/month</span></p>
+          <p class="credits">About 760 papers a month marked overnight, or 150
+          on the spot</p>
+          <ul>
+            <li>Everything in Pro</li>
+            <li>Built for a full teaching load</li>
+            <li>Department invoicing on request</li>
+          </ul>
+        </article>
+      </div>
+
+      <p class="fineprint">Prices are in US dollars; the store shows your own
+      currency. Marking overnight costs about a fifth of marking on the spot,
+      which is why every plan goes so much further that way. Subscriptions renew
+      until cancelled, and can be cancelled any time in the store.</p>
+    </div>
+  </section>
+
+  <!-- ── Closing ───────────────────────────────────────────────────────── -->
+  <section id="get">
+    <div class="wrap">
+      <div class="band">
+        <h2>Built by a teacher, for teachers.</h2>
+        <p>Markless is an active project, submitted to the RevenueCat Shipaton
+        2026. It is not on any app store yet. If you want to be told when it is,
+        or you are a school that would want to read the compliance write-up
+        first, say so.</p>
+        <div class="cta-row">
+          <!-- TODO: replace this mailto with the Google Play listing URL once the app is live — TODO: store URL -->
+          <a class="btn btn-primary" href="mailto:oscar.cs.lee@gmail.com?subject=Markless%20launch">Ask to be told when it launches</a>
+          <a class="btn btn-ghost" href="https://github.com/drposhbug/ai-marking-dreamflow">Read the source</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="privacy.html">Privacy policy</a>
+      <a href="delete-account.html">Delete your account</a>
+      <a href="https://github.com/drposhbug/ai-marking-dreamflow/blob/main/docs/security-and-compliance.md">Security and compliance</a>
+      <a href="https://github.com/drposhbug/ai-marking-dreamflow">GitHub repository</a>
+      <a href="mailto:oscar.cs.lee@gmail.com">oscar.cs.lee@gmail.com</a>
+    </nav>
+    <p>Markless is a marking assistant for teachers. It proposes marks; the
+    teacher decides them.</p>
+    <p>Google Forms, Google Drive and Google Play are trademarks of Google LLC.</p>
+  </div>
+</footer>
+
+</body>
+</html>

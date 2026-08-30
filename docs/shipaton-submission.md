@@ -352,7 +352,9 @@ toggle; and nothing fires for a teacher who has never queued a batch.
 | Judge access | Promo code or free trial | `TODO:` decide which; a promo code needs the app live on a store track |
 | App store URL | Play listing | `TODO:` blocked on R4.7–R4.12 |
 | Public repo | MIT licensed | Licence added; `TODO:` flip the repo to public (R8.2) |
-| Privacy policy URL | Public | `docs/index.html` is ready; `TODO:` switch on GitHub Pages (see `docs/README.md`) |
+| Website URL | Public | `docs/index.html` is the landing page, at `https://drposhbug.github.io/ai-marking-dreamflow/`; `TODO:` switch on GitHub Pages (see `docs/README.md`) |
+| Privacy policy URL | Public | `docs/privacy.html`, at `https://drposhbug.github.io/ai-marking-dreamflow/privacy.html`; `TODO:` switch on GitHub Pages (see `docs/README.md`) |
+| Account deletion URL | Public, no login | `docs/delete-account.html`, at `https://drposhbug.github.io/ai-marking-dreamflow/delete-account.html`; `TODO:` fill in its retention and turnaround markers before Play submission |
 | Student evidence | For Next Gen | `TODO:` .edu email or enrolment letter (R8.4) |
 | Build-in-public post links | | `TODO:` collect (R5.3) |
 
