@@ -144,6 +144,9 @@ ThemeData get lightTheme => ThemeData(
   brightness: Brightness.light,
   scaffoldBackgroundColor: AiMarkerColors.bg,
   appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, elevation: 0, scrolledUnderElevation: 0, centerTitle: true),
+  // A sheet spanning a 1440px monitor is a phone habit. The cap is wider than
+  // any phone, so phones see no change.
+  bottomSheetTheme: const BottomSheetThemeData(constraints: BoxConstraints(maxWidth: 640)),
   cardTheme: CardThemeData(
     color: AiMarkerColors.card,
     elevation: 0,
@@ -197,6 +200,9 @@ ThemeData get darkTheme => ThemeData(
   brightness: Brightness.dark,
   scaffoldBackgroundColor: AiMarkerColors.darkBg,
   appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, elevation: 0, scrolledUnderElevation: 0, centerTitle: true),
+  // A sheet spanning a 1440px monitor is a phone habit. The cap is wider than
+  // any phone, so phones see no change.
+  bottomSheetTheme: const BottomSheetThemeData(constraints: BoxConstraints(maxWidth: 640)),
   cardTheme: CardThemeData(
     color: AiMarkerColors.darkCard,
     elevation: 0,

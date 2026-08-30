@@ -29,10 +29,17 @@ import 'package:marking_prokect_v2/screens/presets/create_preset_flow_screen.dar
 import 'package:marking_prokect_v2/screens/presets/preset_detail_screen.dart';
 import 'package:marking_prokect_v2/screens/presets/preset_edit_screen.dart';
 import 'package:marking_prokect_v2/widgets/bottom_nav_shell.dart';
+import 'package:marking_prokect_v2/widgets/responsive.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 
 class AppRouter {
   static final _rootKey = GlobalKey<NavigatorState>();
+
+  // Every screen reaches the teacher through one of these two builders, so
+  // the desktop content column is decided once here instead of in each of the
+  // twenty-odd screens. On a phone the frame does nothing at all.
+  static Page<void> _page(Widget child) => MaterialPage<void>(child: AppPageFrame(child: child));
+  static Page<void> _instantPage(Widget child) => NoTransitionPage<void>(child: AppPageFrame(child: child));
 
   static final GoRouter router = GoRouter(
     navigatorKey: _rootKey,
@@ -48,31 +55,31 @@ class AppRouter {
       return null;
     },
     routes: [
-      GoRoute(path: AppRoutes.login, name: 'login', pageBuilder: (context, state) => const NoTransitionPage(child: LoginScreen())),
-      GoRoute(path: AppRoutes.onboarding, name: 'onboarding', pageBuilder: (context, state) => const NoTransitionPage(child: OnboardingScreen())),
+      GoRoute(path: AppRoutes.login, name: 'login', pageBuilder: (context, state) => _instantPage(const LoginScreen())),
+      GoRoute(path: AppRoutes.onboarding, name: 'onboarding', pageBuilder: (context, state) => _instantPage(const OnboardingScreen())),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => BottomNavShell(shell: shell),
         branches: [
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.grading, name: 'grading', pageBuilder: (context, state) => const NoTransitionPage(child: GradingHomeScreen()))]),
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.dashboard, name: 'dashboard', pageBuilder: (context, state) => const NoTransitionPage(child: DashboardScreen()))]),
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.classes, name: 'classes', pageBuilder: (context, state) => const NoTransitionPage(child: ClassesMainScreen()))]),
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.library, name: 'library', pageBuilder: (context, state) => const NoTransitionPage(child: LibraryScreen()))]),
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.settings, name: 'settings', pageBuilder: (context, state) => const NoTransitionPage(child: SettingsScreen()))]),
+          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.grading, name: 'grading', pageBuilder: (context, state) => _instantPage(const GradingHomeScreen()))]),
+          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.dashboard, name: 'dashboard', pageBuilder: (context, state) => _instantPage(const DashboardScreen()))]),
+          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.classes, name: 'classes', pageBuilder: (context, state) => _instantPage(const ClassesMainScreen()))]),
+          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.library, name: 'library', pageBuilder: (context, state) => _instantPage(const LibraryScreen()))]),
+          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.settings, name: 'settings', pageBuilder: (context, state) => _instantPage(const SettingsScreen()))]),
         ],
       ),
-      GoRoute(path: AppRoutes.planning, name: 'planning', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PlanningScreen())),
-      GoRoute(path: AppRoutes.plans, name: 'plans', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PlansScreen())),
-      GoRoute(path: AppRoutes.importResponses, name: 'importResponses', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ImportResponsesScreen())),
-      GoRoute(path: AppRoutes.exportMarks, name: 'exportMarks', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ExportMarksScreen())),
-      GoRoute(path: AppRoutes.waysToMark, name: 'waysToMark', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: WaysToMarkScreen())),
-      GoRoute(path: AppRoutes.reportComments, name: 'reportComments', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ReportCommentsScreen())),
-      GoRoute(path: AppRoutes.prepareTest, name: 'prepareTest', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PrepareTestScreen())),
-      GoRoute(path: AppRoutes.splitStack, name: 'splitStack', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: SplitStackScreen())),
+      GoRoute(path: AppRoutes.planning, name: 'planning', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => _page(const PlanningScreen())),
+      GoRoute(path: AppRoutes.plans, name: 'plans', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => _page(const PlansScreen())),
+      GoRoute(path: AppRoutes.importResponses, name: 'importResponses', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => _page(const ImportResponsesScreen())),
+      GoRoute(path: AppRoutes.exportMarks, name: 'exportMarks', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => _page(const ExportMarksScreen())),
+      GoRoute(path: AppRoutes.waysToMark, name: 'waysToMark', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => _page(const WaysToMarkScreen())),
+      GoRoute(path: AppRoutes.reportComments, name: 'reportComments', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => _page(const ReportCommentsScreen())),
+      GoRoute(path: AppRoutes.prepareTest, name: 'prepareTest', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => _page(const PrepareTestScreen())),
+      GoRoute(path: AppRoutes.splitStack, name: 'splitStack', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => _page(const SplitStackScreen())),
       GoRoute(path: AppRoutes.pilotReview, name: 'pilotReview', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final jobId = state.uri.queryParameters['jobId'] ?? '';
-        return MaterialPage(child: PilotReviewScreen(jobId: jobId));
+        return _page(PilotReviewScreen(jobId: jobId));
       }),
-      GoRoute(path: AppRoutes.gradingContext, name: 'gradingContext', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: GradingContextScreen())),
+      GoRoute(path: AppRoutes.gradingContext, name: 'gradingContext', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => _page(const GradingContextScreen())),
       GoRoute(path: AppRoutes.result, name: 'result', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final submissionId = state.uri.queryParameters['submissionId'];
         // The grading flow passes the live result and scanned pages via
@@ -89,41 +96,39 @@ class AppRouter {
           final pages = extra['pageImages'];
           if (pages is List) pageImages = pages.whereType<Uint8List>().toList(growable: false);
         }
-        return MaterialPage(
-          child: ResultScreen(
-            submissionId: submissionId,
-            gradeResult: gradeResult,
-            imageBytes: imageBytes,
-            pageImages: pageImages,
-          ),
-        );
+        return _page(ResultScreen(
+          submissionId: submissionId,
+          gradeResult: gradeResult,
+          imageBytes: imageBytes,
+          pageImages: pageImages,
+        ));
       }),
       GoRoute(path: AppRoutes.classHub, name: 'classHub', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final classId = state.uri.queryParameters['classId'] ?? '';
-        return MaterialPage(child: ClassHubScreen(classId: classId));
+        return _page(ClassHubScreen(classId: classId));
       }),
       GoRoute(path: AppRoutes.classAnalysis, name: 'classAnalysis', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final classId = state.uri.queryParameters['classId'] ?? '';
-        return MaterialPage(child: ClassAnalysisScreen(classId: classId));
+        return _page(ClassAnalysisScreen(classId: classId));
       }),
       GoRoute(path: AppRoutes.studentProfile, name: 'studentProfile', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final studentId = state.uri.queryParameters['studentId'] ?? '';
         final classId = state.uri.queryParameters['classId'];
-        return MaterialPage(child: StudentProfileScreen(studentId: studentId, classId: classId));
+        return _page(StudentProfileScreen(studentId: studentId, classId: classId));
       }),
       GoRoute(path: AppRoutes.presetFlow, name: 'presetFlow', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final classId = state.uri.queryParameters['classId'] ?? '';
-        return MaterialPage(child: CreatePresetFlowScreen(classId: classId));
+        return _page(CreatePresetFlowScreen(classId: classId));
       }),
       GoRoute(path: AppRoutes.presetDetail, name: 'presetDetail', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final presetId = state.uri.queryParameters['presetId'] ?? '';
-        return MaterialPage(child: PresetDetailScreen(presetId: presetId));
+        return _page(PresetDetailScreen(presetId: presetId));
       }),
       GoRoute(path: AppRoutes.presetEdit, name: 'presetEdit', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final presetId = state.uri.queryParameters['presetId'];
         final extra = state.extra;
-        if (extra is GradingPreset) return MaterialPage(child: PresetEditScreen(initialPreset: extra));
-        return MaterialPage(child: PresetEditScreen(presetId: presetId ?? ''));
+        if (extra is GradingPreset) return _page(PresetEditScreen(initialPreset: extra));
+        return _page(PresetEditScreen(presetId: presetId ?? ''));
       }),
     ],
   );
