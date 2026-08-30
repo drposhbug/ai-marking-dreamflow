@@ -199,6 +199,27 @@ class _AppBootstrapState extends State<AppBootstrap> {
     }
     if (!mounted) return;
     await _tellTheTeacher(userId: userId, papersJustFiled: filed, batchLabel: batchLabel);
+    if (!mounted) return;
+    _tellThemWhatIsMissing(overnight.lastReport);
+  }
+
+  /// Papers that went off overnight and are never coming back.
+  ///
+  /// Said out loud, by name. A teacher who handed over thirty papers and
+  /// got twenty-seven has to find out from us, not from a gap in the
+  /// gradebook three days later when they come to write reports.
+  void _tellThemWhatIsMissing(OvernightReport? report) {
+    final missing = report?.unfinished ?? const <String>[];
+    if (missing.isEmpty) return;
+    final named = missing.take(3).join(', ');
+    final rest = missing.length - 3;
+    final who = rest > 0 ? '$named and $rest more' : named;
+    rootMessengerKey.currentState?.showSnackBar(SnackBar(
+      duration: const Duration(seconds: 8),
+      content: Text(missing.length == 1
+          ? '$who didn\'t come back marked. Scan that one again — nothing else was affected.'
+          : '${missing.length} papers didn\'t come back marked ($who). Scan those again — the rest are on your dashboard.'),
+    ));
   }
 
   /// A class set queued during this session is the one moment we ask for

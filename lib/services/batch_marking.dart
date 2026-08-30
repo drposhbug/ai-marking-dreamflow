@@ -123,6 +123,11 @@ Future<int> sendHeldOvernight({
 
   final items = <Map<String, dynamic>>[];
   final papers = <OvernightPaper>[];
+  // Only the jobs that actually made it into the batch are cleared from the
+  // tray at the end, and only the pages of a batch that was really accepted
+  // stay on disk.
+  final sentJobs = <GradingJob>[];
+  final stashed = <String>[];
   for (final job in held) {
     final customId = 'ov_${IdFactory.newId()}';
     // Redact names before the pages ever leave, exactly as the live path
@@ -135,7 +140,14 @@ Future<int> sendHeldOvernight({
       localName ??= found;
     }
     final paths = await overnight.stashPages(customId, job.pages);
-    if (paths.isEmpty) continue;
+    if (paths.isEmpty) {
+      // Nowhere to put the scans means this paper cannot be marked while
+      // the app is closed. It stays held in the tray rather than being sent
+      // nowhere — a paper the teacher handed over must not just vanish.
+      debugPrint('Overnight: keeping ${job.label} back — its pages could not be saved');
+      continue;
+    }
+    stashed.add(customId);
 
     final r = job.req;
     items.add({
@@ -162,13 +174,26 @@ Future<int> sendHeldOvernight({
       mode: r.mode,
       studentName: localName,
     ));
+    sentJobs.add(job);
   }
   if (items.isEmpty) return 0;
 
-  await overnight.submit(teacherId: auth.id, label: label, items: items, papers: papers);
-  // The queue copies are done with — the batch owns these papers now, and
-  // their pages are safely on disk.
-  queue.discardHeld();
+  try {
+    await overnight.submit(teacherId: auth.id, label: label, items: items, papers: papers);
+  } catch (e) {
+    // Nothing was queued, so nothing gets cleared and the scans just
+    // written are no use to anyone. The papers stay in the tray, where the
+    // teacher can try again or mark them now.
+    for (final id in stashed) {
+      await overnight.discardStash(id);
+    }
+    rethrow;
+  }
+  // Only the papers that actually went. The batch owns those now and their
+  // pages are safely on disk; anything held back stays visible in the tray.
+  for (final job in sentJobs) {
+    queue.remove(job.id);
+  }
   return items.length;
 }
 
