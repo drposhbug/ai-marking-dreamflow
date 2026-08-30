@@ -13,6 +13,7 @@ import 'package:marking_prokect_v2/services/page_fingerprint.dart';
 import 'package:marking_prokect_v2/services/pdf_splitter.dart';
 import 'package:marking_prokect_v2/services/test_stamper.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/widgets/web_upload_gate.dart';
 import 'package:provider/provider.dart';
 
 /// How many pages a single copier stack may bring in — 40 students × 3 pages
@@ -92,6 +93,15 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
   }
 
   Future<void> _pickPdf() async {
+    // A copier stack is the largest upload in the app — a whole class's work,
+    // every name still on it. In a browser none of it can be blacked out, so
+    // this asks before the picker opens, not after the file is chosen.
+    final proceed = await ensureWebUploadAcknowledged(
+      context,
+      teacherId: context.read<AuthService>().currentUser?.id,
+      onUseForm: () => context.push(AppRoutes.importResponses),
+    );
+    if (!proceed || !mounted) return;
     try {
       final res = await FilePicker.pickFiles(type: FileType.any, withData: true);
       final f = res?.files.firstOrNull;

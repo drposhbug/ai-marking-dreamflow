@@ -11,6 +11,7 @@ import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
+import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
@@ -23,6 +24,7 @@ import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/pill.dart';
 import 'package:marking_prokect_v2/widgets/teacher_topbar.dart';
+import 'package:marking_prokect_v2/widgets/web_upload_gate.dart';
 import 'package:provider/provider.dart';
 
 class GradingHomeScreen extends StatefulWidget {
@@ -63,6 +65,15 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     }
   }
 
+  /// Shared with every other browser upload route — see
+  /// [ensureWebUploadAcknowledged]. A gate on this screen but not on the
+  /// stack splitter would be the same as no gate at all.
+  Future<bool> _webUploadAcknowledged() => ensureWebUploadAcknowledged(
+        context,
+        teacherId: context.read<AuthService>().currentUser?.id,
+        onUseForm: () => context.push(AppRoutes.importResponses),
+      );
+
   /// Asks which class the scan is for so grading automatically uses that
   /// class's grade level. Returns false when the teacher dismisses the sheet
   /// (cancels the scan). Skipped silently when no classes exist yet.
@@ -87,6 +98,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   }
 
   Future<void> _pickFromCamera() async {
+    if (!await _webUploadAcknowledged() || !mounted) return;
     final ok = await _askWhichClass();
     if (!ok || !mounted) return;
     try {
@@ -131,6 +143,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   }
 
   Future<void> _pickFromGallery() async {
+    if (!await _webUploadAcknowledged() || !mounted) return;
     final ok = await _askWhichClass();
     if (!ok || !mounted) return;
     try {
@@ -208,6 +221,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   /// falls back to the system file picker when Drive isn't installed.
   /// Multi-select supported; every page gets the scanner treatment.
   Future<void> _pickFromDrive() async {
+    if (!await _webUploadAcknowledged() || !mounted) return;
     final ok = await _askWhichClass();
     if (!ok || !mounted) return;
     try {
@@ -329,11 +343,76 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     );
     if (n == 0) return;
     final draft = context.read<AppState>().draft;
+    // A class set skips the setup screen, so this is the point at which the
+    // teacher finds out whether the names on those papers are going up with
+    // them. Said once for the set, not once per paper.
+    final hiding = Anonymizer.intent(settingOn: context.read<AppState>().anonymizeUploads);
+    final nameNote = hiding.hidesTheName ? '' : ' ${hiding.headline}: these pages go up as they are.';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(draft.answerKeyId.isEmpty
-          ? 'Marking $n students — the first paper goes ahead to learn the answer key, then the rest follow.'
-          : 'Marking $n students in the background — results land in the tray as they finish.'),
+      duration: hiding.hidesTheName ? const Duration(seconds: 4) : const Duration(seconds: 7),
+      content: Text((draft.answerKeyId.isEmpty
+              ? 'Marking $n students — the first paper goes ahead to learn the answer key, then the rest follow.'
+              : 'Marking $n students in the background — results land in the tray as they finish.') +
+          nameNote),
     ));
+  }
+
+  /// The Google Form / CSV route. In a browser it is also the only route
+  /// that keeps student names off the wire — answers go up keyed by row
+  /// number and the name column is never sent — so it is recommended there
+  /// and placed first.
+  Widget _importFormCard(BuildContext context) {
+    return Card(
+      child: InkWell(
+        splashFactory: NoSplash.splashFactory,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: () => context.push(AppRoutes.importResponses),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                child: const Icon(Icons.table_chart_rounded, color: AiMarkerColors.secondary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(child: Text('Import a Google Form', style: Theme.of(context).textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(999)),
+                          child: Text(kIsWeb ? 'BEST HERE' : 'FASTEST', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AiMarkerColors.secondary, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    // The real pitch: setting the quiz as a Form skips
+                    // scanning altogether, so nothing is faster.
+                    Text('The quickest way to mark — no scanning at all. Multiple choice marks itself; written answers are AI-marked.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                    if (kIsWeb) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'In a browser, use this one: answers go up keyed by row number and the name column is never sent. Photos here cannot have names hidden.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.secondary, height: 1.35),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _onSearchChanged(String value) {
@@ -434,6 +513,10 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                 ),
               ),
             ),
+            if (kIsWeb) ...[
+              const SizedBox(height: 12),
+              _importFormCard(context),
+            ],
             const SizedBox(height: 12),
             Card(
               child: InkWell(
@@ -500,51 +583,13 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Card(
-              child: InkWell(
-                splashFactory: NoSplash.splashFactory,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                onTap: () => context.push(AppRoutes.importResponses),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
-                        child: const Icon(Icons.table_chart_rounded, color: AiMarkerColors.secondary),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Flexible(child: Text('Import a Google Form', style: Theme.of(context).textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                  decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(999)),
-                                  child: Text('FASTEST', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AiMarkerColors.secondary, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            // The real pitch: setting the quiz as a Form skips
-                            // scanning altogether, so nothing is faster.
-                            Text('The quickest way to mark — no scanning at all. Multiple choice marks itself; written answers are AI-marked.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            // On the phone this sits with the other routes. In a browser it
+            // is moved directly under the scan card, because it is the one
+            // route that stays private there.
+            if (!kIsWeb) ...[
+              const SizedBox(height: 12),
+              _importFormCard(context),
+            ],
             const SizedBox(height: 12),
             Card(
               child: InkWell(

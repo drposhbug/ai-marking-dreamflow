@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
@@ -224,6 +225,13 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
                   else if (res != null) ...[
                     _ScoreCard(job: job),
                     const SizedBox(height: 12),
+                    // The pilot is where the teacher decides whether the
+                    // other twenty-nine go the same way — so if this one's
+                    // name went up uncovered, say it here, not afterwards.
+                    if (!job.nameHiding.hidesTheName) ...[
+                      _NameHidingCard(hiding: job.nameHiding, remaining: remaining),
+                      const SizedBox(height: 12),
+                    ],
                     if (res.flags.isNotEmpty) ...[
                       Card(
                         color: AiMarkerColors.warning.withValues(alpha: 0.10),
@@ -406,6 +414,46 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
   }
 
   static String _n(double v) => v.truncateToDouble() == v ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+}
+
+/// Says what happened to the student's name on the paper that was just
+/// sent, in the same amber the screen already uses for "check this".
+class _NameHidingCard extends StatelessWidget {
+  final NameHiding hiding;
+  final int remaining;
+
+  const _NameHidingCard({required this.hiding, required this.remaining});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: AiMarkerColors.warning.withValues(alpha: 0.10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.visibility_off_outlined, size: 18, color: AiMarkerColors.warning),
+                const SizedBox(width: 8),
+                Expanded(child: Text(hiding.headline, style: Theme.of(context).textTheme.titleSmall)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(hiding.detail, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.35)),
+            if (remaining > 0) ...[
+              const SizedBox(height: 6),
+              Text(
+                'The other $remaining paper${remaining == 1 ? '' : 's'} will go the same way if you release them.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.35),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ScoreCard extends StatelessWidget {

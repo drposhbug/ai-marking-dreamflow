@@ -10,6 +10,7 @@ import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
@@ -807,6 +808,11 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            // Said before the button, not after the upload: this is the
+            // last moment the teacher can cover a name themselves or pick
+            // a different route.
+            _NameHidingNotice(hiding: Anonymizer.intent(settingOn: context.watch<AppState>().anonymizeUploads)),
+            const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: _grading ? null : _grade,
               style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
@@ -854,4 +860,63 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
     );
   }
 
+}
+/// Says, before the teacher taps Mark, whether the student's name will be
+/// hidden on the copy that goes up.
+///
+/// Quiet one line when it will be. Amber, in the same style the rest of the
+/// grading flow uses for "check this", when it will not — with the route
+/// that is safe here offered next to it.
+class _NameHidingNotice extends StatelessWidget {
+  final NameHiding hiding;
+
+  const _NameHidingNotice({required this.hiding});
+
+  @override
+  Widget build(BuildContext context) {
+    if (hiding.hidesTheName) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.visibility_off_outlined, size: 16, color: AiMarkerColors.neutral),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Your device reads the name off the page and blacks it out before this is sent. If it can\'t read one, the page goes up as it is.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Card(
+      color: AiMarkerColors.warning.withValues(alpha: 0.10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.visibility_off_outlined, size: 18, color: AiMarkerColors.warning),
+                const SizedBox(width: 8),
+                Expanded(child: Text(hiding.headline, style: Theme.of(context).textTheme.titleSmall)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(hiding.detail, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.35)),
+            if (hiding == NameHiding.unavailable) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => context.push(AppRoutes.importResponses),
+                icon: const Icon(Icons.table_chart_rounded, size: 18),
+                label: const Text('Mark from a Google Form instead'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
