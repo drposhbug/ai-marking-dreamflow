@@ -1,4 +1,4 @@
-﻿<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Cloud marking, sign-in, and font loading all need network access.
          Release builds do NOT inherit this from debug — removing it breaks
          every cloud feature with "Failed host lookup" errors. -->

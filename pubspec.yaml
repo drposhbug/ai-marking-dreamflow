@@ -1,5 +1,5 @@
 name: marking_prokect_v2
-description: "A new Flutter project."
+description: "Markless — photograph or upload student work and get it marked, with feedback a student can act on."
 publish_to: "none"
 
 version: 1.0.0+1
@@ -49,5 +49,7 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: assets/icons/dreamflow_icon.jpg
+  image_path: assets/icons/markless_icon.png
+  adaptive_icon_background: "#2563EB"
+  adaptive_icon_foreground: assets/icons/markless_icon_fg.png
   remove_alpha_ios: true
