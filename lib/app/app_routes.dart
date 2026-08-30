@@ -17,7 +17,6 @@ class AppRoutes {
   static const exportMarks = '/export-marks';
   static const reportComments = '/report-comments';
 
-  static const imagePreview = '/grading/image-preview';
   static const gradingContext = '/grading/context';
   static const result = '/grading/result';
   static const pilotReview = '/grading/pilot-review';

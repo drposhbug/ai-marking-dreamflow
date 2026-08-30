@@ -6,6 +6,7 @@ import 'package:marking_prokect_v2/services/drive_picker.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/widgets/blocking_progress.dart';
 import 'package:marking_prokect_v2/widgets/teacher_topbar.dart';
 import 'package:provider/provider.dart';
 
@@ -21,6 +22,7 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   bool _loading = false;
+  bool _scanningKey = false;
   List<AnswerKeySummary> _keys = const [];
 
   @override
@@ -45,6 +47,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _scanNewKey() async {
+    // A paid key extraction. Two taps used to buy two of them.
+    if (_scanningKey) return;
     final auth = context.read<AuthService>().currentUser;
     if (auth == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in first.')));
@@ -82,25 +86,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
       pages = <ScannedPage>[];
       try {
         // Drive app's own picker first; system picker as the fallback.
-        showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => const AlertDialog(
-            content: Row(
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 18),
-                Expanded(child: Text('Loading from Google Drive…')),
-              ],
-            ),
-          ),
+        final import = await runWithBlockingProgress(
+          context,
+          message: 'Loading from Google Drive…',
+          task: DrivePicker.importScannedPages,
         );
-        DriveImport import;
-        try {
-          import = await DrivePicker.importScannedPages();
-        } finally {
-          if (mounted) Navigator.of(context, rootNavigator: true).pop();
-        }
         if (!mounted || import.cancelled) return;
         if (import.pages.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -130,26 +120,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
     if (pages == null || pages.isEmpty || !mounted) return;
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 18),
-            Expanded(child: Text('Reading the answer key…\nThis happens only once — it will be saved for reuse.')),
-          ],
-        ),
-      ),
-    );
+    setState(() => _scanningKey = true);
     try {
-      final key = await AiGradingService().extractAnswerKey(
-        teacherId: auth.id,
-        pages: pages.map((p) => p.bytes).toList(growable: false),
+      final key = await runWithBlockingProgress(
+        context,
+        message: 'Reading the answer key…\nThis happens only once — it will be saved for reuse.',
+        task: () => AiGradingService().extractAnswerKey(
+          teacherId: auth.id,
+          pages: pages!.map((p) => p.bytes).toList(growable: false),
+        ),
       );
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
       context.read<AppState>().setAnswerKey(id: key.id, name: key.name);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Answer key saved: ${key.name} — it will be used for the next grade.')),
@@ -157,8 +138,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not read the answer key: $e')));
+    } finally {
+      if (mounted) setState(() => _scanningKey = false);
     }
   }
 
@@ -189,14 +171,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
               TeacherTopbar(
                 title: 'Markless',
                 trailingIcon: Icons.add_rounded,
-                onBell: _scanNewKey,
+                onBell: _scanningKey ? null : _scanNewKey,
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(child: Text('Answers', style: Theme.of(context).textTheme.titleLarge)),
                   FilledButton.icon(
-                    onPressed: _scanNewKey,
+                    onPressed: _scanningKey ? null : _scanNewKey,
                     style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
                     icon: const Icon(Icons.document_scanner_rounded, color: Colors.white),
                     label: const Text('Scan Key'),
