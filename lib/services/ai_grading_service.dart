@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -492,9 +493,56 @@ class AiGradeResult {
   }
 }
 
+/// The marking server was reached but never answered.
+///
+/// Its own class, and worded for a teacher, because the place this shows up
+/// is a paper sitting in the tray at 11pm. School wifi that accepts the
+/// connection and then swallows it is common enough that "it just span
+/// forever" was the old behaviour.
+class MarkingTimeoutException implements Exception {
+  final String message;
+  const MarkingTimeoutException([
+    this.message = 'The marking server didn\'t answer. Nothing was lost — tap the paper to try again.',
+  ]);
+
+  @override
+  String toString() => message;
+}
+
+/// Calls that don't ask the AI for anything: a row read, a row written.
+/// Anything NOT on this list is treated as marking and given the long
+/// timeout, so an action added later can only ever be too patient — never
+/// cut a real class set short.
+const _quickActions = {
+  'get_usage',
+  'get_profile',
+  'save_profile',
+  'save_submission',
+  'delete_submission',
+  'list_submissions',
+  'list_keys',
+  'delete_key',
+  'get_referral',
+  'redeem_referral',
+  'search_schools',
+  'delete_account',
+};
+
+const _markingTimeout = Duration(minutes: 4);
+const _quickTimeout = Duration(seconds: 30);
+
 // ---------- Service ----------
 
 class AiGradingService {
+  /// How long to wait on one call before giving up on it.
+  ///
+  /// Marking a class set is legitimately slow — thirty photographs go up
+  /// before a word comes back — so it gets minutes. What it must never get
+  /// is forever: a request that hangs leaves a paper marking on screen with
+  /// no way out but force-quitting the app, which loses the scans with it.
+  static Duration timeoutFor(String? action) =>
+      _quickActions.contains(action) ? _quickTimeout : _markingTimeout;
+
   /// Detect the best marking scheme for a scanned image.
   Future<String?> detectScheme({
     required Uint8List imageBytes,
@@ -503,7 +551,7 @@ class AiGradingService {
   }) async {
     try {
       final client = Supabase.instance.client;
-      final res = await client.functions.invoke(
+      final res = await _invokeFn(client, 
         'detect_scheme',
         body: {
           'image_base64': base64Encode(imageBytes),
@@ -545,7 +593,7 @@ class AiGradingService {
   }) async {
     final client = Supabase.instance.client;
     try {
-      final res = await client.functions.invoke(
+      final res = await _invokeFn(client, 
         'MARKING-PROCESS',
         body: {
           'action': 'plan',
@@ -574,7 +622,7 @@ class AiGradingService {
   /// Usage meter (percent of the daily/weekly/monthly credit allowance).
   Future<UsageSummary> getUsage({required String teacherId}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'get_usage', 'teacherId': teacherId},
     );
@@ -597,7 +645,7 @@ class AiGradingService {
   /// Cloud copy of a marked result — results follow the account.
   Future<void> saveSubmissionCloud({required String teacherId, required Map<String, dynamic> submission}) async {
     final client = Supabase.instance.client;
-    await client.functions.invoke(
+    await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'save_submission', 'teacherId': teacherId, 'submission': submission},
     );
@@ -605,7 +653,7 @@ class AiGradingService {
 
   Future<void> deleteSubmissionCloud({required String teacherId, required String id}) async {
     final client = Supabase.instance.client;
-    await client.functions.invoke(
+    await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'delete_submission', 'teacherId': teacherId, 'id': id},
     );
@@ -619,7 +667,7 @@ class AiGradingService {
     required List<Map<String, dynamic>> items,
   }) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'batch_submit', 'teacherId': teacherId, 'items': items},
     );
@@ -636,7 +684,7 @@ class AiGradingService {
   /// [BatchOutcome.results] holds them; anything else means keep waiting.
   Future<BatchOutcome> batchStatus({required String teacherId, required String batchId}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'batch_status', 'teacherId': teacherId, 'batchId': batchId},
     );
@@ -683,7 +731,7 @@ class AiGradingService {
     int harshness = 5,
   }) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {
         'action': 'mark_responses',
@@ -744,7 +792,7 @@ class AiGradingService {
     // just re-send the system prompt more often.
     final client = Supabase.instance.client;
     try {
-      final res = await client.functions.invoke(
+      final res = await _invokeFn(client, 
         'MARKING-PROCESS',
         body: {
           'action': 'report_comments',
@@ -802,7 +850,7 @@ class AiGradingService {
     required List<Uint8List> pages,
   }) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {
         'action': 'group_pages',
@@ -836,7 +884,7 @@ class AiGradingService {
   /// teacher who asked. Throws when anything is left behind.
   Future<void> deleteAccountCloud({required String teacherId}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'delete_account', 'teacherId': teacherId},
     );
@@ -848,7 +896,7 @@ class AiGradingService {
 
   Future<List<Map<String, dynamic>>> listSubmissionsCloud({required String teacherId}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'list_submissions', 'teacherId': teacherId},
     );
@@ -862,7 +910,7 @@ class AiGradingService {
   /// The teacher's referral code + how many colleagues joined with it.
   Future<ReferralStatus> getReferral({required String teacherId, String? email}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {
         'action': 'get_referral',
@@ -885,7 +933,7 @@ class AiGradingService {
   Future<void> redeemReferral({required String teacherId, required String code}) async {
     final client = Supabase.instance.client;
     try {
-      final res = await client.functions.invoke(
+      final res = await _invokeFn(client, 
         'MARKING-PROCESS',
         body: {'action': 'redeem_referral', 'teacherId': teacherId, 'code': code},
       );
@@ -919,7 +967,7 @@ class AiGradingService {
   Future<List<String>> suggestSchools({required String query}) async {
     final client = Supabase.instance.client;
     try {
-      final res = await client.functions.invoke(
+      final res = await _invokeFn(client, 
         'MARKING-PROCESS',
         body: {'action': 'search_schools', 'query': query},
       );
@@ -931,7 +979,7 @@ class AiGradingService {
     } catch (e) {
       debugPrint('search_schools failed: $e');
     }
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'suggest_schools', 'query': query},
     );
@@ -947,7 +995,7 @@ class AiGradingService {
   /// (the UI then shows the place in brackets for the teacher to pick).
   Future<List<RegionCandidate>> inferRegion({required String school}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'infer_region', 'school': school},
     );
@@ -978,7 +1026,7 @@ class AiGradingService {
     List<String>? markingFeedback,
   }) async {
     final client = Supabase.instance.client;
-    await client.functions.invoke('MARKING-PROCESS', body: {
+    await _invokeFn(client, 'MARKING-PROCESS', body: {
       'action': 'save_profile',
       'teacherId': teacherId,
       if (email != null) 'email': email,
@@ -999,7 +1047,7 @@ class AiGradingService {
   }) async {
     final client = Supabase.instance.client;
     try {
-      final res = await client.functions.invoke('MARKING-PROCESS', body: {
+      final res = await _invokeFn(client, 'MARKING-PROCESS', body: {
         'action': 'explain',
         'teacherId': teacherId,
         'imagesBase64': pages.map(base64Encode).toList(growable: false),
@@ -1020,7 +1068,7 @@ class AiGradingService {
   /// Permanently removes a saved answer key.
   Future<void> deleteAnswerKey({required String teacherId, required String id}) async {
     final client = Supabase.instance.client;
-    await client.functions.invoke(
+    await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'delete_key', 'teacherId': teacherId, 'id': id},
     );
@@ -1029,7 +1077,7 @@ class AiGradingService {
   /// The account's saved profile, or null when it has never been saved.
   Future<CloudProfile?> getProfile({required String teacherId}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'get_profile', 'teacherId': teacherId},
     );
@@ -1052,7 +1100,7 @@ class AiGradingService {
   /// sheet or class roster — used by onboarding to auto-populate a class.
   Future<List<RosterEntry>> extractRoster({required List<Uint8List> pages}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {
         'action': 'extract_roster',
@@ -1081,7 +1129,7 @@ class AiGradingService {
   /// Costs AI tokens once; every later grade reuses the stored key text.
   Future<AnswerKeySummary> extractAnswerKey({required String teacherId, required List<Uint8List> pages}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {
         'action': 'extract_key',
@@ -1106,7 +1154,7 @@ class AiGradingService {
   /// Lists the teacher's cloud-saved answer keys, newest first.
   Future<List<AnswerKeySummary>> listAnswerKeys({required String teacherId}) async {
     final client = Supabase.instance.client;
-    final res = await client.functions.invoke(
+    final res = await _invokeFn(client, 
       'MARKING-PROCESS',
       body: {'action': 'list_keys', 'teacherId': teacherId},
     );
@@ -1139,7 +1187,7 @@ class AiGradingService {
 
     try {
       final client = Supabase.instance.client;
-      final res = await client.functions.invoke(
+      final res = await _invokeFn(client, 
       'MARKING-PROCESS',
         body: {
           'teacherId': req.teacherId,
@@ -1320,4 +1368,20 @@ class GroupingOutcome {
   /// into somebody's paper.
   final List<int> unresolved;
   const GroupingOutcome({required this.groups, required this.unresolved});
+}
+
+/// Every call to an edge function goes through here, so not one of them can
+/// hang forever. The timeout is picked from the action in the body — see
+/// [AiGradingService.timeoutFor].
+Future<FunctionResponse> _invokeFn(
+  SupabaseClient client,
+  String function, {
+  Map<String, dynamic>? body,
+}) async {
+  final timeout = AiGradingService.timeoutFor(body?['action']?.toString());
+  try {
+    return await client.functions.invoke(function, body: body).timeout(timeout);
+  } on TimeoutException {
+    throw const MarkingTimeoutException();
+  }
 }

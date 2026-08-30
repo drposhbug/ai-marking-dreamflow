@@ -12,6 +12,10 @@ import 'package:marking_prokect_v2/services/page_fingerprint.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 
+/// Marks one paper. Injectable so the queue's behaviour when marking is
+/// slow, or never answers at all, can be tested without a network.
+typedef Grader = Future<AiGradeResult> Function(AiGradeRequest req);
+
 /// `held` = marked-pilot-first: the rest of a class set waits for the
 /// teacher to confirm the first paper marked correctly, so a bad key or the
 /// wrong mode costs one paper instead of thirty.
@@ -64,10 +68,49 @@ class GradingJob {
 class GradingQueueService extends ChangeNotifier {
   final GlobalKey<ScaffoldMessengerState>? messengerKey;
 
-  GradingQueueService({this.messengerKey});
+  /// How many papers may be up in the air at once.
+  ///
+  /// Releasing a class set used to fire all thirty uploads simultaneously —
+  /// thirty multi-megabyte photo sets leaving one phone on school wifi. What
+  /// came back was a scatter of failures the teacher had to open every paper
+  /// to understand. Three at a time takes marginally longer and fails in a
+  /// way that can be read: "four papers failed, tap to retry".
+  static const maxConcurrentMarking = 3;
+
+  final Grader _grader;
+
+  GradingQueueService({this.messengerKey, Grader? grader})
+      : _grader = grader ?? _liveGrader;
+
+  static Future<AiGradeResult> _liveGrader(AiGradeRequest req) => AiGradingService().grade(req);
+
   /// Whether names get blacked out before upload. Set from AppState when a
   /// job is queued, so the queue does not need a BuildContext.
   bool anonymizeUploads = true;
+
+  /// Papers currently being marked, and the ones waiting for a turn.
+  int _marking = 0;
+  final List<Completer<void>> _waitingForSlot = [];
+
+  Future<void> _takeSlot() {
+    if (_marking < maxConcurrentMarking) {
+      _marking++;
+      return Future<void>.value();
+    }
+    final c = Completer<void>();
+    _waitingForSlot.add(c);
+    return c.future;
+  }
+
+  /// Hands the slot straight to whoever is next rather than releasing and
+  /// re-taking it, so the count can never drift.
+  void _freeSlot() {
+    if (_waitingForSlot.isNotEmpty) {
+      _waitingForSlot.removeAt(0).complete();
+      return;
+    }
+    _marking--;
+  }
 
 
   final List<GradingJob> _jobs = [];
@@ -137,25 +180,21 @@ class GradingQueueService extends ChangeNotifier {
       notifyLearnedKey: reqs.length == 1,
     );
     if (reqs.length == 1) return;
-    await pilot.done;
 
-    final keyId = pilot.result?.learnedKeyId;
-    final keyName = pilot.result?.learnedKeyName;
-
-    // Build the remaining jobs now, held, so their scanned pages are safely
-    // in the queue no matter what the teacher decides. Nothing is lost by
-    // saying "wait".
+    // The rest of the set goes into the tray NOW, held, before anything is
+    // waited on. They used to be built after the pilot came back, which
+    // meant that while the pilot was in the air — or hung on a school wifi
+    // that accepts the connection and then answers nothing — twenty-nine
+    // scanned papers existed only as local variables inside this function.
+    // Not in the tray, not on disk, nowhere a teacher could see or retry
+    // them. Force-quitting the stuck app took all thirty scans with it.
     final held = <GradingJob>[];
     for (var i = 1; i < reqs.length; i++) {
-      var r = reqs[i];
-      if (keyId != null && (r.answerKeyId == null || r.answerKeyId!.isEmpty)) {
-        r = r.withAnswerKey(keyId);
-      }
       final job = GradingJob(
         id: 'job_${IdFactory.newId()}',
         createdAt: DateTime.now(),
         pages: pagesList[i],
-        req: r,
+        req: reqs[i],
         label: (labels[i] ?? '').trim().isNotEmpty ? labels[i]! : 'Paper ${i + 1}',
         status: GradingJobStatus.held,
       );
@@ -163,6 +202,20 @@ class GradingQueueService extends ChangeNotifier {
       _jobs.insert(0, job);
     }
     notifyListeners();
+
+    await pilot.done;
+
+    final keyId = pilot.result?.learnedKeyId;
+    final keyName = pilot.result?.learnedKeyName;
+
+    // The pilot may have derived the answer key. Give it to the papers
+    // waiting, so they mark against it cheaply the way they always did.
+    if (keyId != null) {
+      for (final job in held) {
+        final r = job.req;
+        if (r.answerKeyId == null || r.answerKeyId!.isEmpty) job.req = r.withAnswerKey(keyId);
+      }
+    }
 
     if (keyId != null) {
       messengerKey?.currentState?.showSnackBar(
@@ -304,6 +357,10 @@ class GradingQueueService extends ChangeNotifier {
   Future<void> _run(GradingJob job, AiGradeRequest req, StudentsService students, SubmissionsService submissions, {bool replaceSubmission = false}) async {
     // A re-marked pilot keeps its corrected instructions for the next round.
     job.req = req;
+    // Waits its turn when the whole class was released at once. The job is
+    // already in the tray showing "marking", so a teacher sees the set
+    // working through rather than nothing happening.
+    await _takeSlot();
     try {
       final ai = AiGradingService();
 
@@ -325,7 +382,7 @@ class GradingQueueService extends ChangeNotifier {
       job.nameHiding = Anonymizer.outcome(settingOn: anonymizeUploads, anyRedacted: anyRedacted);
       notifyListeners();
 
-      final res = await ai.grade(uploadReq);
+      final res = await _grader(uploadReq);
 
       // Auto-link by the name read off the paper when no student was chosen.
       // Class students are tried first, full name then first name — a lone
@@ -438,6 +495,9 @@ class GradingQueueService extends ChangeNotifier {
               : 'Marking failed for ${job.label} — tap it in the tray to retry.'),
         ),
       );
+    } finally {
+      // Whatever happened, the next paper gets its turn.
+      _freeSlot();
     }
   }
 
