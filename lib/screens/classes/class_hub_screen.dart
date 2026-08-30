@@ -8,6 +8,8 @@ import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
+import 'package:marking_prokect_v2/screens/classes/paste_roster_sheet.dart';
+import 'package:marking_prokect_v2/services/roster_paste.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
@@ -30,6 +32,42 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  /// Builds the class from a pasted list. Names are created in the order
+  /// they were pasted so the teacher can check them against their register
+  /// straight down the screen.
+  Future<void> _openPasteRosterSheet() async {
+    final studentsService = context.read<StudentsService>();
+    final existing = studentsService.byClass(widget.classId);
+    final names = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => PasteRosterSheet(
+        existingNames: existing.map((s) => s.name).toList(growable: false),
+      ),
+    );
+    if (names == null || names.isEmpty || !mounted) return;
+
+    final teacherId = context.read<AuthService>().currentUser?.id;
+    if (teacherId == null) return;
+
+    // Codes are handed out against the whole class, so a pasted student
+    // never collides with one who is already there.
+    final taken = existing.map((s) => s.studentId).where((c) => c.isNotEmpty).toSet();
+    for (final name in names) {
+      await studentsService.create(
+        teacherId: teacherId,
+        classId: widget.classId,
+        name: name,
+        studentId: RosterPaste.codeFor(name, taken),
+      );
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Added ${names.length} student${names.length == 1 ? '' : 's'}.')),
+    );
   }
 
   Future<void> _openAddStudentSheet() async {
@@ -177,7 +215,28 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
               ],
               TextField(controller: _search, onChanged: (_) => setState(() {}), decoration: InputDecoration(hintText: 'Search students...', prefixIcon: Icon(Icons.search_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.85)))),
               const SizedBox(height: 14),
-              Text('Students', style: Theme.of(context).textTheme.titleMedium),
+              Row(
+                children: [
+                  Expanded(child: Text('Students', style: Theme.of(context).textTheme.titleMedium)),
+                  TextButton.icon(
+                    onPressed: _openPasteRosterSheet,
+                    icon: const Icon(Icons.content_paste_rounded, size: 18),
+                    label: const Text('Paste list'),
+                  ),
+                ],
+              ),
+              // An empty class is the moment a teacher decides whether this
+              // app is worth the setup. Typing thirty names is where they
+              // stop, so the paste route is offered before the list, not
+              // buried behind Add Student.
+              if (students.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    'No students yet. Paste your class list and they are all added at once.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                  ),
+                ),
               const SizedBox(height: 10),
               Card(
                 child: Column(

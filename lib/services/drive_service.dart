@@ -150,7 +150,31 @@ class DriveService {
 
   /// Uploads [html] as a Google Doc named [title] inside the Markless
   /// folder. Returns the document's link.
-  Future<String?> uploadDoc({required String title, required String html}) async {
+  Future<String?> uploadDoc({required String title, required String html}) =>
+      _upload(title: title, googleType: 'document', contentType: 'text/html', content: html);
+
+  /// Uploads [csv] as a Google **Sheet** named [title] in the Markless
+  /// folder, and returns its link.
+  ///
+  /// This is as close to a Classroom integration as the app can get without
+  /// asking anybody's permission. Writing marks into Classroom needs a
+  /// Google review AND every district's IT admin to allow the app; putting
+  /// a spreadsheet in the teacher's own Drive needs neither, because
+  /// `drive.file` only ever touches files this app created. The teacher can
+  /// share it, keep it as a record, or copy the columns into whatever
+  /// gradebook their school actually uses.
+  ///
+  /// Google converts the CSV into a real Sheet on upload — no Sheets API
+  /// and no extra scope.
+  Future<String?> uploadSheet({required String title, required String csv}) =>
+      _upload(title: title, googleType: 'spreadsheet', contentType: 'text/csv', content: csv);
+
+  Future<String?> _upload({
+    required String title,
+    required String googleType,
+    required String contentType,
+    required String content,
+  }) async {
     final token = _token;
     if (token == null || token.isEmpty) throw DriveAuthException();
     final folderId = await _ensureFolder(token);
@@ -158,15 +182,15 @@ class DriveService {
     const boundary = 'markless_upload_boundary';
     final meta = jsonEncode({
       'name': title,
-      'mimeType': 'application/vnd.google-apps.document',
+      'mimeType': 'application/vnd.google-apps.$googleType',
       'parents': [folderId],
     });
     final body = '--$boundary\r\n'
         'Content-Type: application/json; charset=UTF-8\r\n\r\n'
         '$meta\r\n'
         '--$boundary\r\n'
-        'Content-Type: text/html; charset=UTF-8\r\n\r\n'
-        '$html\r\n'
+        'Content-Type: $contentType; charset=UTF-8\r\n\r\n'
+        '$content\r\n'
         '--$boundary--';
     final res = await http.post(
       Uri.parse('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink'),
