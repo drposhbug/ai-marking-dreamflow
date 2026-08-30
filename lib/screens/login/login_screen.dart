@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -341,12 +342,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
                   ),
-                  const SizedBox(height: 10),
-                  TextButton.icon(
-                    onPressed: _loading ? null : _devMode,
-                    icon: Icon(Icons.build_rounded, size: 16, color: AiMarkerColors.neutral),
-                    label: Text('Developer mode — skip sign-in & setup', style: TextStyle(color: AiMarkerColors.neutral)),
-                  ),
+                  // Debug builds only. This signs in to a local-only account
+                  // that never syncs, so a teacher who tapped it in a shipped
+                  // build would do a term's marking and find none of it on
+                  // her next device -- quite apart from handing anyone who
+                  // installed the app a way straight past sign-up.
+                  if (kDebugMode) ...[
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: _loading ? null : _devMode,
+                      icon: Icon(Icons.build_rounded, size: 16, color: AiMarkerColors.neutral),
+                      label: Text('Developer mode — skip sign-in & setup', style: TextStyle(color: AiMarkerColors.neutral)),
+                    ),
+                  ],
                 ],
               ),
             ),
