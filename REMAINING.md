@@ -81,8 +81,13 @@ reference it precisely. Delete anything already done; add anything missing.
 - [ ] **R4.8** App content declarations completed (data safety, content rating, target
       audience, ads declaration).
 - [ ] **R4.9** AAB uploaded to the closed testing track.
-- [ ] **R4.10** 12 testers recruited and opted in.
-- [ ] **R4.11** 14-day continuous closed test run to completion.
+- [x] **R4.10** ~~12 testers recruited and opted in.~~ NOT REQUIRED — the 12-tester /
+      14-day closed test applies only to PERSONAL accounts created after 2023-11-13.
+      This is an organization account, so it is exempt and can go straight to production.
+      PRECONDITION: the org account's D-U-N-S / identity verification must be COMPLETE,
+      or nothing can be published at all. Confirm this first.
+- [ ] **R4.11** Short internal-testing pass for sanity (hours, not weeks) — optional but
+      cheap insurance before production.
 - [ ] **R4.12** Production release submitted.
 
 ---
@@ -119,3 +124,73 @@ reference it precisely. Delete anything already done; add anything missing.
 - [ ] **R6.5** No new schema tables if avoidable — derive from existing per-mark
       results. If a table is genuinely needed, propose it before creating it.
 - [ ] **R6.6** Must not add cost per mark — analysis runs once per batch, not per paper.
+---
+
+## R7 — Push notifications (OneSignal)
+
+> Product gap first, prize second. Overnight marking is the flagship feature and the
+> teacher currently has to reopen the app to find out it finished — every "notification"
+> in the code today is an in-app SnackBar, not a push. Also unlocks the OneSignal
+> "Keep Them Coming Back" category ($25k, the largest sponsor prize).
+
+- [ ] **R7.1** OneSignal Flutter SDK added; Android notification permission requested at
+      the right moment (after the first batch is queued, not on first launch).
+- [ ] **R7.2** External user id set to the teacher id, matching `Purchases.logIn` so
+      RevenueCat and OneSignal address the same person.
+- [ ] **R7.3** "Your class set is marked" — fired server-side from the overnight batch
+      completion path, deep-linking straight to the results.
+- [ ] **R7.4** Trial-ending and approaching-mark-cap nudges. These are the upgrade
+      triggers, so they feed the HAMM story as well as retention.
+- [ ] **R7.5** Weekly "you saved about N hours this week" summary — the re-engagement
+      hook that is actually worth receiving.
+- [ ] **R7.6** Every notification respects a Settings toggle, and none fire for a teacher
+      who has never queued a batch.
+
+---
+
+## R8 — Next Gen Award (student category)
+
+> No app store release required for this category — it survives a slipped Play review.
+> Verified 2026-08-30: full git history is clean of secrets (only a removed RevenueCat
+> sandbox `test_` key, public-by-design; the Supabase anon key is `--dart-define`, not
+> baked in). The repo is safe to make public.
+
+- [ ] **R8.1** LICENSE file added (MIT or Apache-2.0 — must be machine-detectable).
+- [ ] **R8.2** Repo flipped to public.
+- [ ] **R8.3** README rewritten — it is still the Flutter template. This is the first
+      thing a Next Gen judge reads: what it does, the architecture, and how the
+      RevenueCat integration works.
+- [ ] **R8.4** Confirm active-student status evidence (.edu email) for the submission.
+
+---
+
+## R9 — Make the give-back real
+
+> Today "10% to charities that help kids learn" exists only as copy in
+> plans_screen.dart and docs/store-listing.md. As a claim with nothing behind it, it
+> reads as a slogan to a Peace Prize judge and is a liability in store review.
+
+- [ ] **R9.1** Name the actual charity and commit to it publicly.
+- [ ] **R9.2** Settings "Giving" row: dollars generated to date, derived from real
+      subscription revenue — not a hardcoded number.
+- [ ] **R9.3** A public receipt (monthly post or page) so the claim is evidenced.
+
+---
+
+## Critical path — 31 days to 2026-09-30 23:45 PDT
+
+| By | What | Why it gates |
+|----|------|--------------|
+| Aug 31 | Confirm org account verification complete | Nothing publishes until it is |
+| Sep 1 | Play app created; privacy policy hosted (R4.4) | Unblocks the `goog_` key AND the listing |
+| Sep 2 | RevenueCat products + Offering + `goog_` key (R2.1, R2.2) | Billing is inert in every build until this lands |
+| Sep 5 | Signed AAB + listing + declarations (R4.2–R4.9) | |
+| Sep 8 | R7 push notifications shipped | |
+| Sep 12 | R6 class item analysis shipped | Best beat in the demo video |
+| Sep 15 | **Production release submitted** | Leaves ~2 weeks of review buffer |
+| Sep 20 | R8 repo public + README (Next Gen hedge) | |
+| Sep 25 | Demo video + submission write-up (R5) | |
+| Sep 30 | Submit | Hard deadline |
+
+Build-in-public posting runs daily from now — it is the one category that needs
+history rather than engineering, and it cannot be caught up later.
