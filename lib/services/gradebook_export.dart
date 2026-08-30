@@ -170,10 +170,15 @@ class GradebookTemplate {
   /// Matching reuses the same forgiving name comparison the page checks
   /// use — a gradebook holding "Lopez, Ana" and a paper signed "Ana Lopez"
   /// is one student, and a teacher should not have to care.
+  /// [lastNameColumn] is for gradebooks that split the name across two
+  /// columns — Google Classroom's export is "Last Name, First Name" — where
+  /// neither column on its own identifies a student. When it is set,
+  /// [nameColumn] holds the first name and the two are joined for matching.
   static TemplateFill fill({
     required List<List<String>> template,
     required List<MarkRow> marks,
     required int nameColumn,
+    int lastNameColumn = -1,
     String columnName = 'Markless',
     bool asPercent = false,
   }) {
@@ -196,7 +201,9 @@ class GradebookTemplate {
       while (r.length < header.length) {
         r.add('');
       }
-      final name = nameColumn < r.length ? r[nameColumn].trim() : '';
+      final first = nameColumn < r.length ? r[nameColumn].trim() : '';
+      final last = lastNameColumn >= 0 && lastNameColumn < r.length ? r[lastNameColumn].trim() : '';
+      final name = lastNameColumn >= 0 ? [first, last].where((p) => p.isNotEmpty).join(' ') : first;
       if (name.isEmpty) {
         out.add(r);
         continue;
@@ -233,12 +240,33 @@ class GradebookTemplate {
   ///
   /// Handles "Lopez, Ana" as well as "Ana Lopez", and never hands the same
   /// mark to two rows.
+  ///
+  /// Confidence order matters, and it is the difference between a right
+  /// and a wrong mark on a child's record. [sameStudentName] is forgiving
+  /// on purpose — it treats a shared first name as a match, which is the
+  /// right call when checking whether two pages came from one paper.
+  /// Writing into a gradebook is not that: a class with two Anas would
+  /// give the first Ana whichever mark came first in the list, and report
+  /// nothing wrong, because both names "matched". So an exact match is
+  /// taken wherever it sits in the list, and the loose rule only decides
+  /// when nothing better exists anywhere.
   static int? _matchIndex(String name, List<MarkRow> marks, Set<int> used) {
     final candidates = <String>[name];
     if (name.contains(',')) {
       final parts = name.split(',');
       if (parts.length >= 2) candidates.add('${parts[1].trim()} ${parts[0].trim()}');
     }
+
+    String norm(String s) =>
+        s.toLowerCase().replaceAll(RegExp(r'[^a-z ]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+    final wanted = candidates.map(norm).where((c) => c.isNotEmpty).toList(growable: false);
+
+    // Pass one: the same name, exactly.
+    for (var i = 0; i < marks.length; i++) {
+      if (used.contains(i)) continue;
+      if (wanted.contains(norm(marks[i].studentName))) return i;
+    }
+    // Pass two: everything else sameStudentName is willing to accept.
     for (var i = 0; i < marks.length; i++) {
       if (used.contains(i)) continue;
       for (final c in candidates) {
@@ -246,5 +274,71 @@ class GradebookTemplate {
       }
     }
     return null;
+  }
+}
+
+/// Recognises a Google Classroom grade export.
+///
+/// Classroom is the one gradebook whose export shape is predictable, and
+/// it is also the one this app can't talk to directly — pushing marks into
+/// Classroom needs Google's review plus every district's IT admin. So the
+/// next best thing is to make its downloaded file land in one tap instead
+/// of asking the teacher which column is which.
+///
+/// The file looks like:
+///
+///     Last Name,First Name,Email Address,Essay 1,Quiz 2
+///     ,,Points,100,20
+///     Ruiz,Ana,ana@school.org,88,18
+///
+/// Two things make it awkward, and both are handled here: the name is
+/// split across two columns, and there is often a "Points" row under the
+/// header that is not a student.
+class ClassroomSheet {
+  final int firstNameColumn;
+  final int lastNameColumn;
+  final int emailColumn;
+
+  const ClassroomSheet({
+    required this.firstNameColumn,
+    required this.lastNameColumn,
+    required this.emailColumn,
+  });
+
+  static final _first = RegExp(r'^first\s*name$', caseSensitive: false);
+  static final _last = RegExp(r'^last\s*name$', caseSensitive: false);
+  static final _email = RegExp(r'^email(\s*address)?$', caseSensitive: false);
+
+  /// The Classroom shape, or null if this is some other file.
+  ///
+  /// Deliberately strict: both name columns AND the email column must be
+  /// there. A file that only half matches goes to the manual mapper, which
+  /// is never wrong — guessing here would silently mark the wrong column.
+  static ClassroomSheet? detect(List<List<String>> rows) {
+    if (rows.isEmpty) return null;
+    final header = rows.first;
+    var first = -1;
+    var last = -1;
+    var email = -1;
+    for (var c = 0; c < header.length; c++) {
+      final h = header[c].trim();
+      if (first < 0 && _first.hasMatch(h)) first = c;
+      if (last < 0 && _last.hasMatch(h)) last = c;
+      if (email < 0 && _email.hasMatch(h)) email = c;
+    }
+    if (first < 0 || last < 0 || email < 0) return null;
+    return ClassroomSheet(firstNameColumn: first, lastNameColumn: last, emailColumn: email);
+  }
+
+  /// True for Classroom's "Points" row — the one under the header holding
+  /// the marks each assignment is out of. It has no name, so filling a
+  /// mark into it would put a student's score on a row that isn't a
+  /// student.
+  static bool isPointsRow(List<String> row, ClassroomSheet shape) {
+    final f = shape.firstNameColumn < row.length ? row[shape.firstNameColumn].trim() : '';
+    final l = shape.lastNameColumn < row.length ? row[shape.lastNameColumn].trim() : '';
+    if (f.isNotEmpty || l.isNotEmpty) return false;
+    final e = shape.emailColumn < row.length ? row[shape.emailColumn].trim() : '';
+    return e.toLowerCase() == 'points' || e.isEmpty;
   }
 }

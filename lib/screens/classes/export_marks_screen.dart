@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/csv_import.dart';
+import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/gradebook_export.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
@@ -68,6 +69,37 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
     }
   }
 
+  /// Puts the marks in the teacher's own Google Drive as a spreadsheet.
+  ///
+  /// Deliberately not a Classroom sync: that needs Google's review and each
+  /// district's IT admin to allow the app. A Sheet in their own Drive needs
+  /// neither, and they can share it or copy it into their real gradebook.
+  Future<void> _exportToDrive() async {
+    final rows = _rows;
+    if (rows.isEmpty) return;
+    final klass = context.read<ClassesService>().getById(_classId ?? '');
+    final name = klass?.name ?? 'Assessment';
+    final now = DateTime.now();
+    final date = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    setState(() => _busy = true);
+    try {
+      final link = await DriveService().uploadSheet(
+        title: 'Marks — $name — $date',
+        csv: GradebookExport.plainCsv(rows, assessment: name),
+      );
+      if (!mounted) return;
+      _snack(link == null || link.isEmpty
+          ? 'Saved to your Google Drive.'
+          : 'Saved to your Google Drive, in the Markless folder.');
+    } on DriveAuthException {
+      if (mounted) _snack('Sign in with Google again to save to Drive.');
+    } catch (e) {
+      if (mounted) _snack('Couldn\'t save to Drive: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// The one that works with any gradebook: the teacher hands over a file
   /// exported from their own system and gets it back with a marks column.
   Future<void> _fillTemplate() async {
@@ -82,7 +114,12 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
       setState(() => _busy = true);
 
       final template = CsvImport.parse(utf8.decode(bytes, allowMalformed: true));
-      final nameCol = GradebookTemplate.findNameColumn(template);
+
+      // Classroom's export is the one shape worth recognising: it splits
+      // the name over two columns, which the single-column finder can't
+      // match on, so without this a Classroom file fills almost nothing.
+      final classroom = ClassroomSheet.detect(template);
+      final nameCol = classroom?.firstNameColumn ?? GradebookTemplate.findNameColumn(template);
       if (nameCol < 0) {
         setState(() => _busy = false);
         _snack('Couldn\'t find a column of student names in that file.');
@@ -92,8 +129,10 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
         template: template,
         marks: rows,
         nameColumn: nameCol,
+        lastNameColumn: classroom?.lastNameColumn ?? -1,
         asPercent: _asPercent,
       );
+      if (classroom != null && mounted) _snack('Recognised a Google Classroom grade sheet.');
       await _shareCsv(filled.csv, 'filled-${f.name.replaceAll('.csv', '')}.csv');
       if (!mounted) return;
       setState(() => _busy = false);
@@ -241,6 +280,18 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
                 const SizedBox(height: 6),
                 Text(
                   'Name, score, percent and feedback. Opens in Excel or Sheets for copying a column across.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                ),
+                const SizedBox(height: 18),
+                OutlinedButton.icon(
+                  onPressed: rows.isEmpty ? null : _exportToDrive,
+                  icon: const Icon(Icons.add_to_drive_rounded),
+                  label: const Text('Save to Google Drive'),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Puts the same marks in your own Drive as a Google Sheet, in a Markless folder. '
+                  'Share it, keep it as a record, or copy the columns into Classroom yourself.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                 ),
               ],
