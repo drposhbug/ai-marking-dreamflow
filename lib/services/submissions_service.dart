@@ -126,6 +126,27 @@ class SubmissionsService extends ChangeNotifier {
     return submission;
   }
 
+  /// Files a whole class set in one go.
+  ///
+  /// An imported form finishes thirty results at once. Saving them one at a
+  /// time rewrote every result the teacher has ever had — annotations, the
+  /// text read off each page and all — thirty times over, on the thread
+  /// drawing the screen. By March that is seconds of the app locking up at
+  /// exactly the moment she is watching it save and deciding it has hung.
+  Future<List<Submission>> createAll(Iterable<Submission> items) async {
+    final added = items.toList(growable: false);
+    if (added.isEmpty) return added;
+    // Reversed so the list is left exactly as a run of single creates would
+    // leave it: newest first.
+    _submissions = [...added.reversed, ..._submissions];
+    await _persist();
+    notifyListeners();
+    for (final s in added) {
+      _pushCloud(s);
+    }
+    return added;
+  }
+
   Future<void> update(Submission submission) async {
     _submissions = _submissions.map((s) => s.id == submission.id ? submission : s).toList(growable: false);
     await _persist();
@@ -166,5 +187,25 @@ class SubmissionsService extends ChangeNotifier {
 
   Future<void> _persistDeleted() async => _store.setString(_kDeletedKey, jsonEncode(_pendingCloudDeletes.toList()));
 
-  Future<void> _persist() async => _store.setString(_kKey, Submission.encodeList(_submissions));
+  /// The written-out JSON for each result, remembered against the result
+  /// itself. A submission never changes in place — an edit makes a new one —
+  /// so its text is built once and reused after that. Weak keys, so results
+  /// that have been deleted don't hold memory.
+  final _encoded = Expando<String>('submission json');
+
+  /// Byte-for-byte what [Submission.encodeList] writes, built by joining the
+  /// per-result text instead of walking every result's whole object graph
+  /// again. Saving one mark used to re-serialise the entire year's work.
+  String _encodeAll() {
+    final out = StringBuffer('[');
+    for (var i = 0; i < _submissions.length; i++) {
+      if (i > 0) out.write(',');
+      final s = _submissions[i];
+      out.write(_encoded[s] ??= jsonEncode(s.toJson()));
+    }
+    out.write(']');
+    return out.toString();
+  }
+
+  Future<void> _persist() async => _store.setString(_kKey, _encodeAll());
 }
