@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -12,9 +11,11 @@ import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
 import 'package:marking_prokect_v2/services/anonymizer.dart';
+import 'package:marking_prokect_v2/services/browser_intake.dart';
 import 'package:marking_prokect_v2/services/bulk_page_processor.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
+import 'package:marking_prokect_v2/services/dropped_intake.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
@@ -23,6 +24,7 @@ import 'package:marking_prokect_v2/services/overnight_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/widgets/drop_target_overlay.dart';
 import 'package:marking_prokect_v2/widgets/pill.dart';
 import 'package:marking_prokect_v2/widgets/teacher_topbar.dart';
 import 'package:marking_prokect_v2/widgets/web_upload_gate.dart';
@@ -42,25 +44,65 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
 
   final ImagePicker _picker = ImagePicker();
 
+  /// Dragging a folder onto the window and pasting a screenshot, on a
+  /// desktop browser. Null everywhere else — the gesture does not exist on a
+  /// phone, so nothing about it is shown there either.
+  BrowserIntake? _browserIntake;
+  bool _dragOver = false;
+
+  /// A second drop while the class picker is still open would stack two
+  /// intakes on top of each other and mark the same papers twice.
+  bool _intakeBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _browserIntake = startBrowserIntake(
+      onHover: (hovering) {
+        if (!mounted || hovering == _dragOver) return;
+        setState(() => _dragOver = hovering && _isVisibleTab);
+      },
+      onDropped: (files) => _intakeDroppedFiles(files, pasted: false),
+      onPasted: (files) => _intakeDroppedFiles(files, pasted: true),
+    );
+  }
+
   @override
   void dispose() {
+    _browserIntake?.dispose();
     _debounce?.cancel();
     _search.dispose();
     super.dispose();
   }
 
+  /// The drop listeners live on the whole document, but the grading tab is
+  /// kept alive behind the others. A drop while the teacher is looking at
+  /// her dashboard must not silently push her onto a marking screen.
+  bool get _isVisibleTab => TickerMode.valuesOf(context).enabled;
+
   Future<void> _handlePickedFile(XFile? image) async {
     if (image == null) return;
     try {
-      final Uint8List bytes = await image.readAsBytes();
-      // Gallery photos get the same scanner treatment as live scans:
-      // EXIF/sideways rotation, straightening, contrast, and sharpening.
-      final processed = await DocumentProcessor.processPage(bytes);
-      if (!mounted) return;
-      context.read<AppState>().setImageBytes(bytes: processed, fileName: image.name);
-      context.push(AppRoutes.gradingContext, extra: {'imageBytes': processed, 'fileName': image.name});
+      await _handleSinglePhoto(PickedPhoto(bytes: await image.readAsBytes(), fileName: image.name));
     } catch (e) {
       debugPrint('Failed to read picked image bytes: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not read image.')));
+    }
+  }
+
+  /// One page, however it arrived — picked, dropped or pasted. Everything
+  /// after this point is the single-photo route the gallery has always used.
+  Future<void> _handleSinglePhoto(PickedPhoto photo) async {
+    try {
+      // Photos get the same scanner treatment as live scans: EXIF/sideways
+      // rotation, straightening, contrast, and sharpening.
+      final processed = await DocumentProcessor.processPage(photo.bytes);
+      if (!mounted) return;
+      context.read<AppState>().setImageBytes(bytes: processed, fileName: photo.fileName);
+      context.push(AppRoutes.gradingContext, extra: {'imageBytes': processed, 'fileName': photo.fileName});
+    } catch (e) {
+      debugPrint('Failed to prepare picked image: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not read image.')));
     }
@@ -165,34 +207,14 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         return;
       }
 
-      // Several photos: pages of ONE test, or one test per photo?
-      final choice = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('${images.length} photos picked'),
-          content: const Text('Are these the pages of one test, or a separate student\'s test per photo?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, 'combine'), child: const Text('One test (pages)')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, 'batch'), child: const Text('One per student')),
-          ],
-        ),
-      );
+      final choice = await _askOneTestOrOnePerStudent(images.length);
       if (!mounted || choice == null) return;
 
-      final result = await _prepareGalleryPhotos(images);
-      if (!mounted || result == null) return;
-      if (result.failed.isNotEmpty) {
-        _snackBar('Couldn\'t read ${result.failed.length} of the photos — the rest are ready. '
-            'Re-shoot ${result.failed.take(3).join(', ')}${result.failed.length > 3 ? '…' : ''}');
+      final picked = <PickedPhoto>[];
+      for (final img in images) {
+        picked.add(PickedPhoto(bytes: await img.readAsBytes(), fileName: img.name));
       }
-      if (result.pages.isEmpty) return;
-
-      if (choice == 'batch') {
-        _enqueueBatch([for (final p in result.pages) [p]]);
-        return;
-      }
-      context.read<AppState>().setPages(result.pages);
-      context.push(AppRoutes.gradingContext);
+      await _prepareAndFilePhotos(picked, choice);
     } catch (e) {
       debugPrint('Pick from gallery failed: $e');
       if (!mounted) return;
@@ -205,6 +227,167 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Work dragged onto the window, or a screenshot pasted with Ctrl-V.
+  ///
+  /// This is a pick like any other, so it goes through the same three gates
+  /// in the same order — the browser upload acknowledgement, the class, then
+  /// the page ceiling — and then joins the gallery route. A teacher who
+  /// dropped a folder gets exactly what she would have got had she picked
+  /// the same files, including the batching question and the counted
+  /// progress she can stop.
+  Future<void> _intakeDroppedFiles(List<DroppedFile> files, {required bool pasted}) async {
+    if (!mounted || _intakeBusy || !_isVisibleTab) return;
+    _intakeBusy = true;
+    try {
+      final usable = markableDrops(files);
+      final skipped = files.length - usable.length;
+      if (usable.isEmpty) {
+        _snackBar(pasted ? 'There was no image on the clipboard. Copy a screenshot first, then paste.' : 'Nothing there Markless can mark. Drop photos of the work, or PDFs.');
+        return;
+      }
+
+      if (!await _webUploadAcknowledged() || !mounted) return;
+      final ok = await _askWhichClass();
+      if (!ok || !mounted) return;
+
+      final photos = await _photosFromDroppedFiles(usable);
+      if (!mounted || photos == null) return;
+      if (photos.isEmpty) {
+        _snackBar('Those files couldn\'t be read. Drop photos of the work, or PDFs.');
+        return;
+      }
+      if (skipped > 0) {
+        _snackBar('$skipped file${skipped == 1 ? '' : 's'} skipped — only photos and PDFs can be marked.');
+      }
+
+      if (photos.length == 1) {
+        await _handleSinglePhoto(photos.first);
+        return;
+      }
+      final choice = await _askOneTestOrOnePerStudent(photos.length);
+      if (!mounted || choice == null) return;
+      await _prepareAndFilePhotos(photos, choice);
+    } catch (e) {
+      debugPrint('Drop intake failed: $e');
+      _snackBar('Could not read what was dropped.');
+    } finally {
+      _intakeBusy = false;
+    }
+  }
+
+  /// A drop, flattened into the pile of photos the gallery route expects.
+  ///
+  /// A dropped PDF is a stack of pages, so its pages are rendered first and
+  /// keep the file's name — that is what lets one student's three pages be
+  /// marked as one paper further down. When nothing is a PDF this is free
+  /// and the drop goes straight through.
+  Future<List<PickedPhoto>?> _photosFromDroppedFiles(List<DroppedFile> files) async {
+    if (!files.any((f) => f.isPdf)) return photosFromDrop(files);
+
+    // A drop of PDFs can be a whole class set, and rendering is real work:
+    // the teacher gets the same count and the same way out she gets for a
+    // Drive import rather than a spinner she can only force-quit.
+    final capped = await _confirmBulkCap(photosFromDrop(files));
+    if (capped == null || !mounted) return null;
+    // The cap keeps the first N in order, so the files it kept are the same
+    // first N — cheaper and safer than matching them back up by name.
+    final todo = files.sublist(0, capped.length);
+
+    return _withCountedProgress<List<PickedPhoto>>(
+      total: todo.length,
+      label: (done, total) => 'Reading file ${done + (done < total ? 1 : 0)} of $total',
+      note: 'Each page inside a PDF is rendered before marking. You can stop and keep what is ready.',
+      work: (run) async {
+        final out = <PickedPhoto>[];
+        for (var i = 0; i < todo.length; i++) {
+          if (run.stopped) break;
+          final file = todo[i];
+          if (file.isPdf) {
+            try {
+              final images = await renderPdfPages(file.bytes);
+              for (var p = 0; p < images.length; p++) {
+                out.add(PickedPhoto(bytes: images[p], fileName: '${file.name} (page ${p + 1})'));
+              }
+            } catch (e) {
+              // One unreadable PDF must not cost her the rest of the stack.
+              debugPrint('Could not render dropped PDF "${file.name}": $e');
+            }
+          } else {
+            out.add(PickedPhoto(bytes: file.bytes, fileName: file.name));
+          }
+          run.report(i + 1, todo.length);
+        }
+        return out;
+      },
+    );
+  }
+
+  /// Several pages at once: are they the pages of ONE test, or one test per
+  /// page? Asked the same way whether they were picked, dropped or pasted,
+  /// because the answer decides whether this is one mark or thirty.
+  Future<String?> _askOneTestOrOnePerStudent(int count) => showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('$count photos picked'),
+          content: const Text('Are these the pages of one test, or a separate student\'s test per photo?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, 'combine'), child: const Text('One test (pages)')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, 'batch'), child: const Text('One per student')),
+          ],
+        ),
+      );
+
+  /// Prepares a pile of pages and files them the way the teacher asked —
+  /// one submission, or one background job per student.
+  ///
+  /// Every multi-page route ends here, so a drop and a gallery pick cannot
+  /// drift apart in what they do with what they collected.
+  Future<void> _prepareAndFilePhotos(List<PickedPhoto> photos, String choice) async {
+    final result = await _preparePickedPhotos(photos);
+    if (!mounted || result == null) return;
+    if (result.failed.isNotEmpty) {
+      _snackBar('Couldn\'t read ${result.failed.length} of the photos — the rest are ready. '
+          'Re-shoot ${result.failed.take(3).join(', ')}${result.failed.length > 3 ? '…' : ''}');
+    }
+    if (result.pages.isEmpty) return;
+
+    if (choice == 'batch') {
+      // Pages of one dropped PDF belong to one student — marking them as
+      // three students would hand back three part-marks and three names.
+      _enqueueBatch(groupPagesBySourceFile(result.pages));
+      return;
+    }
+    context.read<AppState>().setPages(result.pages);
+    context.push(AppRoutes.gradingContext);
+  }
+
+  /// The 60-page ceiling, and the plain-English warning that goes with it.
+  ///
+  /// Returns what will actually be prepared, or null when the teacher backs
+  /// out. Dropping a folder of 300 scans has to land here exactly as picking
+  /// 300 photos does, or it is an out-of-memory crash instead of a choice.
+  Future<List<PickedPhoto>?> _confirmBulkCap(List<PickedPhoto> picked) async {
+    final warning = bulkPickWarning(picked.length);
+    if (warning == null) return picked;
+    if (!mounted) return null;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('That is a lot of photos'),
+        content: Text(warning),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Prepare $kMaxGalleryPhotos'),
+          ),
+        ],
+      ),
+    );
+    if (go != true) return null;
+    return capPicked(picked);
+  }
+
   /// Straightens and cleans a pile of picked photos, showing how far along it
   /// is and letting the teacher stop.
   ///
@@ -212,34 +395,9 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   /// resolution, so this is minutes of work, not seconds. A spinner with no
   /// count and no way out is how a teacher ends up force-quitting halfway
   /// and losing the lot. Returns null if they backed out with nothing done.
-  Future<BulkPageResult?> _prepareGalleryPhotos(List<XFile> images) async {
-    final picked = <PickedPhoto>[];
-    for (final img in images) {
-      picked.add(PickedPhoto(bytes: await img.readAsBytes(), fileName: img.name));
-    }
-
-    final warning = bulkPickWarning(picked.length);
-    if (warning != null) {
-      if (!mounted) return null;
-      final go = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('That is a lot of photos'),
-          content: Text(warning),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text('Prepare $kMaxGalleryPhotos'),
-            ),
-          ],
-        ),
-      );
-      if (go != true) return null;
-    }
-
-    final todo = capPicked(picked);
-    if (!mounted) return null;
+  Future<BulkPageResult?> _preparePickedPhotos(List<PickedPhoto> picked) async {
+    final todo = await _confirmBulkCap(picked);
+    if (todo == null || !mounted) return null;
 
     return _withCountedProgress<BulkPageResult>(
       total: todo.length,
@@ -343,9 +501,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         // nothing and invites a force-quit. The total is only knowable once
         // Drive hands the files back, so it starts as an honest "loading".
         final import = await _withCountedProgress<DriveImport>(
-          label: (done, total) => total == 0
-              ? 'Loading from Google Drive…'
-              : 'Reading file ${done + (done < total ? 1 : 0)} of $total',
+          label: (done, total) => total == 0 ? 'Loading from Google Drive…' : 'Reading file ${done + (done < total ? 1 : 0)} of $total',
           note: 'Each page is rendered and straightened before marking. You can stop and keep what is ready.',
           work: (run) => DrivePicker.importScannedPages(
             onProgress: run.report,
@@ -495,14 +651,16 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(999)),
-                          child: Text(kIsWeb ? 'BEST HERE' : 'FASTEST', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AiMarkerColors.secondary, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+                          child: Text(kIsWeb ? 'BEST HERE' : 'FASTEST',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AiMarkerColors.secondary, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
                         ),
                       ],
                     ),
                     const SizedBox(height: 2),
                     // The real pitch: setting the quiz as a Form skips
                     // scanning altogether, so nothing is faster.
-                    Text('The quickest way to mark — no scanning at all. Multiple choice marks itself; written answers are AI-marked.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                    Text('The quickest way to mark — no scanning at all. Multiple choice marks itself; written answers are AI-marked.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                     if (kIsWeb) ...[
                       const SizedBox(height: 4),
                       Text(
@@ -557,443 +715,450 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     final state = context.watch<AppState>();
     final classes = context.watch<ClassesService>().classes;
     final queue = context.watch<GradingQueueService>();
-    final selectedClass = (state.draft.classId == null || state.draft.classId!.isEmpty)
-        ? null
-        : classes.cast<TeacherClass?>().firstWhere((c) => c?.id == state.draft.classId, orElse: () => null);
+    final selectedClass = (state.draft.classId == null || state.draft.classId!.isEmpty) ? null : classes.cast<TeacherClass?>().firstWhere((c) => c?.id == state.draft.classId, orElse: () => null);
 
     return Scaffold(
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-          children: [
-            TeacherTopbar(title: 'Markless', onBell: () {}),
-            const SizedBox(height: 14),
-            Text('Good morning,', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
-            const SizedBox(height: 2),
-            Text('${user?.name.isNotEmpty == true ? user!.name : 'Teacher'} 👋', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 14),
-            GestureDetector(
-              onTap: _pickFromCamera,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  gradient: const LinearGradient(colors: [AiMarkerColors.primary, AiMarkerColors.tertiary], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.18), border: Border.all(color: Colors.white.withValues(alpha: 0.22))),
-                      child: const Icon(Icons.photo_camera_rounded, color: Colors.white),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+              children: [
+                TeacherTopbar(title: 'Markless', onBell: () {}),
+                const SizedBox(height: 14),
+                Text('Good morning,', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
+                const SizedBox(height: 2),
+                Text('${user?.name.isNotEmpty == true ? user!.name : 'Teacher'} 👋', style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 14),
+                GestureDetector(
+                  onTap: _pickFromCamera,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      gradient: const LinearGradient(colors: [AiMarkerColors.primary, AiMarkerColors.tertiary], begin: Alignment.topLeft, end: Alignment.bottomRight),
                     ),
-                    const SizedBox(height: 10),
-                    Text('Scan Assignment', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white)),
-                    const SizedBox(height: 4),
-                    Text('Take a photo to start grading', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.9))),
-                    const SizedBox(height: 12),
-                    // Answer keys live in the Answers tab — the card keeps
-                    // one clean row of import sources.
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    child: Column(
                       children: [
-                        PillButton(
-                          label: 'From Gallery',
-                          icon: Icons.photo_library_rounded,
-                          background: Colors.white.withValues(alpha: 0.16),
-                          foreground: Colors.white,
-                          onTap: _pickFromGallery,
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.18), border: Border.all(color: Colors.white.withValues(alpha: 0.22))),
+                          child: const Icon(Icons.photo_camera_rounded, color: Colors.white),
                         ),
-                        const SizedBox(width: 10),
-                        PillButton(
-                          label: 'From Drive',
-                          icon: Icons.add_to_drive_rounded,
-                          background: Colors.white.withValues(alpha: 0.16),
-                          foreground: Colors.white,
-                          onTap: _pickFromDrive,
+                        const SizedBox(height: 10),
+                        Text('Scan Assignment', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white)),
+                        const SizedBox(height: 4),
+                        Text('Take a photo to start grading', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.9))),
+                        const SizedBox(height: 12),
+                        // Answer keys live in the Answers tab — the card keeps
+                        // one clean row of import sources.
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            PillButton(
+                              label: 'From Gallery',
+                              icon: Icons.photo_library_rounded,
+                              background: Colors.white.withValues(alpha: 0.16),
+                              foreground: Colors.white,
+                              onTap: _pickFromGallery,
+                            ),
+                            const SizedBox(width: 10),
+                            PillButton(
+                              label: 'From Drive',
+                              icon: Icons.add_to_drive_rounded,
+                              background: Colors.white.withValues(alpha: 0.16),
+                              foreground: Colors.white,
+                              onTap: _pickFromDrive,
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-            if (kIsWeb) ...[
-              const SizedBox(height: 12),
-              _importFormCard(context),
-            ],
-            const SizedBox(height: 12),
-            Card(
-              child: InkWell(
-                splashFactory: NoSplash.splashFactory,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                onTap: () => context.push(AppRoutes.prepareTest),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
-                        child: const Icon(Icons.qr_code_2_rounded, color: AiMarkerColors.secondary),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Prepare a test to print', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 2),
-                            Text('Each copy gets a tiny code, so scanning it back never mixes students up.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
-                    ],
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: InkWell(
-                splashFactory: NoSplash.splashFactory,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                onTap: () => context.push(AppRoutes.splitStack),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(color: AiMarkerColors.tertiary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
-                        child: const Icon(Icons.print_rounded, color: AiMarkerColors.tertiary),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Split a scanned stack', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 2),
-                            Text('Feed the class set through the photocopier once — one PDF in, one paper per student out.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // On the phone this sits with the other routes. In a browser it
-            // is moved directly under the scan card, because it is the one
-            // route that stays private there.
-            if (!kIsWeb) ...[
-              const SizedBox(height: 12),
-              _importFormCard(context),
-            ],
-            const SizedBox(height: 12),
-            Card(
-              child: InkWell(
-                splashFactory: NoSplash.splashFactory,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                onTap: () => context.push(AppRoutes.planning),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(color: AiMarkerColors.tertiary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
-                        child: const Icon(Icons.event_note_rounded, color: AiMarkerColors.tertiary),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Plan with Mark', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 2),
-                            Text('Draft a lesson plan, quiz, assignment, or worksheet in seconds.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Report writing is the other job that eats a teacher's
-            // evenings, and the only app that can do it honestly is the
-            // one already holding the marks. Put where the marking lives,
-            // because that is where the evidence comes from.
-            Card(
-              child: InkWell(
-                splashFactory: NoSplash.splashFactory,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                onTap: () => context.push(AppRoutes.reportComments),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
-                        child: const Icon(Icons.rate_review_rounded, color: AiMarkerColors.secondary),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Report card comments', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 2),
-                            Text('A draft for every student, written from their own marks this term.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Replaces a passive "the assistant is clever" line with the
-            // one thing that actually changes how long an evening takes.
-            // Left to guess, most teachers reach for the camera — the
-            // slowest of the four routes — and conclude the app is slow.
-            Card(
-              child: InkWell(
-                splashFactory: NoSplash.splashFactory,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                onTap: () => context.push(AppRoutes.waysToMark),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      Icon(Icons.speed_rounded, color: Theme.of(context).colorScheme.secondary),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Four ways to mark a class set',
-                                style: Theme.of(context).textTheme.titleSmall),
-                            const SizedBox(height: 2),
-                            Text('A form takes 2 minutes, the copier 6, photos 15. Tap for the steps.',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35)),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (context.watch<OvernightService>().batches.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Card(
-                color: AiMarkerColors.tertiary.withValues(alpha: 0.10),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                // Discoverable, not a hidden trick: on a laptop the fastest way
+                // in is the one nothing on screen mentions.
+                if (_browserIntake != null) ...[
+                  const SizedBox(height: 10),
+                  const DropAndPasteHint(),
+                ],
+                if (kIsWeb) ...[
+                  const SizedBox(height: 12),
+                  _importFormCard(context),
+                ],
+                const SizedBox(height: 12),
+                Card(
+                  child: InkWell(
+                    splashFactory: NoSplash.splashFactory,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    onTap: () => context.push(AppRoutes.prepareTest),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
                         children: [
-                          const Icon(Icons.bedtime_rounded, color: AiMarkerColors.tertiary, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text('${context.watch<OvernightService>().pendingPapers} papers marking overnight',
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                            child: const Icon(Icons.qr_code_2_rounded, color: AiMarkerColors.secondary),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Prepare a test to print', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 2),
+                                Text('Each copy gets a tiny code, so scanning it back never mixes students up.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      for (final b in context.watch<OvernightService>().batches)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text('• ${b.label} — ${b.papers.length} papers',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                        ),
-                      const SizedBox(height: 6),
-                      Text(
-                        // Not "we'll let you know": nothing tells the phone a
-                        // batch has finished, so the marks are filed when she
-                        // next opens Markless. Promising a notification she
-                        // never gets is worse than promising nothing.
-                        'Marking carries on with the app closed. Open Markless in the morning and the marks are waiting on your dashboard.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
-                      ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: context.watch<OvernightService>().checking
-                            ? null
-                            : () async {
-                                final filed = await checkOvernight(context);
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text(filed > 0
-                                      ? '$filed papers came back — they\'re on your dashboard.'
-                                      : 'Still marking. Nothing to file yet.'),
-                                ));
-                              },
-                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: const Text('Check now'),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 18),
-            if (queue.jobs.isNotEmpty) ...[
-              Row(
-                children: [
-                  Expanded(child: Text('Marking', style: Theme.of(context).textTheme.titleMedium)),
-                  if (queue.markingCount > 0)
-                    Text('${queue.markingCount} in progress', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                const SizedBox(height: 12),
+                Card(
+                  child: InkWell(
+                    splashFactory: NoSplash.splashFactory,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    onTap: () => context.push(AppRoutes.splitStack),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(color: AiMarkerColors.tertiary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                            child: const Icon(Icons.print_rounded, color: AiMarkerColors.tertiary),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Split a scanned stack', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 2),
+                                Text('Feed the class set through the photocopier once — one PDF in, one paper per student out.',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // On the phone this sits with the other routes. In a browser it
+                // is moved directly under the scan card, because it is the one
+                // route that stays private there.
+                if (!kIsWeb) ...[
+                  const SizedBox(height: 12),
+                  _importFormCard(context),
                 ],
-              ),
-              if (queue.heldJobs.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Card(
-                    color: AiMarkerColors.warning.withValues(alpha: 0.10),
+                const SizedBox(height: 12),
+                Card(
+                  child: InkWell(
+                    splashFactory: NoSplash.splashFactory,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    onTap: () => context.push(AppRoutes.planning),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(color: AiMarkerColors.tertiary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                            child: const Icon(Icons.event_note_rounded, color: AiMarkerColors.tertiary),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Plan with Mark', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 2),
+                                Text('Draft a lesson plan, quiz, assignment, or worksheet in seconds.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Report writing is the other job that eats a teacher's
+                // evenings, and the only app that can do it honestly is the
+                // one already holding the marks. Put where the marking lives,
+                // because that is where the evidence comes from.
+                Card(
+                  child: InkWell(
+                    splashFactory: NoSplash.splashFactory,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    onTap: () => context.push(AppRoutes.reportComments),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                            child: const Icon(Icons.rate_review_rounded, color: AiMarkerColors.secondary),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Report card comments', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 2),
+                                Text('A draft for every student, written from their own marks this term.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Replaces a passive "the assistant is clever" line with the
+                // one thing that actually changes how long an evening takes.
+                // Left to guess, most teachers reach for the camera — the
+                // slowest of the four routes — and conclude the app is slow.
+                Card(
+                  child: InkWell(
+                    splashFactory: NoSplash.splashFactory,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    onTap: () => context.push(AppRoutes.waysToMark),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          Icon(Icons.speed_rounded, color: Theme.of(context).colorScheme.secondary),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Four ways to mark a class set', style: Theme.of(context).textTheme.titleSmall),
+                                const SizedBox(height: 2),
+                                Text('A form takes 2 minutes, the copier 6, photos 15. Tap for the steps.',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (context.watch<OvernightService>().batches.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Card(
+                    color: AiMarkerColors.tertiary.withValues(alpha: 0.10),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${queue.heldJobs.length} papers waiting on you',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Open the first marked paper. If it marked the way you would, release the rest — if not, fix the answer key or mode first and nothing has been wasted.',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
-                          ),
-                          const SizedBox(height: 10),
                           Row(
                             children: [
-                              FilledButton.icon(
-                                onPressed: () {
-                                  final n = queue.heldJobs.length;
-                                  queue.releaseHeld(
-                                    students: context.read<StudentsService>(),
-                                    submissions: context.read<SubmissionsService>(),
-                                  );
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Marking the remaining $n papers.')),
-                                  );
-                                },
-                                icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                                label: Text('Mark all ${queue.heldJobs.length}'),
-                              ),
+                              const Icon(Icons.bedtime_rounded, color: AiMarkerColors.tertiary, size: 20),
                               const SizedBox(width: 8),
-                              TextButton(
-                                onPressed: queue.discardHeld,
-                                child: const Text('Discard'),
+                              Expanded(
+                                child: Text('${context.watch<OvernightService>().pendingPapers} papers marking overnight',
+                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 4),
+                          for (final b in context.watch<OvernightService>().batches)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text('• ${b.label} — ${b.papers.length} papers', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                            ),
+                          const SizedBox(height: 6),
+                          Text(
+                            // Not "we'll let you know": nothing tells the phone a
+                            // batch has finished, so the marks are filed when she
+                            // next opens Markless. Promising a notification she
+                            // never gets is worse than promising nothing.
+                            'Marking carries on with the app closed. Open Markless in the morning and the marks are waiting on your dashboard.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: context.watch<OvernightService>().checking
+                                ? null
+                                : () async {
+                                    final filed = await checkOvernight(context);
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                      content: Text(filed > 0 ? '$filed papers came back — they\'re on your dashboard.' : 'Still marking. Nothing to file yet.'),
+                                    ));
+                                  },
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('Check now'),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
-              const SizedBox(height: 10),
-              Card(
-                child: Column(
-                  children: [
-                    for (final job in queue.jobs.take(8))
-                      ListTile(
-                        leading: switch (job.status) {
-                          GradingJobStatus.marking => const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
-                          GradingJobStatus.held => const Icon(Icons.pause_circle_rounded, color: AiMarkerColors.warning),
-                          GradingJobStatus.done => const Icon(Icons.check_circle_rounded, color: AiMarkerColors.secondary),
-                          GradingJobStatus.error => const Icon(Icons.error_rounded, color: AiMarkerColors.error),
-                        },
-                        title: Text(job.label, style: Theme.of(context).textTheme.titleSmall),
-                        subtitle: Text(
-                          switch (job.status) {
-                            GradingJobStatus.marking => "Marking…",
-                            GradingJobStatus.held => "Waiting for your OK — check the first result",
-                            GradingJobStatus.done => "${job.result?.primaryDisplay ?? "Done"} — tap to view",
-                            GradingJobStatus.error => "Failed — tap to retry",
-                          },
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
-                        ),
-                        trailing: job.status == GradingJobStatus.marking
-                            ? null
-                            : IconButton(
-                                icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral, size: 20),
-                                onPressed: () => queue.remove(job.id),
-                                tooltip: 'Dismiss',
-                              ),
-                        onTap: job.status == GradingJobStatus.done
-                            ? () => context.push(
-                                  '${AppRoutes.result}?submissionId=${job.submissionId}',
-                                  extra: {
-                                    'gradeResult': job.result,
-                                    'imageBytes': job.pages.isEmpty ? null : job.pages.first,
-                                    'pageImages': job.pages,
-                                  },
-                                )
-                            : job.status == GradingJobStatus.error
-                                ? () => queue.retry(job.id, students: context.read<StudentsService>(), submissions: context.read<SubmissionsService>())
-                                : null,
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-            ],
-            Text('STUDENT INFO', style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
-            const SizedBox(height: 10),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _search,
-                      onChanged: _onSearchChanged,
-                      decoration: InputDecoration(
-                        hintText: 'Enter student name or scan...',
-                        prefixIcon: Icon(Icons.search_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
-                        suffixIcon: IconButton(onPressed: () => _search.clear(), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8))),
-                      ),
-                    ),
-                    if (_studentHits.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      _StudentSearchResults(items: _studentHits, onSelect: _selectStudent),
+                ],
+                const SizedBox(height: 18),
+                if (queue.jobs.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Expanded(child: Text('Marking', style: Theme.of(context).textTheme.titleMedium)),
+                      if (queue.markingCount > 0) Text('${queue.markingCount} in progress', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                     ],
-                    const SizedBox(height: 12),
-                    _ClassRow(
-                      label: selectedClass == null
-                          ? 'Which class? Tap to choose'
-                          : '${selectedClass.name} · ${selectedClass.period}${selectedClass.gradeLevel != null ? ' · Grade ${selectedClass.gradeLevel}' : ''}',
-                      hasClass: selectedClass != null,
-                      onTap: () => _askWhichClass(),
+                  ),
+                  if (queue.heldJobs.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Card(
+                        color: AiMarkerColors.warning.withValues(alpha: 0.10),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${queue.heldJobs.length} papers waiting on you', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Open the first marked paper. If it marked the way you would, release the rest — if not, fix the answer key or mode first and nothing has been wasted.',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: () {
+                                      final n = queue.heldJobs.length;
+                                      queue.releaseHeld(
+                                        students: context.read<StudentsService>(),
+                                        submissions: context.read<SubmissionsService>(),
+                                      );
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Marking the remaining $n papers.')),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                                    label: Text('Mark all ${queue.heldJobs.length}'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  TextButton(
+                                    onPressed: queue.discardHeld,
+                                    child: const Text('Discard'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
+                  const SizedBox(height: 10),
+                  Card(
+                    child: Column(
+                      children: [
+                        for (final job in queue.jobs.take(8))
+                          ListTile(
+                            leading: switch (job.status) {
+                              GradingJobStatus.marking => const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
+                              GradingJobStatus.held => const Icon(Icons.pause_circle_rounded, color: AiMarkerColors.warning),
+                              GradingJobStatus.done => const Icon(Icons.check_circle_rounded, color: AiMarkerColors.secondary),
+                              GradingJobStatus.error => const Icon(Icons.error_rounded, color: AiMarkerColors.error),
+                            },
+                            title: Text(job.label, style: Theme.of(context).textTheme.titleSmall),
+                            subtitle: Text(
+                              switch (job.status) {
+                                GradingJobStatus.marking => "Marking…",
+                                GradingJobStatus.held => "Waiting for your OK — check the first result",
+                                GradingJobStatus.done => "${job.result?.primaryDisplay ?? "Done"} — tap to view",
+                                GradingJobStatus.error => "Failed — tap to retry",
+                              },
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                            ),
+                            trailing: job.status == GradingJobStatus.marking
+                                ? null
+                                : IconButton(
+                                    icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral, size: 20),
+                                    onPressed: () => queue.remove(job.id),
+                                    tooltip: 'Dismiss',
+                                  ),
+                            onTap: job.status == GradingJobStatus.done
+                                ? () => context.push(
+                                      '${AppRoutes.result}?submissionId=${job.submissionId}',
+                                      extra: {
+                                        'gradeResult': job.result,
+                                        'imageBytes': job.pages.isEmpty ? null : job.pages.first,
+                                        'pageImages': job.pages,
+                                      },
+                                    )
+                                : job.status == GradingJobStatus.error
+                                    ? () => queue.retry(job.id, students: context.read<StudentsService>(), submissions: context.read<SubmissionsService>())
+                                    : null,
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                ],
+                Text('STUDENT INFO', style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
+                const SizedBox(height: 10),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _search,
+                          onChanged: _onSearchChanged,
+                          decoration: InputDecoration(
+                            hintText: 'Enter student name or scan...',
+                            prefixIcon: Icon(Icons.search_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
+                            suffixIcon: IconButton(onPressed: () => _search.clear(), icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8))),
+                          ),
+                        ),
+                        if (_studentHits.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          _StudentSearchResults(items: _studentHits, onSelect: _selectStudent),
+                        ],
+                        const SizedBox(height: 12),
+                        _ClassRow(
+                          label: selectedClass == null
+                              ? 'Which class? Tap to choose'
+                              : '${selectedClass.name} · ${selectedClass.period}${selectedClass.gradeLevel != null ? ' · Grade ${selectedClass.gradeLevel}' : ''}',
+                          hasClass: selectedClass != null,
+                          onTap: () => _askWhichClass(),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+          // Only while a drag is actually over the window. A teacher holding
+          // a folder over the page has to be able to see that letting go
+          // will do something.
+          if (_dragOver) const Positioned.fill(child: DropTargetOverlay()),
+        ],
       ),
     );
   }
@@ -1008,12 +1173,17 @@ class _StudentSearchResults extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(AppRadius.lg), border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.22))),
+      decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.22))),
       child: Column(
         children: [
           for (final s in items.take(6))
             ListTile(
-              leading: CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12), child: Text(s.name.isEmpty ? '?' : s.name.substring(0, 1), style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700))),
+              leading: CircleAvatar(
+                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                  child: Text(s.name.isEmpty ? '?' : s.name.substring(0, 1), style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700))),
               title: Text(s.name, style: Theme.of(context).textTheme.titleSmall),
               subtitle: Text(s.studentCode, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
               trailing: Icon(Icons.north_east_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.85)),

@@ -429,3 +429,28 @@ corrections-train-the-preset (better), drag-drop + paste intake (faster).
 
 **If only three get built: R15.1, R15.9, R15.11** — trust, margin, and
 distribution, in that order.
+
+---
+
+## R16 — Drag/paste intake: what is verified and what is not (2026-08-30)
+
+Verified in a real Chrome against a debug web build:
+- Listeners attach; `types.contains('Files')` detection works.
+- The "Drop the pages here" overlay appears on dragenter and clears on drop.
+- `preventDefault` fires on dragover AND drop, so the browser will not navigate
+  away to the dropped file.
+- The affordance line renders on the grading screen.
+- 12 unit tests cover the pure logic: filtering, mapping to `PickedPhoto`, the
+  60-file cap, paste naming, and PDF page grouping.
+
+- [ ] **R16.1 NOT verified: the last hop.** A synthetic `DragEvent` carrying a
+      real `File` reaches the handler (overlay reacts, preventDefault fires) but
+      **no acknowledgement dialog appears and nothing enters the pipeline.** A
+      plain JS listener on the identical event does see `files.length === 1`, so
+      the event is well-formed. The break is somewhere between
+      `e.dataTransfer.files` in the Dart drop handler and `onDropped`.
+      Note `_readAll` swallows per-file read errors by design, so a FileReader
+      failure would look exactly like this — silently nothing.
+      **Test with a real OS drag before trusting this feature.** It may well be
+      an artifact of synthetic events, which cannot be assumed either way.
+- [ ] **R16.2** Paste is untested end to end for the same reason.
