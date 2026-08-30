@@ -9,92 +9,215 @@
 <link rel="icon" href="icon.png" type="image/png">
 <link rel="apple-touch-icon" href="icon.png">
 <style>
+/* Same sheet-of-paper shell as the home page: a page on a desk, with the
+   exercise-book margin rule down the left. */
+
+:root {
+  color-scheme: light dark;
+
+  --desk:      #dee3ec;
+  --desk-edge: #cbd3e1;
+  --paper:     #fcfcfa;
+  --paper-2:   #f4f5f1;
+  --ink:       #12161e;
+  --ink-2:     #3a4353;
+  --muted:     #5c6478;
+  --pen:       #c1272d;
+  --brand:     #2563eb;
+  --brand-2:   #1d4ed8;
+  --rule:      #e0e3e9;
+  --graphite:  #cbd0d8;
+
+  --page-shadow: 0 1px 0 rgba(16, 22, 34, .05), 0 26px 54px -34px rgba(16, 22, 34, .55);
+
+  --gutter: 5rem;
+  --pad-r:  2.6rem;
+}
+
+@media (prefers-color-scheme: dark) {
   :root {
-    color-scheme: light dark;
-    --bg: #ffffff;
-    --fg: #1b1c1e;
-    --muted: #5c6068;
-    --rule: #e2e4e8;
-    --accent: #2f5d8c;
-    --panel: #f5f6f8;
+    --desk:      #070a10;
+    --desk-edge: #0d111a;
+    --paper:     #151922;
+    --paper-2:   #1b2029;
+    --ink:       #edf1f7;
+    --ink-2:     #c2cadb;
+    --muted:     #8d97ad;
+    --pen:       #ff8078;
+    --brand:     #8fb3ff;
+    --brand-2:   #b3ccff;
+    --rule:      #262e3c;
+    --graphite:  #38414f;
+
+    --page-shadow: 0 0 0 1px rgba(255, 255, 255, .04), 0 30px 60px -36px rgba(0, 0, 0, .9);
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #16181b;
-      --fg: #e6e8ea;
-      --muted: #a2a8b0;
-      --rule: #2c3036;
-      --accent: #8ab4e0;
-      --panel: #1e2126;
-    }
-  }
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--fg);
-    font: 17px/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          "Helvetica Neue", Arial, sans-serif;
-  }
-  main {
-    max-width: 40rem;
-    margin: 0 auto;
-    padding: 2.5rem 1.25rem 4rem;
-  }
-  h1 {
-    font-size: 1.85rem;
-    line-height: 1.2;
-    margin: 0 0 0.35rem;
-    letter-spacing: -0.01em;
-  }
-  h2 {
-    font-size: 1.2rem;
-    line-height: 1.3;
-    margin: 2.4rem 0 0.6rem;
-    padding-top: 1.4rem;
-    border-top: 1px solid var(--rule);
-    letter-spacing: -0.005em;
-  }
-  h3 {
-    font-size: 1rem;
-    margin: 1.6rem 0 0.35rem;
-    color: var(--accent);
-  }
-  p, li { margin: 0 0 0.9rem; }
-  ul { padding-left: 1.25rem; margin: 0 0 0.9rem; }
-  li { margin-bottom: 0.5rem; }
-  a { color: var(--accent); }
-  strong { font-weight: 650; }
-  .updated {
-    color: var(--muted);
-    font-size: 0.95rem;
-    margin: 0 0 1.5rem;
-  }
-  .lede { font-size: 1.05rem; }
-  .contact {
-    background: var(--panel);
-    border: 1px solid var(--rule);
-    border-radius: 10px;
-    padding: 0.85rem 1rem;
-    margin: 0 0 1.75rem;
-  }
-  .contact p { margin: 0; }
-  footer {
-    margin-top: 3rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--rule);
-    color: var(--muted);
-    font-size: 0.9rem;
-  }
-  @media (max-width: 30rem) {
-    body { font-size: 16px; }
-    main { padding: 1.75rem 1rem 3rem; }
-    h1 { font-size: 1.6rem; }
-  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--desk);
+  color: var(--ink);
+  font: 400 1.0625rem/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--brand); text-underline-offset: .18em; }
+a:hover { color: var(--brand-2); }
+:where(a):focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.desk {
+  min-height: 100vh;
+  padding: clamp(0rem, 3.2vw, 2.6rem) clamp(0rem, 3vw, 2.5rem) clamp(1.5rem, 3vw, 2.6rem);
+  background: radial-gradient(120% 70% at 50% 0%, var(--desk-edge) 0%, var(--desk) 62%);
+}
+.sheet {
+  position: relative;
+  max-width: 48rem;
+  margin-inline: auto;
+  background: var(--paper);
+  box-shadow: var(--page-shadow);
+  border-radius: 2px;
+}
+.sheet::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: var(--gutter);
+  width: 1px;
+  background: var(--pen);
+  opacity: .38;
+  pointer-events: none;
+}
+
+.site-header {
+  display: flex; align-items: center; gap: 1.4rem; flex-wrap: wrap;
+  min-height: 4.25rem;
+  padding-inline: calc(var(--gutter) + 1.4rem) var(--pad-r);
+  border-bottom: 1px solid var(--rule);
+}
+.brand {
+  display: inline-flex; align-items: center; gap: .6rem; margin-right: auto;
+  font-weight: 700; font-size: 1rem; letter-spacing: -.025em;
+  color: var(--ink); text-decoration: none;
+}
+.brand img { width: 26px; height: 26px; border-radius: 6px; display: block; }
+.site-nav { display: flex; align-items: center; gap: clamp(.9rem, 2.1vw, 1.6rem); }
+.site-nav a {
+  color: var(--ink-2); text-decoration: none;
+  font-size: .9125rem; font-weight: 500; letter-spacing: -.005em;
+}
+.site-nav a:hover { color: var(--pen); text-decoration: underline; }
+
+main {
+  max-width: 48rem;
+  padding: clamp(2rem, 3.4vw, 2.9rem) var(--pad-r) clamp(2.6rem, 4.5vw, 3.6rem)
+           calc(var(--gutter) + 1.4rem);
+}
+
+h1 {
+  margin: 0 0 .35rem;
+  font-size: clamp(1.8rem, 4.2vw, 2.3rem);
+  line-height: 1.1;
+  letter-spacing: -.034em;
+  font-weight: 800;
+  text-wrap: balance;
+}
+h2 {
+  margin: 2.3rem 0 .6rem;
+  padding-top: 1.35rem;
+  border-top: 1px solid var(--rule);
+  font-size: 1.2rem;
+  line-height: 1.25;
+  letter-spacing: -.024em;
+  font-weight: 700;
+}
+h3 {
+  margin: 1.6rem 0 .35rem;
+  font-size: .8125rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--pen);
+}
+
+p, li { margin: 0 0 .9rem; }
+p { text-wrap: pretty; }
+ul { padding-left: 1.25rem; margin: 0 0 .9rem; }
+li { margin-bottom: .5rem; }
+strong { font-weight: 650; }
+
+.updated {
+  margin: 0 0 1.5rem;
+  font: 600 .8125rem/1.4 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+        "Liberation Mono", monospace;
+  letter-spacing: .04em; color: var(--muted);
+}
+.updated strong { font-weight: 600; }
+.lede { font-size: 1.075rem; color: var(--ink-2); }
+
+.contact {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--pen);
+  border-radius: 3px;
+  padding: .85rem 1.05rem;
+  margin: 0 0 1.75rem;
+}
+.contact p { margin: 0; }
+
+footer {
+  margin-top: 2.6rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: .875rem;
+  line-height: 1.6;
+}
+footer p { margin: 0 0 .4rem; }
+footer p:last-child { margin-bottom: 0; }
+
+@media (max-width: 61.99rem) {
+  :root { --gutter: 1.5rem; --pad-r: 1.6rem; }
+  .site-header { padding-inline: 2.6rem var(--pad-r); }
+  main { padding-left: 2.6rem; }
+}
+@media (max-width: 34rem) {
+  :root { --gutter: 1rem; --pad-r: 1.25rem; }
+  body { font-size: 1rem; }
+  .desk { padding-inline: 0; }
+  .sheet { border-radius: 0; }
+  .site-header { padding-inline: 1.95rem var(--pad-r); min-height: 0; padding-block: .9rem; gap: .8rem 1.1rem; }
+  .brand { margin-right: 0; width: 100%; }
+  .site-nav { flex-wrap: wrap; gap: .65rem 1rem; }
+  main { padding-left: 1.95rem; }
+}
 </style>
 </head>
 <body>
+
+<div class="desk">
+<div class="sheet">
+
+<header class="site-header">
+  <a class="brand" href="./">
+    <img src="icon.png" width="26" height="26" alt="The Markless app icon">
+    Markless
+  </a>
+  <nav class="site-nav" aria-label="Primary">
+    <a href="./">Home</a>
+    <a href="delete-account.html">Delete your account</a>
+    <a href="https://github.com/drposhbug/ai-marking-dreamflow">Source</a>
+  </nav>
+</header>
+
 <main>
 
   <h1>Markless — Privacy Policy</h1>
@@ -200,5 +323,8 @@
   </footer>
 
 </main>
+
+</div>
+</div>
 </body>
 </html>
