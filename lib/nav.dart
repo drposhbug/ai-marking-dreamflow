@@ -8,7 +8,6 @@ import 'package:marking_prokect_v2/screens/classes/classes_main_screen.dart';
 import 'package:marking_prokect_v2/screens/dashboard/dashboard_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/grading_home_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/grading_context_screen.dart';
-import 'package:marking_prokect_v2/screens/grading/image_preview_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/pilot_review_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/result_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/ways_to_mark_screen.dart';
@@ -73,7 +72,6 @@ class AppRouter {
         final jobId = state.uri.queryParameters['jobId'] ?? '';
         return MaterialPage(child: PilotReviewScreen(jobId: jobId));
       }),
-      GoRoute(path: AppRoutes.imagePreview, name: 'imagePreview', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ImagePreviewScreen())),
       GoRoute(path: AppRoutes.gradingContext, name: 'gradingContext', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: GradingContextScreen())),
       GoRoute(path: AppRoutes.result, name: 'result', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final submissionId = state.uri.queryParameters['submissionId'];

@@ -29,6 +29,13 @@ class ClassHubScreen extends StatefulWidget {
 class _ClassHubScreenState extends State<ClassHubScreen> {
   final _search = TextEditingController();
 
+  /// Reading an attendance sheet is a paid OCR call that runs for seconds
+  /// behind nothing but a SnackBar. Without this, a teacher who taps again
+  /// because "nothing happened" pays twice AND gets the roster twice over:
+  /// both runs snapshot the same existing-names set, so neither sees the
+  /// other's inserts and thirty students become sixty.
+  bool _scanningAttendance = false;
+
   @override
   void dispose() {
     _search.dispose();
@@ -295,10 +302,12 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: FilledButton.tonalIcon(
-                onPressed: _scanAttendance,
+                onPressed: _scanningAttendance ? null : _scanAttendance,
                 style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xl))),
-                icon: const Icon(Icons.photo_camera_rounded),
-                label: const Text('Scan Attendance'),
+                icon: _scanningAttendance
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.photo_camera_rounded),
+                label: Text(_scanningAttendance ? 'Reading names…' : 'Scan Attendance'),
               ),
             ),
           ],
@@ -386,18 +395,22 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
       if (source == null) return;
     }
 
+    final XFile? image = await ImagePicker().pickImage(source: source, imageQuality: 85);
+    if (image == null || !mounted) return;
+
+    setState(() => _scanningAttendance = true);
     try {
-      final XFile? image = await ImagePicker().pickImage(source: source, imageQuality: 85);
-      if (image == null || !mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reading names off the attendance sheet…')));
       final bytes = await image.readAsBytes();
       final found = await AiGradingService().extractRoster(pages: [bytes]);
       if (!mounted) return;
 
       final students = context.read<StudentsService>();
-      final existing = students.byClass(widget.classId).map((s) => s.name.trim().toLowerCase()).toSet();
       var added = 0;
       for (final r in found) {
+        // Re-read the roster each time rather than snapshotting it once. A
+        // sheet that lists the same name twice, or a run racing anything else
+        // that adds students, would otherwise insert every duplicate.
+        final existing = students.byClass(widget.classId).map((s) => s.name.trim().toLowerCase()).toSet();
         if (existing.contains(r.name.trim().toLowerCase())) continue;
         final code = r.studentId ??
             '${r.name.trim().split(RegExp(r'\s+')).map((w) => w[0].toUpperCase()).join()}${DateTime.now().millisecondsSinceEpoch % 1000}';
@@ -412,6 +425,8 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
       debugPrint('ClassHub._scanAttendance failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not read the attendance sheet — try a clearer photo.')));
+    } finally {
+      if (mounted) setState(() => _scanningAttendance = false);
     }
   }
 }
