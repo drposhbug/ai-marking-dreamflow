@@ -257,23 +257,43 @@ class GradebookTemplate {
       if (parts.length >= 2) candidates.add('${parts[1].trim()} ${parts[0].trim()}');
     }
 
-    String norm(String s) =>
-        s.toLowerCase().replaceAll(RegExp(r'[^a-z ]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
-    final wanted = candidates.map(norm).where((c) => c.isNotEmpty).toList(growable: false);
+    final wanted = candidates.map(_normName).where((c) => c.isNotEmpty).toList(growable: false);
 
-    // Pass one: the same name, exactly.
+    // Pass one: the same name, exactly. Accents are folded rather than
+    // stripped, so a gradebook holding "Ana Ruiz" and a register holding
+    // "Ana Ruíz" are one student and match here instead of falling through
+    // to the guessing pass.
     for (var i = 0; i < marks.length; i++) {
       if (used.contains(i)) continue;
-      if (wanted.contains(norm(marks[i].studentName))) return i;
+      if (wanted.contains(_normName(marks[i].studentName))) return i;
     }
-    // Pass two: everything else sameStudentName is willing to accept.
+
+    // Pass two: everything else sameStudentName is willing to accept —
+    // but only when exactly one mark accepts it. Two students called Ana
+    // both answer to a first-name match, and picking whichever came first
+    // writes one child's mark onto the other's row without a word. An
+    // ambiguous name is left for the teacher, who is told about it.
+    var found = -1;
     for (var i = 0; i < marks.length; i++) {
       if (used.contains(i)) continue;
-      for (final c in candidates) {
-        if (sameStudentName(c, marks[i].studentName)) return i;
-      }
+      final hit = candidates.any((c) => sameStudentName(c, marks[i].studentName));
+      if (!hit) continue;
+      if (found >= 0) return null; // more than one: do not guess
+      found = i;
     }
-    return null;
+    return found < 0 ? null : found;
+  }
+
+  /// Lower-cased, accent-folded, punctuation-free, single-spaced.
+  static String _normName(String s) {
+    const from = 'àáâãäåāăąèéêëēĕėęěìíîïĩīĭįòóôõöøōŏőùúûüũūŭůçćĉċčñńņňýÿŷ';
+    const to = 'aaaaaaaaaeeeeeeeeeiiiiiiiiooooooooouuuuuuuucccccnnnnyyy';
+    final b = StringBuffer();
+    for (final ch in s.toLowerCase().split('')) {
+      final i = from.indexOf(ch);
+      b.write(i >= 0 ? to[i] : ch);
+    }
+    return b.toString().replaceAll(RegExp(r'[^a-z ]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 }
 
