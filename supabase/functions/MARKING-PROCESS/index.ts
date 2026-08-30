@@ -2132,6 +2132,166 @@ ${rows.map((r) => `[${r.i}] ${r.text}`).join("\n")}`;
     return json({ results, provider: [...usedProviders].join("+") || "claude" });
   }
 
+  // ── Report card comments ──────────────────────────────────────────────
+  //
+  // A term of one student's marked work, turned into a draft the teacher
+  // edits and sends. Report writing is thirty comments a class, three times
+  // a year — dreaded more than the marking itself — and this app is the
+  // only one that can do it honestly, because it already holds the
+  // evidence: every mark, rubric line, strength and next step.
+  //
+  // The failure mode here is worse than "no output". A comment that invents
+  // a claim about a child goes home on school letterhead and the teacher
+  // has no way of knowing to check it. So the rules below are written
+  // around refusing rather than filling: say less, never guess, and when
+  // there is not enough evidence say so instead of writing something
+  // plausible.
+  //
+  // Nothing identifying arrives. Students are an ARRAY, the model answers
+  // by array position, it writes "{{name}}" where a name belongs, and the
+  // app puts the real name back on the device. See
+  // lib/services/report_comments.dart for the other half of this.
+  if (action === "report_comments") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const students = Array.isArray(payload?.students) ? payload.students : [];
+    if (students.length === 0) return json({ error: "students are required" }, 400);
+    // Larger than any real class. A request past this is a bug or a whole
+    // teaching load sent at once, and either way it belongs in batches.
+    if (students.length > 60) return json({ error: "Too many students in one call — do a class at a time." }, 400);
+
+    const gate = await budgetGate(teacherId, true);
+    if (gate) return gate;
+
+    const tone = ["warm", "balanced", "formal"].includes(String(payload?.tone))
+      ? String(payload.tone)
+      : "warm";
+    // 25..160 words. Below 25 nothing survives; above 160 the model starts
+    // padding, and padding is where invention creeps in.
+    const words = Math.min(160, Math.max(25, Math.round(Number(payload?.words ?? 70) || 70)));
+    const includeNextStep = payload?.includeNextStep !== false;
+    const reportSubject = String(payload?.subject ?? "").slice(0, 80);
+    const reportGrade = Number(payload?.gradeLevel ?? 0) || null;
+    const termLabel = String(payload?.term ?? "this term").slice(0, 60);
+
+    const COMMENT_SCHEMA = {
+      type: "object",
+      properties: {
+        comments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              i: { type: "integer" },
+              comment: { type: "string" },
+              grounds: { type: "array", items: { type: "string" } },
+            },
+            required: ["i", "comment", "grounds"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["comments"],
+      additionalProperties: false,
+    };
+
+    // Static across every teacher and every chunk of a class, so it is
+    // cached: a class of thirty is several calls that all re-read this at
+    // ~10% input cost.
+    const REPORT_RULES =
+      `You are helping a teacher write report card comments. You are given, for each student, a summary of the work they actually had marked this term: scores, rubric lines, and the strengths and next steps recorded when each piece was marked. You write ONE draft comment per student. The teacher edits and approves every one — you are producing a first draft, never a finished report.
+
+THE ONE RULE THAT MATTERS: write nothing you cannot point to in that student's evidence.
+- Every claim must trace to a score, a rubric line, or a recorded strength/next step for THAT student.
+- Never infer effort, attitude, behaviour, attendance, participation, confidence, enjoyment, home life, or ability. None of that is in the evidence. Marked work shows what a student produced, not who they are.
+- Never compare a student to the class, to other students, or to an expectation you were not given.
+- Never invent a number, a topic, an assignment name or a date. Use only figures that appear in the evidence.
+- When the evidence is thin (one piece of work, or no rubric detail), write a SHORTER comment that says only what is there. A short honest comment is a success. Padding is the failure.
+- If there is genuinely nothing to say, say that the work seen so far is too limited to report on and leave it to the teacher.
+
+IDENTITY: you are never told who these students are, and you must not guess. Write "{{name}}" exactly, wherever the student's name belongs — the app substitutes the real name. Use the "pronoun" given for that student. Never write a name, an initial, or "Student 3".
+
+WHAT MAKES THESE WORTH READING: specifics from the evidence, in plain words a parent understands.
+- Good: "{{name}} handled unit conversion confidently across all three assessments, and scored highest on the graph interpretation questions."
+- Good: "Across the term {{name}} averaged 62%, with the marks lost concentrated in the written explanation criterion (averaging 41% over four pieces)."
+- Bad: "{{name}} is a hard-working and enthusiastic student who always tries their best." — none of that is in the evidence.
+- Bad: "{{name}} has shown great improvement." — only claim improvement when the trend figure supports it.
+
+STYLE
+- Write about the work, in the third person, addressed to a parent reading the report.
+- Name the subject or topic where the evidence names it. Do not name a topic it does not.
+- No markdown, no bullet points, no headings — plain prose in one paragraph.
+- Do not open every comment the same way.
+
+ALSO RETURN "grounds": 2 to 4 short phrases naming the exact evidence you used, e.g. "average 62% over 5 pieces", "unit conversion criterion 45% across 3". This is shown to the teacher so a claim can be checked against a real mark instead of taken on trust. If you wrote a claim you cannot ground, remove the claim.`;
+
+    const briefFor = (rows: unknown[]) =>
+      `${tone === "formal"
+        ? "Tone: formal and factual — this school's reports read like official records."
+        : tone === "balanced"
+        ? "Tone: plain and even — neither effusive nor cold."
+        : "Tone: warm and encouraging, but never at the cost of accuracy. Warmth comes from how the evidence is put, not from adding praise the evidence does not support."}
+Length: about ${words} words each, and less when the evidence is thin.
+${includeNextStep
+        ? "End each comment with one concrete next step drawn from that student's recorded next steps or weakest rubric line."
+        : "Do not add a next step — the teacher adds those separately."}
+Reporting period: ${termLabel}.${reportSubject ? `\nSubject: ${reportSubject}.` : ""}${reportGrade ? `\nGrade level: ${reportGrade} — pitch the language for a parent of a grade ${reportGrade} student.` : ""}
+
+EVIDENCE (one entry per student; "percent" is that piece as a percentage, "criteria" are rubric lines averaged across the term with how many times each was seen, "trendPoints" is the change in percentage points from the first half of the period to the second, "didWell"/"nextSteps" are what the marker recorded at the time):
+${JSON.stringify(rows)}
+
+Return one comment for EVERY student above, echoing back the same "i" you were given.`;
+
+    // deno-lint-ignore no-explicit-any
+    const comments: any[] = [];
+    // Six at a time. One call for a whole class would be cheaper, but a
+    // thirty-student answer runs long enough to risk the output limit, and
+    // a truncated response loses every comment in it rather than one.
+    for (let at = 0; at < students.length; at += 6) {
+      const rows = students.slice(at, at + 6);
+      const usage = { inputTokens: 0, outputTokens: 0 };
+      // deno-lint-ignore no-explicit-any
+      let parsed: any = null;
+      try {
+        parsed = await callClaude([], "image/jpeg", {
+          systemBlocks: [{ type: "text", text: REPORT_RULES, cache_control: { type: "ephemeral", ttl: "1h" } }],
+          userText: briefFor(rows),
+          schema: COMMENT_SCHEMA,
+          usage,
+          // Judgement about a child, written once and sent home. This is
+          // not the place to save output tokens.
+          effort: "medium",
+        });
+      } catch (e) {
+        console.error("report_comments chunk failed:", e instanceof Error ? e.message : e);
+        // Report the gap rather than dropping students silently — a
+        // teacher must never discover in June that four comments were
+        // never drafted.
+        for (const r of rows) {
+          comments.push({ i: Number((r as { i?: number })?.i ?? -1), comment: "", grounds: [], error: "not drafted" });
+        }
+        continue;
+      }
+      await logUsage(teacherId, "report_comments", usage.inputTokens, usage.outputTokens);
+      const got = Array.isArray(parsed?.comments) ? parsed.comments : [];
+      const byI = new Map(got.map((c: { i: number }) => [Number(c?.i), c]));
+      for (const r of rows) {
+        const i = Number((r as { i?: number })?.i ?? -1);
+        // deno-lint-ignore no-explicit-any
+        const c: any = byI.get(i);
+        comments.push({
+          i,
+          comment: String(c?.comment ?? "").slice(0, 2000),
+          grounds: (Array.isArray(c?.grounds) ? c.grounds : [])
+            .slice(0, 6)
+            .map((g: unknown) => String(g).slice(0, 160)),
+          ...(c ? {} : { error: "not drafted" }),
+        });
+      }
+    }
+    return json({ comments, provider: "claude" });
+  }
+
   // ── Setup lists (classes, students, student↔class links). Marked work
   //    already follows the account via submissions_cloud; these used to be
   //    phone-only, so clearing the app lost every class a teacher had made.

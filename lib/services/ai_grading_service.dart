@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
+import 'package:marking_prokect_v2/services/report_comments.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ---------- Request ----------
@@ -712,6 +713,73 @@ class AiGradingService {
       }
     }
     return out;
+  }
+
+  /// Drafts a report card comment per student from a term of marked work.
+  ///
+  /// [students] are the anonymous evidence payloads from
+  /// [ReportComments.anonymousPayload] — summarised on the device, keyed by
+  /// position, and carrying NO name, id or page image. Exactly as with
+  /// marking, the model is never told whose work it is looking at; the
+  /// draft comes back with a `{{name}}` placeholder and the app fills it in.
+  ///
+  /// A whole class goes in one request the way [markResponses] does, so
+  /// thirty comments is one round trip rather than thirty.
+  ///
+  /// Returned by the index that was sent, never by arrival order — a chunk
+  /// that failed server-side comes back with an empty comment, and matching
+  /// on position would then shift every later student's draft onto the
+  /// wrong child.
+  Future<Map<int, ReportDraft>> reportComments({
+    required String teacherId,
+    required List<Map<String, dynamic>> students,
+    ReportOptions options = const ReportOptions(),
+    String? subject,
+    int? gradeLevel,
+    String? term,
+  }) async {
+    // Sent whole. The edge function splits the class into groups of six
+    // before it calls the model, so a long class cannot truncate one reply
+    // and a group that fails costs only itself — chunking again here would
+    // just re-send the system prompt more often.
+    final client = Supabase.instance.client;
+    try {
+      final res = await client.functions.invoke(
+        'MARKING-PROCESS',
+        body: {
+          'action': 'report_comments',
+          'teacherId': teacherId,
+          'students': students,
+          ...options.toJson(),
+          if (subject != null && subject.isNotEmpty) 'subject': subject,
+          if (gradeLevel != null) 'gradeLevel': gradeLevel,
+          if (term != null && term.isNotEmpty) 'term': term,
+        },
+      );
+      final data = res.data;
+      if (data is Map && data['error'] != null) {
+        _maybeThrowUsageLimitMap(data);
+        throw Exception(data['error'].toString());
+      }
+      final out = <int, ReportDraft>{};
+      if (data is Map && data['comments'] is List) {
+        for (final c in (data['comments'] as List).whereType<Map>()) {
+          final i = (c['i'] as num?)?.toInt() ?? -1;
+          if (i < 0) continue;
+          final text = (c['comment'] ?? '').toString().trim();
+          if (text.isEmpty) continue; // a chunk the server could not draft
+          out[i] = ReportDraft(
+            index: i,
+            comment: text,
+            grounds: (c['grounds'] as List? ?? const []).map((e) => e.toString()).toList(growable: false),
+          );
+        }
+      }
+      return out;
+    } catch (e) {
+      _maybeThrowUsageLimit(e);
+      rethrow;
+    }
   }
 
   /// Throws [UsageLimitException] when a response map is the budget gate's

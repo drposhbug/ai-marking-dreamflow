@@ -15,6 +15,7 @@ class AppRoutes {
   static const prepareTest = '/prepare-test';
   static const waysToMark = '/ways-to-mark';
   static const exportMarks = '/export-marks';
+  static const reportComments = '/report-comments';
 
   static const imagePreview = '/grading/image-preview';
   static const gradingContext = '/grading/context';

@@ -579,6 +579,43 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            // Report writing is the other job that eats a teacher's
+            // evenings, and the only app that can do it honestly is the
+            // one already holding the marks. Put where the marking lives,
+            // because that is where the evidence comes from.
+            Card(
+              child: InkWell(
+                splashFactory: NoSplash.splashFactory,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                onTap: () => context.push(AppRoutes.reportComments),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: AiMarkerColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                        child: const Icon(Icons.rate_review_rounded, color: AiMarkerColors.secondary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Report card comments', style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 2),
+                            Text('A draft for every student, written from their own marks this term.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.9)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             // Replaces a passive "the assistant is clever" line with the
             // one thing that actually changes how long an evening takes.
             // Left to guess, most teachers reach for the camera — the
