@@ -6,6 +6,7 @@ import 'package:marking_prokect_v2/data/curriculum_regions.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
@@ -694,22 +695,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // In a browser this switch cannot do anything: hiding
+                  // names needs on-device text recognition and there is
+                  // none. It is greyed out and labelled rather than left
+                  // sitting on, which would tell a teacher a lie they act
+                  // on with a child's work.
                   _ToggleRow(
-                    title: 'Hide student names before marking',
-                    value: appState.anonymizeUploads,
-                    onChanged: (v) async {
-                      final auth = context.read<AuthService>().currentUser;
-                      if (auth == null) return;
-                      await context.read<AppState>().setAnonymizeUploads(teacherId: auth.id, on: v);
-                    },
+                    title: Anonymizer.available
+                        ? 'Hide student names before marking'
+                        : 'Hide student names before marking — not available in a browser',
+                    value: Anonymizer.available && appState.anonymizeUploads,
+                    onChanged: !Anonymizer.available
+                        ? null
+                        : (v) async {
+                            final auth = context.read<AuthService>().currentUser;
+                            if (auth == null) return;
+                            await context.read<AppState>().setAnonymizeUploads(teacherId: auth.id, on: v);
+                          },
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
                     child: Text(
-                      'Your phone reads the name off each paper and blacks it out before the page is sent to be marked — so the work is marked, not the student. The name never leaves this device; it is what files the result under the right student here. You still see the original paper, name and all.',
+                      Anonymizer.available
+                          ? 'Your phone reads the name off each paper and blacks it out before the page is sent to be marked — so the work is marked, not the student. The name never leaves this device; it is what files the result under the right student here. You still see the original paper, name and all. If it cannot read a name field on a page, that page is sent as it is, and the app tells you so.'
+                          : 'Blacking names out needs on-device text recognition, and a browser does not have it. Pages you upload here go for marking exactly as you picked them, name and all. Cover names before uploading, or mark from a Google Form or CSV — that route sends answers keyed by row number and never sends the name column.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                     ),
                   ),
+                  if (!Anonymizer.available)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                      child: OutlinedButton.icon(
+                        onPressed: () => context.push(AppRoutes.importResponses),
+                        icon: const Icon(Icons.table_chart_rounded, size: 18),
+                        label: const Text('Mark from a Google Form or CSV'),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -924,7 +945,10 @@ class _GivingRow extends StatelessWidget {
 class _ToggleRow extends StatelessWidget {
   final String title;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  /// Null greys the switch out — for a setting that cannot do anything on
+  /// this platform. A switch that looks live and changes nothing is worse
+  /// than no switch at all.
+  final ValueChanged<bool>? onChanged;
 
   const _ToggleRow({required this.title, required this.value, required this.onChanged});
 
@@ -935,7 +959,14 @@ class _ToggleRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
-          Expanded(child: Text(title, style: Theme.of(context).textTheme.titleSmall)),
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: onChanged == null ? AiMarkerColors.neutral : null,
+                  ),
+            ),
+          ),
           Switch(value: value, onChanged: onChanged, activeColor: cs.primary),
         ],
       ),

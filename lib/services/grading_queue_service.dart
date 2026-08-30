@@ -34,6 +34,11 @@ class GradingJob {
   // stay quiet — the batch announces once for the whole set).
   bool notifyLearnedKey = true;
 
+  /// What actually happened to the student's name on the copy that was
+  /// sent. Set the moment the pages go up, and shown to the teacher — a
+  /// paper that went out with the name on it must not be a silent event.
+  NameHiding nameHiding = NameHiding.notFound;
+
   /// Completes when this job finishes (done or error) — lets a batch wait
   /// for its pilot paper before releasing the rest.
   final Completer<void> _done = Completer<void>();
@@ -308,11 +313,17 @@ class GradingQueueService extends ChangeNotifier {
       // real paper, name and all, when they open the result.
       var uploadReq = req;
       String? localName;
-      if (anonymizeUploads) {
-        final (clean, nameFound) = await Anonymizer.pages(job.pages);
-        localName = nameFound;
-        uploadReq = _withPages(req, clean);
+      var anyRedacted = false;
+      if (anonymizeUploads && Anonymizer.available) {
+        final set = await Anonymizer.pageSet(job.pages);
+        localName = set.nameOnPaper;
+        anyRedacted = set.anyRedacted;
+        uploadReq = _withPages(req, set.pages);
       }
+      // Recorded before the request goes out, so whatever the teacher is
+      // shown afterwards describes what really left the device.
+      job.nameHiding = Anonymizer.outcome(settingOn: anonymizeUploads, anyRedacted: anyRedacted);
+      notifyListeners();
 
       final res = await ai.grade(uploadReq);
 

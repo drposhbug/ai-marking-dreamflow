@@ -1,6 +1,6 @@
 # Markless — Security & Compliance
 
-**Last updated: 25 August 2026**
+**Last updated: 30 August 2026**
 
 This is the document a school administrator, district privacy officer or
 procurement reviewer should be handed. It states what Markless does with
@@ -41,8 +41,8 @@ whose work it is.
 
 | What | Where it goes |
 |---|---|
-| The student's name | **Stays on the device.** Read locally, blacked out of the page before upload |
-| Page images | Sent for marking, with identity fields redacted, then discarded |
+| The student's name | **Stays on the device — on iOS and Android.** Read locally, blacked out of the page before upload. **In a browser this does not happen at all**; see §3.1 |
+| Page images | Sent for marking, with identity fields redacted on mobile, then discarded |
 | Typed answers (Form/CSV import) | Sent keyed by **row number**, never by name; known names scrubbed from the text |
 | Marks, feedback, scores | Stored on the teacher's account; never sent to a model afterwards |
 | Teacher account id | Sent, to meter usage against the right account |
@@ -82,7 +82,7 @@ information directly from children and shows no ads.
 
 ## 3. What leaves the device, exactly
 
-### Marking a photographed or scanned paper
+### Marking a photographed or scanned paper (iOS and Android)
 
 1. The page is processed on the device (deskew, contrast, sharpen).
 2. **On-device text recognition finds identity fields** — `Name:`, `Student:`,
@@ -99,15 +99,44 @@ information directly from children and shows no ads.
    right student.
 
 This is controlled by **Settings → Privacy → "Hide student names before
-marking"**, on by default.
+marking"**, on by default. It is available on iOS and Android only; in a
+browser the setting is disabled and says so, because there is nothing behind
+it there (§3.1).
 
 **Its limits, stated plainly.** Redaction covers name *fields*. It cannot
 cover a name written somewhere unexpected, a name inside the body of an essay,
 or a signature on artwork; and if the handwriting is unreadable to the
-recognizer, the field is not found and the page uploads unredacted (the app
-reports when this happened). Handwriting is itself arguably identifying, and
-nothing removes that. Markless reduces exposure substantially; it does not
-make a scanned page anonymous, and no vendor should claim otherwise.
+recognizer, the field is not found and the page uploads unredacted. The app
+reports that: before the teacher sends a paper it says whether names will be
+hidden, and on the check-the-first-one screen for a class set it says whether
+the name on that paper was actually covered — because that screen is where the
+teacher decides whether the other twenty-nine go the same way. Handwriting is
+itself arguably identifying, and nothing removes that. Markless reduces
+exposure substantially; it does not make a scanned page anonymous, and no
+vendor should claim otherwise.
+
+### 3.1 What is different in a browser
+
+Name redaction needs on-device text recognition. That is a native library
+(Google ML Kit) and browsers do not have it. So on the web version of
+Markless:
+
+- **Nothing is read off the page and nothing is blacked out.** A photo or PDF
+  uploaded in a browser is sent for marking exactly as the teacher picked it,
+  with whatever name is written on it.
+- **The Settings toggle "Hide student names before marking" is disabled** in a
+  browser and says why, rather than sitting on and doing nothing.
+- **The first time a teacher uploads student work in a browser, the app says
+  this and requires an explicit acknowledgement** before the page goes
+  anywhere. The acknowledgement is remembered per teacher.
+- **The Google Form / CSV route is unaffected and is the recommended route on
+  the web.** It is pure Dart, needs no on-device recognition, sends answers
+  keyed by row number, and never transmits the name column. The grading screen
+  says so.
+
+A district that requires page images to be redacted before transmission should
+treat the browser version as not meeting that requirement, and use the iOS or
+Android app, or the Form/CSV route, for photographed work.
 
 ### Marking an imported Google Form / CSV
 
@@ -129,8 +158,8 @@ analytics SDK in the app.
 
 | Provider | Purpose | Data it receives | Trains on it? |
 |---|---|---|---|
-| **Anthropic** (Claude) | Primary marking | Redacted page images, marking instructions | No — API data is not used for training |
-| **Google** (Gemini) | Fallback marking, page transcription | Redacted page images | No, under paid API terms |
+| **Anthropic** (Claude) | Primary marking | Page images — redacted on iOS/Android, unredacted from a browser (§3.1) — and marking instructions | No — API data is not used for training |
+| **Google** (Gemini) | Fallback marking, page transcription | Page images, on the same terms as the row above | No, under paid API terms |
 | **DeepSeek** | Cheap route for objective/short answers | Answer **text** only, no images, no names | **Yes — see below** |
 | **Supabase** | Database, marking service hosting | Marks, feedback, classes, students, account | No |
 | **RevenueCat / Google Play / Apple** | Subscriptions | Purchase records. No payment details reach us | No |
@@ -189,12 +218,16 @@ Listed because a reviewer will find them anyway, and a vendor who hides them
 should not be trusted with student work.
 
 1. **Redaction is best-effort**, per §3.
-2. **DeepSeek's terms do not meet the no-training standard**, per §4.
-3. **No SOC 2 report.** Markless is a small product; there has been no
+2. **Redaction does not run in a browser at all**, per §3.1. The web version
+   uploads photographed work with names on it. The app says so and asks the
+   teacher to acknowledge it before the first upload, but saying so is not the
+   same as fixing it, and this is a real difference between platforms.
+3. **DeepSeek's terms do not meet the no-training standard**, per §4.
+4. **No SOC 2 report.** Markless is a small product; there has been no
    third-party security audit.
-4. **No signed DPA template yet.** Available on request, negotiated per
+5. **No signed DPA template yet.** Available on request, negotiated per
    district.
-5. **Sub-processor changes** are not currently announced on a schedule. If a
+6. **Sub-processor changes** are not currently announced on a schedule. If a
    district requires notice before a new subprocessor is added, that must be
    written into the agreement.
 
