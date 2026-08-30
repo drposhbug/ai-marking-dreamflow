@@ -17,6 +17,7 @@ import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/widgets/blocking_progress.dart';
 import 'package:provider/provider.dart';
 
 /// Sentinel returned by the key sheet when the trash icon on a saved key is
@@ -270,25 +271,11 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
   Future<void> _importKeyFromDrive(String teacherId) async {
     final pages = <ScannedPage>[];
     try {
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 18),
-              Expanded(child: Text('Loading from Google Drive…')),
-            ],
-          ),
-        ),
+      final import = await runWithBlockingProgress(
+        context,
+        message: 'Loading from Google Drive…',
+        task: () => DrivePicker.importScannedPages(),
       );
-      DriveImport import;
-      try {
-        import = await DrivePicker.importScannedPages();
-      } finally {
-        if (mounted) Navigator.of(context, rootNavigator: true).pop();
-      }
       if (!mounted || import.cancelled) return;
       if (import.pages.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -316,26 +303,16 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
   }
 
   Future<void> _extractKeyFromPages(String teacherId, List<ScannedPage> pages) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 18),
-            Expanded(child: Text('Reading the answer key…\nThis happens only once.')),
-          ],
-        ),
-      ),
-    );
     try {
-      final key = await AiGradingService().extractAnswerKey(
-        teacherId: teacherId,
-        pages: pages.map((p) => p.bytes).toList(growable: false),
+      final key = await runWithBlockingProgress(
+        context,
+        message: 'Reading the answer key…\nThis happens only once.',
+        task: () => AiGradingService().extractAnswerKey(
+          teacherId: teacherId,
+          pages: pages.map((p) => p.bytes).toList(growable: false),
+        ),
       );
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop(); // close progress dialog
       setState(() {
         _answerKeyId = key.id;
         _answerKeyName = key.name;
@@ -346,7 +323,6 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not read the answer key: $e')),
       );

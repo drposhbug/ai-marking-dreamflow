@@ -239,58 +239,88 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     }
 
     final todo = capPicked(picked);
-    var done = 0;
-    var cancelled = false;
-    late final StateSetter refresh;
-
     if (!mounted) return null;
-    showDialog<void>(
+
+    return _withCountedProgress<BulkPageResult>(
+      total: todo.length,
+      label: (done, total) => 'Preparing photo ${done + (done < total ? 1 : 0)} of $total',
+      note: 'Straightening and sharpening each page. You can stop and keep what is ready.',
+      work: (run) => processPickedPages(
+        todo,
+        process: DocumentProcessor.processPage,
+        isCancelled: () => run.stopped,
+        onProgress: (d, t) => run.report(d, t),
+      ),
+    );
+  }
+
+  /// Runs [work] behind a dialog that shows a real count and a Stop button.
+  ///
+  /// A pile of photos or a class set of PDFs is minutes of work, and a bare
+  /// spinner through all of it is how a teacher ends up force-quitting halfway
+  /// and losing the lot. So she gets three things: a count that moves, a way
+  /// out that keeps whatever is already done, and a close that can only ever
+  /// take this dialog. Back is deliberately blocked while it runs, which makes
+  /// closing in a finally essential — a failure part-way must never leave her
+  /// trapped behind a dialog nothing can dismiss.
+  Future<T> _withCountedProgress<T>({
+    required String Function(int done, int total) label,
+    required String note,
+    required Future<T> Function(_CountedRun run) work,
+    int total = 0,
+  }) async {
+    final run = _CountedRun()..total = total;
+    final navigator = Navigator.of(context, rootNavigator: true);
+
+    // Held as a route rather than closed through the builder's context: work
+    // that finishes before the dialog has built would otherwise leave it up,
+    // and popping "whatever is on top" is what threw teachers off screens.
+    final route = DialogRoute<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => PopScope(
         // Back must not dismiss the dialog out from under a run that is still
-        // going -- Cancel is the way out, so the loop stops with it.
+        // going — Stop is the way out, so the loop stops with it.
         canPop: false,
         child: AlertDialog(
           content: StatefulBuilder(builder: (ctx, setInner) {
-            refresh = setInner;
+            run._redraw = () => setInner(() {});
             return Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Preparing photo ${done + (done < todo.length ? 1 : 0)} of ${todo.length}'),
+                Text(label(run.done, run.total)),
                 const SizedBox(height: 14),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.sm),
-                  child: LinearProgressIndicator(value: todo.isEmpty ? 0 : done / todo.length),
+                  // A bar that fills is only honest once the total is known;
+                  // until then it sweeps rather than claiming a fraction.
+                  child: LinearProgressIndicator(value: run.total == 0 ? null : run.done / run.total),
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Straightening and sharpening each page. You can stop and keep what is ready.',
+                  note,
                   style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
                 ),
               ],
             );
           }),
           actions: [
-            TextButton(onPressed: () => cancelled = true, child: const Text('Stop')),
+            TextButton(onPressed: () => run.stopped = true, child: const Text('Stop')),
           ],
         ),
       ),
     );
+    unawaited(navigator.push(route));
 
-    final result = await processPickedPages(
-      todo,
-      process: DocumentProcessor.processPage,
-      isCancelled: () => cancelled,
-      onProgress: (d, _) {
-        done = d;
-        refresh(() {});
-      },
-    );
-
-    if (mounted) Navigator.of(context, rootNavigator: true).pop();
-    return result;
+    try {
+      return await work(run);
+    } finally {
+      run._redraw = null;
+      // removeRoute rather than pop: it works whether or not the dialog has
+      // finished animating in, and can only ever remove this route.
+      if (route.isActive) navigator.removeRoute(route);
+    }
   }
 
   /// Assignment pages straight from the Google Drive app's own picker;
@@ -307,31 +337,31 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       var unreadable = 0;
       var pdfTruncated = false;
       while (true) {
-        DriveImport import;
-        // Drive downloads can take a few seconds — show progress instead of
-        // leaving the teacher staring at a screen that "does nothing".
-        showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => const AlertDialog(
-            content: Row(
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 18),
-                Expanded(child: Text('Loading from Google Drive…')),
-              ],
-            ),
+        // A whole class set of PDFs is every page of every file rendered and
+        // straightened, so the count matters: "file 4 of 12" tells her it is
+        // working and roughly how long is left, where a spinner tells her
+        // nothing and invites a force-quit. The total is only knowable once
+        // Drive hands the files back, so it starts as an honest "loading".
+        final import = await _withCountedProgress<DriveImport>(
+          label: (done, total) => total == 0
+              ? 'Loading from Google Drive…'
+              : 'Reading file ${done + (done < total ? 1 : 0)} of $total',
+          note: 'Each page is rendered and straightened before marking. You can stop and keep what is ready.',
+          work: (run) => DrivePicker.importScannedPages(
+            onProgress: run.report,
+            isCancelled: () => run.stopped,
           ),
         );
-        try {
-          import = await DrivePicker.importScannedPages();
-        } finally {
-          if (mounted) Navigator.of(context, rootNavigator: true).pop();
-        }
         if (!mounted) return;
         if (import.cancelled) {
           if (groups.isEmpty) return; // cancelled the first pick — nothing to do
           break; // cancelled an "add more" round — mark what we have
+        }
+        // Stopped before the first file finished: nothing failed, so telling
+        // her a file "couldn't be read" would be a lie about her own choice.
+        if (import.pages.isEmpty && import.unreadable == 0) {
+          if (groups.isEmpty) return;
+          break;
         }
         if (import.pages.isEmpty) {
           final who = import.unreadableNames.isEmpty ? 'That file' : '"${import.unreadableNames.first}"';
@@ -798,7 +828,11 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                         ),
                       const SizedBox(height: 6),
                       Text(
-                        'You can close the app. They land on your dashboard when they finish — usually well before morning.',
+                        // Not "we'll let you know": nothing tells the phone a
+                        // batch has finished, so the marks are filed when she
+                        // next opens Markless. Promising a notification she
+                        // never gets is worse than promising nothing.
+                        'Marking carries on with the app closed. Open Markless in the morning and the marks are waiting on your dashboard.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                       ),
                       const SizedBox(height: 8),
@@ -1109,5 +1143,26 @@ class _ClassPickerSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// How far along a long job is, and the teacher's way out of it.
+///
+/// [total] is zero until the work knows how much there is to do — the Drive
+/// picker only says how many files she chose once she has finished choosing —
+/// so the dialog can say "loading" honestly instead of inventing a count.
+class _CountedRun {
+  int done = 0;
+  int total = 0;
+  bool stopped = false;
+
+  /// Null before the dialog has built and again once it is gone, so a late
+  /// progress report can never call setState on a dead widget.
+  VoidCallback? _redraw;
+
+  void report(int done, int total) {
+    this.done = done;
+    this.total = total;
+    _redraw?.call();
   }
 }

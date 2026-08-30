@@ -160,6 +160,80 @@ class DriveImport {
   bool get cancelled => pickedCount == 0;
 }
 
+/// One file exactly as the Drive picker handed it over, before it is turned
+/// into pages. [bytes] is null when the phone could not stream the file at
+/// all — that is a failure the teacher needs told about, by name.
+class PickedDriveFile {
+  final String name;
+  final String mime;
+  final Uint8List? bytes;
+  const PickedDriveFile({required this.name, this.mime = '', this.bytes});
+}
+
+/// Turns one picked file into pages, and says whether a long PDF was cut off
+/// at the page cap. Split out from the import loop so the loop can be driven
+/// with a fake in tests instead of really rendering PDFs.
+Future<({List<ScannedPage> pages, bool truncated})> convertDriveFile(PickedDriveFile f) async {
+  final bytes = f.bytes;
+  if (bytes == null) return (pages: const <ScannedPage>[], truncated: false);
+  final pages = await pagesFromPickedFile(name: f.name, mime: f.mime, bytes: bytes);
+  if (pages.isEmpty) return (pages: const <ScannedPage>[], truncated: false);
+  return (pages: pages, truncated: await pdfExceedsPageCap(f.name, f.mime, bytes));
+}
+
+/// Renders and cleans each picked file in turn, reporting progress so the
+/// teacher can see it moving, and stopping the moment she asks it to.
+///
+/// A class set is a dozen PDFs and every page of every one is rendered and
+/// straightened, so this is minutes of work, not seconds. [picked] is how
+/// many files she chose in Drive — anything the phone never streamed back
+/// counts as unreadable, because from her side those files did not arrive.
+Future<DriveImport> convertPickedDriveFiles(
+  List<PickedDriveFile> files, {
+  required int picked,
+  Future<({List<ScannedPage> pages, bool truncated})> Function(PickedDriveFile file) convert = convertDriveFile,
+  void Function(int done, int total)? onProgress,
+  bool Function()? isCancelled,
+}) async {
+  final pages = <ScannedPage>[];
+  final groups = <List<ScannedPage>>[];
+  final failed = <String>[];
+  var unreadable = picked - files.length; // entries the native side couldn't stream
+  var truncated = false;
+  final total = files.length;
+
+  // Reported before the first file so the dialog can swap from an honest
+  // "loading" to a real count the moment the count is known.
+  onProgress?.call(0, total);
+
+  for (var i = 0; i < total; i++) {
+    // Checked before each file rather than after, so stopping ends the next
+    // few seconds of work instead of the next few minutes. The files never
+    // opened are not failures — she chose to stop, nothing went wrong.
+    if (isCancelled?.call() ?? false) break;
+    final f = files[i];
+    final got = await convert(f);
+    if (got.pages.isEmpty) {
+      unreadable++;
+      failed.add(f.name);
+    } else {
+      pages.addAll(got.pages);
+      groups.add(got.pages);
+      truncated = truncated || got.truncated;
+    }
+    onProgress?.call(i + 1, total);
+  }
+
+  return DriveImport(
+    pages: pages,
+    fileGroups: groups,
+    pickedCount: picked,
+    unreadable: unreadable.clamp(0, picked),
+    pdfTruncated: truncated,
+    unreadableNames: failed,
+  );
+}
+
 /// Opens the Google Drive app's OWN picker (via a native intent targeted at
 /// the Drive package) so "From Drive" lands the teacher directly in their
 /// Drive. Downloads the picked files and turns images AND PDFs into
@@ -167,7 +241,12 @@ class DriveImport {
 class DrivePicker {
   static const _channel = MethodChannel('markless/drive_picker');
 
-  static Future<DriveImport> importScannedPages() async {
+  /// [onProgress] reports files converted out of files picked, so a whole
+  /// class set can show a real count instead of a spinner that says nothing.
+  static Future<DriveImport> importScannedPages({
+    void Function(int done, int total)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
     Map<String, dynamic> raw;
     try {
       raw = (await _channel.invokeMapMethod<String, dynamic>('pickFromDrive')) ?? const {};
@@ -179,39 +258,20 @@ class DrivePicker {
     }
 
     final picked = (raw['picked'] as num?)?.toInt() ?? 0;
-    final files = (raw['files'] as List? ?? const []).whereType<Map>().toList();
+    final files = [
+      for (final f in (raw['files'] as List? ?? const []).whereType<Map>())
+        PickedDriveFile(
+          name: (f['name'] ?? 'drive_file').toString(),
+          mime: (f['mime'] ?? '').toString(),
+          bytes: f['bytes'] is Uint8List ? f['bytes'] as Uint8List : null,
+        ),
+    ];
 
-    final pages = <ScannedPage>[];
-    final groups = <List<ScannedPage>>[];
-    final failed = <String>[];
-    var unreadable = picked - files.length; // entries the native side couldn't stream
-    var truncated = false;
-    for (final f in files) {
-      final name = (f['name'] ?? 'drive_file').toString();
-      final mime = (f['mime'] ?? '').toString();
-      final bytes = f['bytes'];
-      if (bytes is! Uint8List) {
-        unreadable++;
-        failed.add(name);
-        continue;
-      }
-      final got = await pagesFromPickedFile(name: name, mime: mime, bytes: bytes);
-      if (got.isEmpty) {
-        unreadable++;
-        failed.add(name);
-        continue;
-      }
-      if (await pdfExceedsPageCap(name, mime, bytes)) truncated = true;
-      pages.addAll(got);
-      groups.add(got);
-    }
-    return DriveImport(
-      pages: pages,
-      fileGroups: groups,
-      pickedCount: picked,
-      unreadable: unreadable.clamp(0, picked),
-      pdfTruncated: truncated,
-      unreadableNames: failed,
+    return convertPickedDriveFiles(
+      files,
+      picked: picked,
+      onProgress: onProgress,
+      isCancelled: isCancelled,
     );
   }
 }
