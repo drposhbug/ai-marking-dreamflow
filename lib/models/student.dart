@@ -7,18 +7,22 @@ class Student {
   final String name;
   final String studentId;
   final String? notes;
+  /// How the student is referred to in a drafted report comment. Set by
+  /// the teacher, never guessed from a name, and null until they say.
+  final String? pronoun;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const Student({required this.id, required this.teacherId, required this.classId, required this.name, required this.studentId, required this.createdAt, required this.updatedAt, this.notes});
+  const Student({required this.id, required this.teacherId, required this.classId, required this.name, required this.studentId, required this.createdAt, required this.updatedAt, this.notes, this.pronoun});
 
-  Student copyWith({String? id, String? teacherId, String? classId, String? name, String? studentId, String? notes, DateTime? createdAt, DateTime? updatedAt}) => Student(
+  Student copyWith({String? id, String? teacherId, String? classId, String? name, String? studentId, String? notes, String? pronoun, DateTime? createdAt, DateTime? updatedAt}) => Student(
     id: id ?? this.id,
     teacherId: teacherId ?? this.teacherId,
     classId: classId ?? this.classId,
     name: name ?? this.name,
     studentId: studentId ?? this.studentId,
     notes: notes ?? this.notes,
+    pronoun: pronoun ?? this.pronoun,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -30,6 +34,7 @@ class Student {
     'name': name,
     'student_id': studentId,
     'notes': notes,
+    'pronoun': pronoun,
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
   };
@@ -41,6 +46,7 @@ class Student {
     name: (json['name'] as String?) ?? '',
     studentId: (json['student_id'] as String?) ?? '',
     notes: json['notes'] as String?,
+    pronoun: json['pronoun'] as String?,
     createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()) ?? DateTime.now(),
     updatedAt: DateTime.tryParse((json['updated_at'] ?? '').toString()) ?? DateTime.now(),
   );

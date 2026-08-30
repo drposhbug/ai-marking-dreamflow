@@ -165,6 +165,19 @@ class StudentsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Remembers how a student is referred to in drafted report comments.
+  ///
+  /// Kept on the student so a teacher sets it once, not once per term and
+  /// not again on their next device.
+  Future<void> updatePronoun({required String studentId, required String pronoun}) async {
+    await _ensureLoaded();
+    _students = _students
+        .map((s) => s.id == studentId ? s.copyWith(pronoun: pronoun, updatedAt: DateTime.now()) : s)
+        .toList();
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> _persist() async {
     await _store.setString(_kKey, Student.encodeList(_students));
     CloudCollection.push(teacherId: _teacherId, kind: CloudCollection.kStudents, items: _students.map((s) => s.toJson()).toList(growable: false));
