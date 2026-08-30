@@ -13,6 +13,7 @@ MarkRow mark(String name, double score, {double outOf = 20, String code = '', St
 
 void main() {
   _classroomSheet();
+  _nameMatching();
   group('a CSV every spreadsheet can open', () {
     test('quotes fields that would otherwise break the file', () {
       expect(GradebookExport.csvField('plain'), 'plain');
@@ -270,5 +271,90 @@ void _classroomSheet() {
       final shape = ClassroomSheet.detect(sheet())!;
       expect(ClassroomSheet.isPointsRow(['Ruiz', 'Ana', 'ana@school.org', ''], shape), isFalse);
     });
+  });
+}
+
+/// Matching a gradebook row to a marked paper, where being wrong means a
+/// child's record carries someone else's mark.
+void _nameMatching() {
+  MarkRow m(String n, double s) => MarkRow(
+      studentName: n, studentCode: '', score: s, maxScore: 100,
+      markedAt: DateTime(2026, 6, 1), feedback: '');
+
+  List<List<String>> twoAnas() => [
+        ['Student', 'Essay'],
+        ['Ana Ruiz', ''],
+        ['Ana Diaz', ''],
+      ];
+
+  test('an exact match wins over a looser one later in the list', () {
+    final filled = GradebookTemplate.fill(
+      template: twoAnas(),
+      marks: [m('Ana Diaz', 71), m('Ana Ruiz', 88)],
+      nameColumn: 0,
+    );
+    final rows = filled.csv.trim().split('\n');
+    expect(rows[1], contains('88'));
+    expect(rows[2], contains('71'));
+  });
+
+  test('an accent does not stop a name matching its own row', () {
+    // Normalising used to delete accented letters outright, so "Ruíz"
+    // never equalled "Ruiz", no exact match existed, and the loose rule
+    // handed Ana Ruiz whichever Ana came first.
+    final filled = GradebookTemplate.fill(
+      template: twoAnas(),
+      marks: [m('Ana Díaz', 71), m('Ana Ruíz', 88)],
+      nameColumn: 0,
+    );
+    final rows = filled.csv.trim().split('\n');
+    expect(rows[1], contains('88'));
+    expect(rows[2], contains('71'));
+    expect(filled.unmatched, isEmpty);
+  });
+
+  test('a name two students could answer to is reported, never guessed', () {
+    final filled = GradebookTemplate.fill(
+      template: [
+        ['Student', 'Essay'],
+        ['Ana', ''],
+      ],
+      marks: [m('Ana Ruiz', 88), m('Ana Diaz', 71)],
+      nameColumn: 0,
+    );
+    // Silence here would be the worst outcome: a mark on the wrong child
+    // with nothing on screen to say so.
+    expect(filled.filled, 0);
+    expect(filled.unmatched, contains('Ana'));
+  });
+
+  test('a first-name-only row still matches when there is just one candidate', () {
+    // The forgiving rule is kept where it is safe — only one Ana exists.
+    final filled = GradebookTemplate.fill(
+      template: [
+        ['Student', 'Essay'],
+        ['Ana', ''],
+      ],
+      marks: [m('Ana Ruiz', 88)],
+      nameColumn: 0,
+    );
+    expect(filled.filled, 1);
+  });
+
+  test('every accent in the fold table maps to its plain letter', () {
+    // A misaligned table would quietly map letters to the wrong ones.
+    final filled = GradebookTemplate.fill(
+      template: [
+        ['Student', 'Essay'],
+        ['Zoe Muller', ''],
+        ['Jose Nunez', ''],
+      ],
+      marks: [m('Zoë Müller', 90), m('José Núñez', 80)],
+      nameColumn: 0,
+    );
+    expect(filled.filled, 2);
+    final rows = filled.csv.trim().split('\n');
+    expect(rows[1], contains('90'));
+    expect(rows[2], contains('80'));
   });
 }
