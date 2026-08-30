@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/marking_rules.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +28,10 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
   double _harshness = 5;
   late GradingMode _mode;
   late Map<String, bool> _criteria;
+
+  /// Deleting a rule also clears the count that suggested it, so a
+  /// correction the teacher has thrown out does not come back next week.
+  final _ruleMemory = MarkingRuleMemory();
 
   @override
   void initState() {
@@ -207,6 +212,8 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
             ),
             const SizedBox(height: 12),
             TextField(controller: _notes, maxLines: 4, decoration: const InputDecoration(labelText: 'Notes', hintText: 'Custom marking instructions...')),
+            const SizedBox(height: 14),
+            _LearnedRules(presetId: preset.id, memory: _ruleMemory),
             const SizedBox(height: 18),
             FilledButton(
               onPressed: _save,
@@ -230,6 +237,118 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
                 style: OutlinedButton.styleFrom(foregroundColor: AiMarkerColors.error, side: BorderSide(color: AiMarkerColors.error.withValues(alpha: 0.35))),
                 child: const Text('Delete scheme'),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What the teacher has taught this scheme, in her own words, with the
+/// wording open to change and a way to throw any of it out.
+///
+/// This is the visible half of the bargain: the marker only follows a rule
+/// she read and agreed to, and she can read it back here whenever she wants
+/// to know why a mark came out the way it did.
+class _LearnedRules extends StatelessWidget {
+  final String presetId;
+  final MarkingRuleMemory memory;
+
+  const _LearnedRules({required this.presetId, required this.memory});
+
+  Future<void> _edit(BuildContext context, MarkingRule rule) async {
+    final controller = TextEditingController(text: rule.text);
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('What Mark is told'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    final text = controller.text;
+    controller.dispose();
+    if (save != true || !context.mounted) return;
+    await context.read<PresetsService>().updateRuleText(presetId: presetId, ruleId: rule.id, text: text);
+  }
+
+  Future<void> _remove(BuildContext context, MarkingRule rule) async {
+    final removed = await context.read<PresetsService>().removeRule(presetId: presetId, ruleId: rule.id);
+    if (removed == null) return;
+    await memory.forget(presetId: presetId, signalKey: removed.signalKey);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Removed — Mark will stop following it, and will not ask about it again.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final presets = context.watch<PresetsService>();
+    final rules = presets.rulesFor(presetId);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('What Mark has learned here', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900))),
+                Text('${rules.length}/${GradingPreset.maxRulesPerPreset}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (rules.isEmpty)
+              Text(
+                'Nothing yet. When you correct the same thing on three papers marked with this scheme, Mark will ask whether it should do it your way from then on.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+              )
+            else ...[
+              Text(
+                'Followed on every paper marked with this scheme, and on no other.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+              ),
+              const SizedBox(height: 8),
+              for (final rule in rules)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _edit(context, rule),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Text(rule.text, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.35)),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Forget this',
+                        onPressed: () => _remove(context, rule),
+                        icon: Icon(Icons.close_rounded, size: 18, color: AiMarkerColors.neutral),
+                      ),
+                    ],
+                  ),
+                ),
+              if (rules.length >= GradingPreset.maxRulesPerPreset)
+                Text(
+                  'This scheme is full. Nothing new will be remembered until you remove one.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.warning, height: 1.4),
+                ),
+            ],
           ],
         ),
       ),

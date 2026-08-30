@@ -10,6 +10,7 @@ class PresetsService extends ChangeNotifier {
   static const _kKey = 'ai_marker.presets';
   static const _kSeedPrefix = 'ai_marker.default_presets_seeded.v1.';
   static const _kBuiltInOverridesKey = 'ai_marker.builtin_scheme_overrides.v1';
+  static const _kRulesKey = 'ai_marker.preset_marking_rules.v1';
   final LocalStore _store;
 
   SupabaseClient? get _client {
@@ -38,6 +39,135 @@ class PresetsService extends ChangeNotifier {
 
   PresetsService({LocalStore? store}) : _store = store ?? const LocalStore() {
     Future.microtask(_loadBuiltInOverrides);
+    Future.microtask(loadRules);
+  }
+
+  // ── What the teacher has taught this scheme ───────────────────────────
+  //
+  // Rules live beside the scheme rather than inside it: the schemes table in
+  // Supabase has no column for them, and a teacher's corrections are hers
+  // and belong on her device. They are read on every mark, so they are held
+  // in memory and written through.
+
+  /// presetId -> the corrections that scheme has been taught.
+  Map<String, List<MarkingRule>> _rules = const {};
+  Future<void>? _rulesLoading;
+
+  /// Loads once, however many callers ask. Two reads racing would let the
+  /// slower one put an empty list back over a rule the teacher just saved.
+  Future<void> loadRules() => _rulesLoading ??= _loadRules();
+
+  Future<void> _loadRules() async {
+    try {
+      final raw = await _store.getString(_kRulesKey);
+      if (raw == null || raw.isEmpty) {
+        _rules = const {};
+      } else {
+        final decoded = (jsonDecode(raw) as Map).cast<String, dynamic>();
+        final out = <String, List<MarkingRule>>{};
+        for (final entry in decoded.entries) {
+          if (entry.key.trim().isEmpty) continue;
+          final v = entry.value;
+          if (v is! List) continue;
+          final list = v
+              .whereType<Map>()
+              .map((m) => MarkingRule.fromJson(m.cast<String, dynamic>()))
+              .where((r) => r.id.isNotEmpty && r.text.trim().isNotEmpty)
+              .take(GradingPreset.maxRulesPerPreset)
+              .toList();
+          if (list.isNotEmpty) out[entry.key] = list;
+        }
+        _rules = out;
+      }
+    } catch (e) {
+      debugPrint('PresetsService.loadRules failed: $e');
+      _rules = const {};
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> _persistRules() async {
+    try {
+      final map = <String, dynamic>{
+        for (final e in _rules.entries) e.key: e.value.map((r) => r.toJson()).toList(),
+      };
+      await _store.setString(_kRulesKey, jsonEncode(map));
+    } catch (e) {
+      debugPrint('PresetsService._persistRules failed: $e');
+    }
+  }
+
+  /// The corrections this scheme has been taught, oldest first.
+  List<MarkingRule> rulesFor(String presetId) => _rules[presetId] ?? const [];
+
+  /// The same rules as plain sentences, ready to ride along with a marking
+  /// request. They go ahead of the teacher's general corrections: the server
+  /// keeps only the first twenty instructions, and a rule she approved for
+  /// this scheme beats a general one.
+  List<String> ruleInstructions(String presetId) =>
+      rulesFor(presetId).map((r) => r.text.trim()).where((t) => t.isNotEmpty).toList(growable: false);
+
+  /// True when this scheme has no room left. The teacher is told rather than
+  /// having one of her own rules quietly dropped to make space.
+  bool schemeIsFull(String presetId) => rulesFor(presetId).length >= GradingPreset.maxRulesPerPreset;
+
+  /// Saves a correction the teacher has read and agreed to. Returns false
+  /// when the scheme is already full — nothing is evicted to make room.
+  Future<bool> addRule({required String presetId, required String text, required String signalKey}) async {
+    await loadRules();
+    final clean = text.trim();
+    if (presetId.trim().isEmpty || clean.isEmpty) return false;
+    final existing = rulesFor(presetId);
+    if (existing.length >= GradingPreset.maxRulesPerPreset) return false;
+
+    final rule = MarkingRule(id: 'r_${IdFactory.newId()}', text: clean, signalKey: signalKey, createdAt: DateTime.now());
+    _rules = {..._rules, presetId: [...existing, rule]};
+    await _persistRules();
+    notifyListeners();
+    return true;
+  }
+
+  /// Replaces the wording of a rule the teacher already keeps.
+  Future<void> updateRuleText({required String presetId, required String ruleId, required String text}) async {
+    await loadRules();
+    final clean = text.trim();
+    if (clean.isEmpty) return;
+    final existing = rulesFor(presetId);
+    if (!existing.any((r) => r.id == ruleId)) return;
+    _rules = {
+      ..._rules,
+      presetId: existing
+          .map((r) => r.id == ruleId
+              ? MarkingRule(id: r.id, text: clean, signalKey: r.signalKey, createdAt: r.createdAt)
+              : r)
+          .toList(),
+    };
+    await _persistRules();
+    notifyListeners();
+  }
+
+  /// Returns the deleted rule so the caller can also clear the tally behind
+  /// it — a rule she removed should not be suggested back to her next week.
+  Future<MarkingRule?> removeRule({required String presetId, required String ruleId}) async {
+    await loadRules();
+    final existing = rulesFor(presetId);
+    MarkingRule? removed;
+    for (final r in existing) {
+      if (r.id == ruleId) removed = r;
+    }
+    if (removed == null) return null;
+    final next = existing.where((r) => r.id != ruleId).toList();
+    final map = {..._rules};
+    if (next.isEmpty) {
+      map.remove(presetId);
+    } else {
+      map[presetId] = next;
+    }
+    _rules = map;
+    await _persistRules();
+    notifyListeners();
+    return removed;
   }
 
   Future<void> _loadBuiltInOverrides() async {
