@@ -23,6 +23,7 @@ import 'package:marking_prokect_v2/screens/plans/plans_screen.dart';
 import 'package:marking_prokect_v2/screens/reports/report_comments_screen.dart';
 import 'package:marking_prokect_v2/screens/settings/settings_screen.dart';
 import 'package:marking_prokect_v2/screens/students/student_profile_screen.dart';
+import 'package:marking_prokect_v2/screens/classes/class_analysis_screen.dart';
 import 'package:marking_prokect_v2/screens/classes/class_hub_screen.dart';
 import 'package:marking_prokect_v2/screens/classes/export_marks_screen.dart';
 import 'package:marking_prokect_v2/screens/presets/create_preset_flow_screen.dart';
@@ -102,6 +103,10 @@ class AppRouter {
       GoRoute(path: AppRoutes.classHub, name: 'classHub', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final classId = state.uri.queryParameters['classId'] ?? '';
         return MaterialPage(child: ClassHubScreen(classId: classId));
+      }),
+      GoRoute(path: AppRoutes.classAnalysis, name: 'classAnalysis', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
+        final classId = state.uri.queryParameters['classId'] ?? '';
+        return MaterialPage(child: ClassAnalysisScreen(classId: classId));
       }),
       GoRoute(path: AppRoutes.studentProfile, name: 'studentProfile', parentNavigatorKey: _rootKey, pageBuilder: (context, state) {
         final studentId = state.uri.queryParameters['studentId'] ?? '';

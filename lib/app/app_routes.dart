@@ -23,6 +23,7 @@ class AppRoutes {
   static const pilotReview = '/grading/pilot-review';
 
   static const classHub = '/classes/hub';
+  static const classAnalysis = '/classes/analysis';
   static const studentProfile = '/students/profile';
 
   static const presetFlow = '/presets/create';
