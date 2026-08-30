@@ -357,3 +357,75 @@ Also noted while type-checking with `deno check`:
 - [ ] **R14.4** `MARKING-PROCESS` has one pre-existing `TS7006` (implicit `any`,
       the `normalized.annotations.map((a) => ...)` call). Deploys fine today;
       left alone deliberately rather than touching the marking path mid-release.
+
+---
+
+## R15 — Feature roadmap (drafted 2026-08-30)
+
+Ranked within each axis by value against effort. In progress this session:
+corrections-train-the-preset (better), drag-drop + paste intake (faster).
+
+### Mark BETTER
+
+- [ ] **R15.1 Cross-paper consistency check.** After a class set, flag any two
+      papers whose answers to the same question are near-identical but scored
+      differently. This is the single biggest trust objection to AI marking —
+      "would it mark my two students the same?" — and answering it in the
+      product is worth more than any accuracy claim. Nearly free: `class_analysis.dart`
+      already aggregates per-question results across a batch, so this is a
+      comparison over data on disk, no new marking call. **Best value on this list.**
+- [ ] **R15.2 Second opinion, only where it is unsure.** The marker already
+      emits confidence/triage flags. Re-mark ONLY the flagged answers with a
+      stronger model. Accuracy goes up exactly where it is weak, and the cost is
+      a few percent of a class set rather than double.
+- [ ] **R15.3 Exemplar-anchored marking.** Teacher marks one answer by hand, or
+      tags one as "this is a 4/5", and that anchors the scale for the set.
+      Models drift most on essays and open responses; an anchor is the cheapest
+      known fix. Extends the pilot-paper flow that already exists.
+- [ ] **R15.4 Rubric upload.** Teacher's own rubric document becomes preset
+      rules. Most-requested feature in this category, and presets are already
+      the right home for it.
+
+### Mark FASTER
+
+- [ ] **R15.5 QR code on printed papers.** `test_stamper.dart` already prints
+      identity onto pre-coded copies. A scannable code makes stack splitting and
+      student identification exact instead of inferred — it removes name matching,
+      the mis-split recovery flow, and the two-Anas problem in one step. ~80% of
+      the machinery exists.
+- [ ] **R15.6 Share sheet / "Open with Markless".** Receive work from Drive,
+      email or Photos via the OS share sheet. Needs `android/` + `ios/` config,
+      so it is its own piece of work, but it matches how teachers actually
+      receive student work.
+- [ ] **R15.7 Reuse an assessment.** A preset + answer key as one reusable
+      thing, re-run next term or next year without rebuilding it.
+
+### Mark CHEAPER
+
+- [ ] **R15.8 The two-stage router.** Already the plan of record (see
+      [[markless-pricing]]): cheap vision parse, then grading routed by question
+      type — objective to a cheap tier, reasoning to mid, essays to Sonnet, with
+      low-confidence escalation. Pricing already assumes ~$0.015/mark and
+      Sonnet-only runs $0.02-0.04. Blocked only on API keys that do not exist yet.
+- [ ] **R15.9 Objective questions should never reach an LLM.** Multiple choice
+      matched against the key locally is free. A MC-only quiz should cost
+      essentially nothing to mark, which makes the Starter tier much better
+      business and is a real marketing line.
+- [ ] **R15.10 Re-mark only what changed.** Re-running a paper today re-buys
+      every question. Only changed answers need re-marking.
+
+### Different ways to ADD work
+
+- [ ] **R15.11 Student self-submit link.** Teacher shares a link; students upload
+      their own work straight into the class. Removes the entire collection step
+      — the slowest part of the whole workflow — and every student who opens it
+      sees Markless, which is a real growth loop rather than a bolted-on referral.
+      Pairs with the web app now that it is a proper product.
+- [ ] **R15.12 Google Classroom import.** Pull assignments and submissions
+      directly. Biggest workflow unlock available; also the biggest effort
+      (OAuth scopes, review). Worth planning once the store release is done.
+- [ ] **R15.13 Email-in address.** Forward work to a per-teacher address and it
+      appears in the queue. Infra-heavy; listed for completeness.
+
+**If only three get built: R15.1, R15.9, R15.11** — trust, margin, and
+distribution, in that order.
