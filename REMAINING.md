@@ -214,3 +214,56 @@ history rather than engineering, and it cannot be caught up later.
   dashboard Journeys exist.
 - **Charity is still a placeholder** — `GivingSummary.charityPlaceholder`. R9.1
   and R9.3 remain open, so the Peace Prize section is not submittable yet.
+
+---
+
+## R10 — Web app (done 2026-08-30)
+
+- [x] **R10.1** Web shell branded: real title/description/OG tags, PWA manifest,
+      Markless icons, `theme-color` #2563EB. Was still the Flutter template.
+- [x] **R10.2** Splash screen so first load isn't a blank white page. Torn down on
+      the engine's `flutter-first-frame`, with a 20s hard timeout so a failed boot
+      can never leave a stuck spinner.
+- [x] **R10.3** `web/bundle.js` deleted — a dead Passkeys shim, render-blocking in
+      `<head>`. Verified: no passkeys web package resolves, and the compiled bundle
+      contains no Passkeys reference.
+- [x] **R10.4** Redaction honesty (see R11) — the blocker on letting teachers near
+      the web build at all.
+- [ ] **R10.5** RevenueCat Web Billing. Today `billing_service` tells web users
+      "Plans are bought in the phone app", so a teacher on the website cannot pay.
+      Worth doing: it is a purchase path that does not depend on Play review
+      landing by Sep 30, it satisfies Shipaton's "in-app **or web** purchase" on its
+      own, it opens the Funnel Vision (Stripe) category, and since Google's
+      2026-06-30 change a web checkout costs 10% rather than Play Billing's 15%.
+
+---
+
+## R11 — Redaction honesty (done 2026-08-30)
+
+- [x] **R11.1** `AnonymizedPage.redacted` actually reaches the teacher — before the
+      upload and again on the pilot screen. Nothing read it before.
+- [x] **R11.2** Settings toggle no longer reads as ON-and-working in a browser.
+- [x] **R11.3** One-per-teacher acknowledgement before any browser upload of student
+      work, covering the stack splitter as well as the three pick routes.
+- [x] **R11.4** `docs/security-and-compliance.md` corrected: redaction claims scoped
+      to iOS/Android, new §3.1 on what differs in a browser.
+
+---
+
+## R12 — Play compliance (found 2026-08-30)
+
+- [x] **R12.1** In-app account deletion — already existed and works.
+- [x] **R12.2** Public account-deletion page at `docs/delete-account.html`. Play
+      REJECTS new submissions from apps allowing account creation without a URL that
+      is reachable without login and links directly to deletion. A section inside
+      the privacy policy does not satisfy it.
+- [ ] **R12.3** Decide two numbers, then fill them into BOTH the page and the Play
+      Data Safety form — they are the same values and neither exists anywhere yet:
+      the retention period for the anonymous marking cache, and the turnaround for
+      an emailed deletion request. Do not invent them at form-filling time.
+- [ ] **R12.4** Switch GitHub Pages on (Settings → Pages → main / /docs) so all three
+      URLs resolve. Play needs the privacy and deletion URLs live before submission.
+- [ ] **R12.5** Store cut: Play Billing is 10% (first $1M) + 5% = 15%, which is what
+      the caps assume — note it now comes from the under-$1M rate, NOT the Small
+      Business Program. Web checkout is 10%. Linking out from the app stopped being
+      prohibited on 2026-06-30 in US/UK/EEA.
