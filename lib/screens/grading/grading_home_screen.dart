@@ -12,6 +12,7 @@ import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
 import 'package:marking_prokect_v2/services/anonymizer.dart';
+import 'package:marking_prokect_v2/services/bulk_page_processor.dart';
 import 'package:marking_prokect_v2/services/document_processor.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
@@ -178,43 +179,118 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       );
       if (!mounted || choice == null) return;
 
-      // Straighten/clean every photo like a live scan — with progress.
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          content: Row(
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(width: 18),
-              Expanded(child: Text('Preparing ${images.length} photos…')),
-            ],
-          ),
-        ),
-      );
-      final pages = <ScannedPage>[];
-      try {
-        for (final img in images) {
-          final bytes = await img.readAsBytes();
-          final processed = await DocumentProcessor.processPage(bytes);
-          pages.add(ScannedPage(bytes: processed, fileName: img.name));
-        }
-      } finally {
-        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      final result = await _prepareGalleryPhotos(images);
+      if (!mounted || result == null) return;
+      if (result.failed.isNotEmpty) {
+        _snackBar('Couldn\'t read ${result.failed.length} of the photos — the rest are ready. '
+            'Re-shoot ${result.failed.take(3).join(', ')}${result.failed.length > 3 ? '…' : ''}');
       }
-      if (!mounted || pages.isEmpty) return;
+      if (result.pages.isEmpty) return;
 
       if (choice == 'batch') {
-        _enqueueBatch([for (final p in pages) [p]]);
+        _enqueueBatch([for (final p in result.pages) [p]]);
         return;
       }
-      context.read<AppState>().setPages(pages);
+      context.read<AppState>().setPages(result.pages);
       context.push(AppRoutes.gradingContext);
     } catch (e) {
       debugPrint('Pick from gallery failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open gallery.')));
     }
+  }
+
+  void _snackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Straightens and cleans a pile of picked photos, showing how far along it
+  /// is and letting the teacher stop.
+  ///
+  /// A class set is thirty photos and each one is decoded at full camera
+  /// resolution, so this is minutes of work, not seconds. A spinner with no
+  /// count and no way out is how a teacher ends up force-quitting halfway
+  /// and losing the lot. Returns null if they backed out with nothing done.
+  Future<BulkPageResult?> _prepareGalleryPhotos(List<XFile> images) async {
+    final picked = <PickedPhoto>[];
+    for (final img in images) {
+      picked.add(PickedPhoto(bytes: await img.readAsBytes(), fileName: img.name));
+    }
+
+    final warning = bulkPickWarning(picked.length);
+    if (warning != null) {
+      if (!mounted) return null;
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('That is a lot of photos'),
+          content: Text(warning),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Prepare $kMaxGalleryPhotos'),
+            ),
+          ],
+        ),
+      );
+      if (go != true) return null;
+    }
+
+    final todo = capPicked(picked);
+    var done = 0;
+    var cancelled = false;
+    late final StateSetter refresh;
+
+    if (!mounted) return null;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        // Back must not dismiss the dialog out from under a run that is still
+        // going -- Cancel is the way out, so the loop stops with it.
+        canPop: false,
+        child: AlertDialog(
+          content: StatefulBuilder(builder: (ctx, setInner) {
+            refresh = setInner;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Preparing photo ${done + (done < todo.length ? 1 : 0)} of ${todo.length}'),
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  child: LinearProgressIndicator(value: todo.isEmpty ? 0 : done / todo.length),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Straightening and sharpening each page. You can stop and keep what is ready.',
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                ),
+              ],
+            );
+          }),
+          actions: [
+            TextButton(onPressed: () => cancelled = true, child: const Text('Stop')),
+          ],
+        ),
+      ),
+    );
+
+    final result = await processPickedPages(
+      todo,
+      process: DocumentProcessor.processPage,
+      isCancelled: () => cancelled,
+      onProgress: (d, _) {
+        done = d;
+        refresh(() {});
+      },
+    );
+
+    if (mounted) Navigator.of(context, rootNavigator: true).pop();
+    return result;
   }
 
   /// Assignment pages straight from the Google Drive app's own picker;
