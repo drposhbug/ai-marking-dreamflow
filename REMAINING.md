@@ -71,7 +71,7 @@ reference it precisely. Delete anything already done; add anything missing.
 **Code / build artifacts (agents can help):**
 - [ ] **R4.1** Release signing configured (keystore, key.properties, gitignored).
 - [ ] **R4.2** Signed release AAB builds cleanly.
-- [ ] **R4.3** App icon, app name, and version code/name finalized in pubspec + manifest.
+- [x] **R4.3** App icon, app name, and version code/name finalized in pubspec + manifest.
 - [~] **R4.4** Privacy policy drafted and hosted at a public URL. Page built at
       `docs/index.html`; still needs GitHub Pages switching on (Settings → Pages →
       main / /docs). See docs/README.md.
@@ -137,17 +137,17 @@ reference it precisely. Delete anything already done; add anything missing.
 > in the code today is an in-app SnackBar, not a push. Also unlocks the OneSignal
 > "Keep Them Coming Back" category ($25k, the largest sponsor prize).
 
-- [ ] **R7.1** OneSignal Flutter SDK added; Android notification permission requested at
+- [x] **R7.1** OneSignal Flutter SDK added; Android notification permission requested at
       the right moment (after the first batch is queued, not on first launch).
-- [ ] **R7.2** External user id set to the teacher id, matching `Purchases.logIn` so
+- [x] **R7.2** External user id set to the teacher id, matching `Purchases.logIn` so
       RevenueCat and OneSignal address the same person.
-- [ ] **R7.3** "Your class set is marked" — fired server-side from the overnight batch
+- [x] **R7.3** "Your class set is marked" — fired server-side from the overnight batch
       completion path, deep-linking straight to the results.
-- [ ] **R7.4** Trial-ending and approaching-mark-cap nudges. These are the upgrade
+- [x] **R7.4** Trial-ending and approaching-mark-cap nudges. These are the upgrade
       triggers, so they feed the HAMM story as well as retention.
-- [ ] **R7.5** Weekly "you saved about N hours this week" summary — the re-engagement
+- [x] **R7.5** Weekly "you saved about N hours this week" summary — the re-engagement
       hook that is actually worth receiving.
-- [ ] **R7.6** Every notification respects a Settings toggle, and none fire for a teacher
+- [x] **R7.6** Every notification respects a Settings toggle, and none fire for a teacher
       who has never queued a batch.
 
 ---
@@ -175,7 +175,7 @@ reference it precisely. Delete anything already done; add anything missing.
 > reads as a slogan to a Peace Prize judge and is a liability in store review.
 
 - [ ] **R9.1** Name the actual charity and commit to it publicly.
-- [ ] **R9.2** Settings "Giving" row: dollars generated to date, derived from real
+- [x] **R9.2** Settings "Giving" row: dollars generated to date, derived from real
       subscription revenue — not a hardcoded number.
 - [~] **R9.3** A public receipt (monthly post or page) so the claim is evidenced.
 
@@ -198,3 +198,19 @@ reference it precisely. Delete anything already done; add anything missing.
 
 Build-in-public posting runs daily from now — it is the one category that needs
 history rather than engineering, and it cannot be caught up later.
+
+### Notes from the R7 build (2026-08-30)
+
+- **R7.3 is client-side.** Nothing server-side ever learns a batch ended — the
+  client polling `batch_status` is what sets `status = 'ended'`, as a side effect
+  of asking. Sending from the server needs a NEW scheduled function (cron → walk
+  `marking_batches` where `status != 'ended'` → OneSignal REST), not a branch
+  inside MARKING-PROCESS. The recipe is written up at `PushService.batchDoneCopy`.
+  Until that exists, a teacher who never reopens the app still hears nothing.
+- **No `android/` change was needed** — the OneSignal AAR contributes
+  `POST_NOTIFICATIONS` and its receivers itself.
+- **R7.4/R7.5 ship as OneSignal tags**, not on-device scheduled notifications, so
+  the segments are built in the OneSignal dashboard. They will not fire until the
+  dashboard Journeys exist.
+- **Charity is still a placeholder** — `GivingSummary.charityPlaceholder`. R9.1
+  and R9.3 remain open, so the Peace Prize section is not submittable yet.
