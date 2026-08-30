@@ -14,7 +14,9 @@ class PresetDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final preset = context.watch<PresetsService>().getById(presetId);
+    final presets = context.watch<PresetsService>();
+    final preset = presets.getById(presetId);
+    final rules = presets.rulesFor(presetId);
 
     if (preset == null) {
       return Scaffold(appBar: AppBar(title: const Text('Scheme')), body: const Center(child: Text('Scheme not found')));
@@ -117,6 +119,39 @@ class PresetDetailScreen extends StatelessWidget {
                     Text('Custom notes', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     Card(child: Padding(padding: const EdgeInsets.all(14), child: Text(preset.notes, style: Theme.of(context).textTheme.bodyMedium))),
+                    const SizedBox(height: 12),
+                  ],
+                  // Corrections the teacher agreed to have remembered. Shown
+                  // here so nothing about how this scheme marks is hidden
+                  // from her; Edit is where she changes or removes them.
+                  if (rules.isNotEmpty) ...[
+                    Text('What Mark has learned here', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text('Followed on every paper marked with this scheme, and on no other. Tap Edit to change or remove one.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4)),
+                    const SizedBox(height: 8),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (final r in rules)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(Icons.school_outlined, size: 16, color: AiMarkerColors.secondary),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: Text(r.text, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.35))),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 12),
                   ],
                   Text('Last modified', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),

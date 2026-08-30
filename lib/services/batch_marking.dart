@@ -13,6 +13,7 @@ import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
 import 'package:marking_prokect_v2/services/overnight_service.dart';
 import 'package:marking_prokect_v2/services/page_fingerprint.dart';
+import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:provider/provider.dart';
@@ -44,6 +45,13 @@ int enqueueStudentGroups({
   queue.anonymizeUploads = app.anonymizeUploads;
   attachFleetConfirmation(context);
 
+  // What this scheme has been taught goes ahead of the teacher's general
+  // corrections — the server keeps only the first twenty instructions.
+  final teacherFeedback = [
+    ...context.read<PresetsService>().ruleInstructions(draft.presetId ?? ''),
+    ...app.markingFeedback,
+  ];
+
   final reqs = <AiGradeRequest>[];
   final pagesList = <List<Uint8List>>[];
   final jobLabels = <String?>[];
@@ -68,7 +76,7 @@ int enqueueStudentGroups({
       studentGrade: null,
       gradeLevel: draft.gradeLevel,
       region: app.region,
-      teacherFeedback: app.markingFeedback,
+      teacherFeedback: teacherFeedback,
       answerKeyId: draft.answerKeyId.isEmpty ? null : draft.answerKeyId,
     ));
     pagesList.add(bytes);

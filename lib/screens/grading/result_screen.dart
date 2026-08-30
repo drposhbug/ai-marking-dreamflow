@@ -13,6 +13,8 @@ import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
+import 'package:marking_prokect_v2/services/marking_rules.dart';
+import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/services/word_locator.dart';
@@ -497,14 +499,6 @@ class _ResultScreenState extends State<ResultScreen> {
     final anns = [...result.annotations];
     anns[idx] = newAnn;
 
-    // Teacher turned a part mark (0.5) into a whole number — that's a
-    // marking-style signal worth remembering, with their consent.
-    final oldEarned = _num(a.earnedMark);
-    final newEarned = _num(earned.text);
-    if (oldEarned != null && newEarned != null && oldEarned != newEarned && oldEarned % 1 != 0 && newEarned % 1 == 0) {
-      _offerWholeMarkPreference();
-    }
-
     // Recompute the total from the per-question marks when they all parse.
     double earnedSum = 0, outOfSum = 0;
     var parseable = anns.isNotEmpty;
@@ -524,41 +518,120 @@ class _ResultScreenState extends State<ResultScreen> {
       rawScore: parseable ? earnedSum : null,
       maxScore: parseable ? outOfSum : null,
     ));
+
+    // The teacher's correction is saved. Only now — and only when she has
+    // made the same one on three different papers marked with this scheme —
+    // does the app ask whether it should stop making her do it.
+    await _maybeLearnFromCorrection(before: a, after: newAnn);
   }
 
-  /// One-time ask: should Mark stop giving part marks entirely? Saves as a
-  /// standing Teach-Mark instruction that rides with every future grade.
-  Future<void> _offerWholeMarkPreference() async {
-    final auth = context.read<AuthService>().currentUser;
-    if (auth == null) return;
-    final app = context.read<AppState>();
-    final already = app.markingFeedback.any((f) {
-      final l = f.toLowerCase();
-      return l.contains('part mark') || l.contains('whole mark') || l.contains('fractional');
-    });
-    if (already) return;
+  // ── Teaching the scheme, instead of throwing the correction away ──────
+  //
+  // Reads from the device, so it survives the teacher leaving this screen
+  // and coming back to the next paper.
+  final _ruleMemory = MarkingRuleMemory();
 
-    final yes = await showDialog<bool>(
+  /// Counts one correction against the scheme this paper was marked with,
+  /// and puts a suggestion to the teacher when it has become a pattern.
+  Future<void> _maybeLearnFromCorrection({required QuestionAnnotation before, required QuestionAnnotation after}) async {
+    final sub = widget.submissionId == null ? null : context.read<SubmissionsService>().getById(widget.submissionId!);
+    // A rule belongs to a scheme. A result with no scheme behind it has
+    // nowhere to keep one, so the correction is not counted at all rather
+    // than being turned into something that changes all her marking.
+    if (sub == null || sub.presetId.trim().isEmpty) return;
+
+    final presets = context.read<PresetsService>();
+    await presets.loadRules();
+    if (!mounted) return;
+
+    final offer = await _ruleMemory.noteCorrection(
+      presetId: sub.presetId,
+      paperId: sub.id,
+      correction: MarkCorrection(
+        oldMark: _num(before.earnedMark),
+        newMark: _num(after.earnedMark),
+        oldNote: before.feedback,
+        newNote: after.feedback,
+      ),
+      rulesOnScheme: presets.rulesFor(sub.presetId).length,
+    );
+    if (offer == null || !mounted) return;
+    await _showRuleOffer(offer: offer, presetId: sub.presetId, presets: presets);
+  }
+
+  /// Shows exactly what would be remembered, in words the teacher can
+  /// change, and takes no for an answer.
+  Future<void> _showRuleOffer({required RuleOffer offer, required String presetId, required PresetsService presets}) async {
+    final schemeName = presets.getById(presetId)?.name ?? 'this scheme';
+
+    if (offer.schemeIsFull) {
+      // Rather than quietly dropping a rule she already agreed to, say the
+      // scheme is full and leave the choice with her.
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('This scheme is full'),
+          content: Text(
+              '$schemeName already remembers ${GradingPreset.maxRulesPerPreset} of your corrections, which is as many as it will follow.\n\n'
+              'Nothing has been dropped. To make room, open the scheme and delete one you no longer need.'),
+          actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+      await _ruleMemory.declineOffer(presetId: presetId, signal: offer.signal);
+      return;
+    }
+
+    final controller = TextEditingController(text: offer.suggestedText);
+    final keep = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('No part marks?'),
-        content: const Text(
-            'You changed a part mark to a whole number. Should Mark stop giving part marks (0.25 / 0.5 / 0.75) and always score questions in whole marks?'),
+        title: Text(offer.signal.headline),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You have made this same correction on ${MarkingRules.papersBeforeOffer} papers marked with $schemeName. '
+              'Mark can do it your way from the next one — on this scheme only.',
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'What Mark will be told'),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You can change or delete this later in the scheme.',
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+            ),
+          ],
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep part marks')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Always whole marks')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not this time')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remember it')),
         ],
       ),
     );
-    if (yes != true || !mounted) return;
-    await app.addMarkingFeedback(
-      teacherId: auth.id,
-      feedback: 'Never award fractional part marks (0.25, 0.5, 0.75) — score every question in whole marks only.',
-    );
+    final text = controller.text;
+    controller.dispose();
+
+    // A dismissed dialog is a no, and is treated as one — it is not asked
+    // again on the next paper.
+    if (keep != true || text.trim().isEmpty) {
+      await _ruleMemory.declineOffer(presetId: presetId, signal: offer.signal);
+      return;
+    }
+
+    final saved = await presets.addRule(presetId: presetId, text: text, signalKey: offer.signal.key);
+    await _ruleMemory.acceptOffer(presetId: presetId, signal: offer.signal);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Saved — Mark will use whole marks on every future grade. Change it any time in Settings → Give feedback.')),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(saved
+          ? 'Saved to $schemeName — Mark will follow it from the next paper. Change it any time in the scheme.'
+          : 'That scheme is already full, so nothing was changed.'),
+    ));
   }
 
   Future<void> _editScore() async {

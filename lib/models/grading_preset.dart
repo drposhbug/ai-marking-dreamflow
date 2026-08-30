@@ -2,6 +2,42 @@ import 'dart:convert';
 
 enum GradingMode { homework, testQuiz, labReport, englishEssay }
 
+/// One correction a teacher agreed to have remembered for a scheme.
+///
+/// It is stored in her own words — she reads and can edit the sentence
+/// before it is kept — and it travels with every future mark on that scheme
+/// as a plain instruction. Nothing about a rule is inferred at marking time;
+/// what she approved is what the marker is told.
+class MarkingRule {
+  final String id;
+
+  /// The instruction as the teacher left it.
+  final String text;
+
+  /// Which repeated correction produced it (see MarkingSignal.key). Kept so
+  /// deleting a rule can also clear the tally that suggested it, instead of
+  /// the same question coming back a week later.
+  final String signalKey;
+
+  final DateTime createdAt;
+
+  const MarkingRule({required this.id, required this.text, required this.signalKey, required this.createdAt});
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'text': text,
+        'signal_key': signalKey,
+        'created_at': createdAt.toIso8601String(),
+      };
+
+  factory MarkingRule.fromJson(Map<String, dynamic> j) => MarkingRule(
+        id: (j['id'] ?? '').toString(),
+        text: (j['text'] ?? '').toString(),
+        signalKey: (j['signal_key'] ?? '').toString(),
+        createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
+      );
+}
+
 class GradingPreset {
   /// Hard-coded IDs for the built-in schemes that ship with the app.
   ///
@@ -15,6 +51,18 @@ class GradingPreset {
   static final DateTime _builtInTimestamp = DateTime(2025, 1, 1);
 
   static const Set<String> builtInIds = {builtInHomeworkId, builtInTestId, builtInLabId, builtInEnglishId};
+
+  /// A scheme remembers at most this many of the teacher's corrections.
+  ///
+  /// Eight is about as many standing instructions as a teacher can still
+  /// read back and recognise as hers. It also has to share the marking
+  /// request with the general "teach the marker" corrections she may have
+  /// saved in Settings — the server keeps the first twenty instructions and
+  /// drops the rest, so a scheme's rules go first and leave room for those.
+  ///
+  /// At the cap nothing is silently evicted: she is told the scheme is full
+  /// and asked to delete one.
+  static const int maxRulesPerPreset = 8;
 
   /// The 4 default schemes are embedded in the app and do not require
   /// Supabase connectivity or authentication to load.

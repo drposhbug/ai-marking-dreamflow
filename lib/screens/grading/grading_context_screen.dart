@@ -392,7 +392,13 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       final presetId = draft.presetId ?? _builtInIdForMode(draft.mode);
       final preStudent = draft.studentId == null ? null : context.read<StudentsService>().getById(draft.studentId!);
       final regionId = context.read<AppState>().region;
-      final teacherFeedback = context.read<AppState>().markingFeedback;
+      // What this scheme has been taught goes first: the server keeps only
+      // the first twenty instructions, and a correction the teacher approved
+      // for this scheme beats a general one she saved months ago.
+      final teacherFeedback = [
+        ...context.read<PresetsService>().ruleInstructions(presetId),
+        ...context.read<AppState>().markingFeedback,
+      ];
       final pages = draft.pages.map((p) => p.bytes).toList(growable: false);
 
       final req = AiGradeRequest(
