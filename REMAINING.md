@@ -322,3 +322,38 @@ Still open:
       dedupe does not).
 - [ ] **R13.15** `submissions_service._persist()` re-encodes the ENTIRE submission
       history to SharedPreferences on every single mark, on the UI isolate.
+
+---
+
+## R14 — Server-side authorization (found 2026-08-30, PRE-EXISTING)
+
+`MARKING-PROCESS` read actions take `teacherId` from the request body and trust
+it. The anon key ships in the APK — the code says so itself — so a `teacherId`
+in the payload is a request, not an identity. Anyone holding that key can read
+another teacher's rows by passing their id.
+
+`delete_account` already does this correctly, and `list_batches` (added
+2026-08-30) was made to match it:
+
+```ts
+const claims = jwtClaims(req.headers.get("authorization"));
+if (claims?.role !== "authenticated" || String(claims?.sub ?? "") !== teacherId) {
+  return json({ error: "..." }, 403);
+}
+```
+
+- [ ] **R14.1** Apply that guard to the remaining read actions. In rough order of
+      what they expose: `list_submissions` (marked student work), `get_profile`
+      (name, school, email), `list_keys`, `get_collection`, `get_usage`,
+      `get_referral`.
+- [ ] **R14.2** These need a matching client check — the app already sends the
+      Supabase session JWT, so signed-in teachers should be unaffected, but any
+      path that calls these WITHOUT a real session (local-only / dev accounts)
+      will start getting 403s. Test that before deploying.
+- [ ] **R14.3** Worth doing before real teachers with real children's work are on
+      it, not after. This is a data-exposure issue, not a hardening nicety.
+
+Also noted while type-checking with `deno check`:
+- [ ] **R14.4** `MARKING-PROCESS` has one pre-existing `TS7006` (implicit `any`,
+      the `normalized.annotations.map((a) => ...)` call). Deploys fine today;
+      left alone deliberately rather than touching the marking path mid-release.
