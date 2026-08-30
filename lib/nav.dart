@@ -23,6 +23,7 @@ import 'package:marking_prokect_v2/screens/plans/plans_screen.dart';
 import 'package:marking_prokect_v2/screens/settings/settings_screen.dart';
 import 'package:marking_prokect_v2/screens/students/student_profile_screen.dart';
 import 'package:marking_prokect_v2/screens/classes/class_hub_screen.dart';
+import 'package:marking_prokect_v2/screens/classes/export_marks_screen.dart';
 import 'package:marking_prokect_v2/screens/presets/create_preset_flow_screen.dart';
 import 'package:marking_prokect_v2/screens/presets/preset_detail_screen.dart';
 import 'package:marking_prokect_v2/screens/presets/preset_edit_screen.dart';
@@ -61,6 +62,7 @@ class AppRouter {
       GoRoute(path: AppRoutes.planning, name: 'planning', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PlanningScreen())),
       GoRoute(path: AppRoutes.plans, name: 'plans', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PlansScreen())),
       GoRoute(path: AppRoutes.importResponses, name: 'importResponses', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ImportResponsesScreen())),
+      GoRoute(path: AppRoutes.exportMarks, name: 'exportMarks', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: ExportMarksScreen())),
       GoRoute(path: AppRoutes.waysToMark, name: 'waysToMark', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: WaysToMarkScreen())),
       GoRoute(path: AppRoutes.prepareTest, name: 'prepareTest', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: PrepareTestScreen())),
       GoRoute(path: AppRoutes.splitStack, name: 'splitStack', parentNavigatorKey: _rootKey, pageBuilder: (context, state) => const MaterialPage(child: SplitStackScreen())),
