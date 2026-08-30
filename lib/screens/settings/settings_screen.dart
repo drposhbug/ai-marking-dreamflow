@@ -625,6 +625,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: 'Scan or manage saved answer keys',
                     onTap: () => context.go(AppRoutes.library),
                   ),
+                  _RowItem(
+                    icon: Icons.upload_rounded,
+                    title: 'Export marks',
+                    subtitle: 'Send them to your gradebook instead of typing them in',
+                    onTap: () => context.push(AppRoutes.exportMarks),
+                  ),
                 ],
               ),
             ),
