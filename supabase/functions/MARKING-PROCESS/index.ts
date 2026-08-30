@@ -1964,6 +1964,45 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── Getting a night's marking back on a new phone ──────────────────────
+  // Batch ids used to live only on the device that queued them. Reinstall
+  // the app, or pick up a new phone, and last night's class set was
+  // unreachable: the marking_batches row was still there and Anthropic still
+  // had the results, but nothing could tell the teacher which batch to ask
+  // for. This hands back the ids so the app can call batch_status on each.
+  //
+  // Anthropic keeps results retrievable for 29 days, so that is the window
+  // worth listing — beyond it there is nothing left to recover. Already
+  // ended batches are INCLUDED on purpose: OVERNIGHT-SWEEPER settles a batch
+  // within about 15 minutes of it finishing, so a list of only unfinished
+  // ones would be empty at exactly the moment a teacher needs their marking
+  // back. Each row carries its status so the caller can tell the two apart.
+  if (action === "list_batches") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const since = new Date(Date.now() - 29 * 86400_000).toISOString();
+    const { data, error } = await serviceDb()
+      .from("marking_batches")
+      .select("batch_id, status, meta, created_at, updated_at")
+      .eq("teacher_id", teacherId)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    if (error) return json({ error: error.message }, 500);
+    return json({
+      // deno-lint-ignore no-explicit-any
+      batches: (data ?? []).map((r: any) => ({
+        batchId: r.batch_id,
+        status: r.status,
+        // meta is keyed by custom_id, one entry per paper, so its size is
+        // the size of the class set. The meta itself is the poll path's
+        // business and is not returned.
+        papers: Object.keys(r.meta ?? {}).length,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      })),
+    });
+  }
 
   // ── Account deletion. Required by the App Store (5.1.1(v)) and Play:
   //    a teacher who can create an account must be able to erase it from
