@@ -1980,6 +1980,18 @@ Deno.serve(async (req) => {
   if (action === "list_batches") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+
+    // Proved against the token, not taken on the payload's word. The anon key
+    // ships in the APK, so a teacherId in the body is a request, not an
+    // identity: without this, anyone holding that key could enumerate another
+    // teacher's class sets by id. Same check delete_account makes, and this
+    // action has no callers yet, so it starts strict rather than inheriting
+    // the looser habit of the older read actions.
+    const claims = jwtClaims(req.headers.get("authorization"));
+    if (claims?.role !== "authenticated" || String(claims?.sub ?? "") !== teacherId) {
+      return json({ error: "Sign in again to see your overnight batches." }, 403);
+    }
+
     const since = new Date(Date.now() - 29 * 86400_000).toISOString();
     const { data, error } = await serviceDb()
       .from("marking_batches")
