@@ -9,8 +9,9 @@ environment:
 
 dependencies:
   file_picker: '>=8.1.2'
-  # Pin to a 1.x release to avoid pulling in the Passkeys Web SDK dependency,
-  # which requires additional web bootstrap scripting and can crash on startup.
+  # Only passkeys_platform_interface comes in transitively -- a Dart-only
+  # interface, no Passkeys Web SDK. Verified 2026-08-30: the compiled web
+  # bundle contains no Passkeys reference, so no JS shim is needed to boot.
   supabase_flutter: ^2.8.0
   http: ^1.2.0
   pdfx: ^2.6.0
