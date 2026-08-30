@@ -267,3 +267,56 @@ history rather than engineering, and it cannot be caught up later.
       the caps assume — note it now comes from the under-$1M rate, NOT the Small
       Business Program. Web checkout is 10%. Linking out from the app stopped being
       prohibited on 2026-06-30 in US/UK/EEA.
+
+---
+
+## R13 — Robustness pass (2026-08-30)
+
+Done:
+- [x] **R13.1** Timeouts on all 25 `functions.invoke` sites (there were none). Slow
+      default of 4 min; a timeout becomes a retryable tray job, not a lost paper.
+- [x] **R13.2** Marking concurrency capped at 3 (was: all 29 at once from one phone).
+- [x] **R13.3** `enqueueBatch` puts the whole set in the tray BEFORE awaiting the
+      pilot. Previously a hung pilot left 29 papers as local variables in a
+      suspended function — unreachable by any amount of persistence.
+- [x] **R13.4** Overnight: per-paper filing + `filedIds` persisted after each paper
+      (gradebook was getting duplicates); failed/expired papers kept and named
+      instead of silently dropped; failed submit no longer discards held papers;
+      page paths stored relative (iOS moves Documents on app update).
+- [x] **R13.5** Gallery bulk pick: capped at 60, real progress, Stop button, one bad
+      photo no longer discards the pick.
+- [x] **R13.6** Paid double-taps closed: Scan Attendance (also fixed roster
+      duplication — 30 students became 60), Scan Key.
+- [x] **R13.7** `runWithBlockingProgress` — back button no longer dismisses a
+      progress dialog and makes the completion pop take the screen underneath.
+- [x] **R13.8** Deleted `image_preview_screen` — dead prototype on a LIVE root route
+      that assigned `Random().nextInt(students)` as the detected student.
+
+Still open:
+- [ ] **R13.9** **Money leak.** `batch_submit` runs `budgetGate` but writes NO
+      `usage_log` row — billing happens only on the first poll that sees `ended`
+      (index.ts:1953). A teacher who queues an overnight batch and never reopens
+      the app means Anthropic bills you and `usage_log` records nothing: invisible
+      to the credit meter AND the monthly cap. Fixed by R13.10.
+- [ ] **R13.10** **Scheduled sweeper (server).** pg_cron ~15 min, SEPARATE from
+      MARKING-PROCESS: select `marking_batches` where `status <> 'ended'` and
+      `created_at > now() - 29 days`; retrieve from Anthropic; skip unless
+      `processing_status = 'ended'`; bill via
+      `UPDATE ... WHERE batch_id = $1 AND status <> 'ended'` and only log usage if
+      1 row changed (this also closes a TOCTOU race where two devices polling
+      concurrently both bill); then POST OneSignal with
+      `include_aliases.external_id`. This is what makes "you can close the app"
+      true, what makes push fire at all, and what stops R13.9.
+- [ ] **R13.11** `list_batches` action so a reinstall or a new phone can recover a
+      night's marking. Today batches are device-local: the row and the Anthropic
+      results both still exist but no client can reach them.
+- [ ] **R13.12** The home screen says overnight results "land on your dashboard when
+      they finish". Until R13.10 they land when the teacher next OPENS the app.
+      Either ship R13.10 or reword it.
+- [ ] **R13.13** Still-indeterminate progress for countable work: Drive import, and
+      "Saving results…" during the CSV import's 30x3 sequential writes.
+- [ ] **R13.14** CSV import has no checkpoint — re-running double-charges and
+      creates a second submission per student (student dedupe exists; submission
+      dedupe does not).
+- [ ] **R13.15** `submissions_service._persist()` re-encodes the ENTIRE submission
+      history to SharedPreferences on every single mark, on the UI isolate.
