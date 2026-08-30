@@ -10,6 +10,7 @@ import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
+import 'package:marking_prokect_v2/services/push_service.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/region_picker.dart';
@@ -23,9 +24,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _alertsNew = true;
-  bool _alertsTriage = true;
-  bool _weekly = false;
   bool _driveAutoSave = false;
 
   UsageSummary? _usage;
@@ -48,6 +46,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Saved against the account, not the phone, so a teacher who switches
+  /// devices keeps the answer they already gave.
+  Future<void> _setPushPrefs(PushPrefs prefs) async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    await context.read<PushService>().setPrefs(auth.id, prefs);
+  }
+
   bool _deleting = false;
 
   /// Erases the account everywhere — required by both app stores, and the
@@ -56,6 +62,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _deleteAccount() async {
     final auth = context.read<AuthService>().currentUser;
     if (auth == null) return;
+    // Held now, before the confirmations: a deleted account must stop being
+    // a notification target too, and by then the context is long gone.
+    final push = context.read<PushService>();
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -109,6 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // is the recoverable side of the mistake.
       await AiGradingService().deleteAccountCloud(teacherId: auth.id);
       await const LocalStore().clear();
+      await push.logOut();
       if (!mounted) return;
       await context.read<BillingService>().logOut();
       if (!mounted) return;
@@ -493,6 +503,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final user = context.watch<AuthService>().currentUser;
     final appState = context.watch<AppState>();
     final classCount = context.watch<ClassesService>().classes.length;
+    final push = context.watch<PushService>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Grading Assistant')),
@@ -670,6 +681,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(Icons.workspace_premium_rounded, size: 18),
                       label: Text(context.watch<BillingService>().isPro ? 'Manage plan' : 'See plans & upgrade'),
                     ),
+                    const Divider(height: 26),
+                    _GivingRow(giving: context.watch<BillingService>().giving),
                   ],
                 ),
               ),
@@ -735,9 +748,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Card(
               child: Column(
                 children: [
-                  _ToggleRow(title: 'New submission alerts', value: _alertsNew, onChanged: (v) => setState(() => _alertsNew = v)),
-                  _ToggleRow(title: 'Triage flag alerts', value: _alertsTriage, onChanged: (v) => setState(() => _alertsTriage = v)),
-                  _ToggleRow(title: 'Weekly summary', value: _weekly, onChanged: (v) => setState(() => _weekly = v)),
+                  _ToggleRow(
+                    title: 'Marked class sets',
+                    value: push.prefs.batchDone,
+                    onChanged: (v) => _setPushPrefs(push.prefs.copyWith(batchDone: v)),
+                  ),
+                  _ToggleRow(
+                    title: 'Trial and credit reminders',
+                    value: push.prefs.planNudges,
+                    onChanged: (v) => _setPushPrefs(push.prefs.copyWith(planNudges: v)),
+                  ),
+                  _ToggleRow(
+                    title: 'Weekly summary',
+                    value: push.prefs.weeklySummary,
+                    onChanged: (v) => _setPushPrefs(push.prefs.copyWith(weeklySummary: v)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                    child: Text(
+                      push.unavailableReason.isNotEmpty
+                          ? push.unavailableReason
+                          : 'Nothing is sent until you\'ve queued a class set overnight — that\'s the only thing worth waking you for.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -752,7 +786,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             TextButton(
               style: TextButton.styleFrom(foregroundColor: AiMarkerColors.error, splashFactory: NoSplash.splashFactory),
               onPressed: () async {
+                // Signing out has to hand the device back to nobody, or the
+                // next teacher on this phone gets the last one's nudges.
+                final push = context.read<PushService>();
                 await context.read<AuthService>().signOut();
+                await push.logOut();
                 if (!mounted) return;
                 context.go(AppRoutes.login);
               },
@@ -820,6 +858,65 @@ class _RowItem extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Puts a number behind the give-back the Plans screen promises.
+///
+/// Only ever shows what the teacher's own subscription accounts for. When
+/// the store hasn't given the app a price there is no total to show, so it
+/// says what one payment generates instead of inventing a running figure —
+/// a made-up number on a claim about giving money away is worse than none.
+class _GivingRow extends StatelessWidget {
+  final GivingSummary giving;
+
+  const _GivingRow({required this.giving});
+
+  String _money(double amount, String currencyCode) {
+    final code = currencyCode.isEmpty ? '' : ' $currencyCode';
+    return '\$${amount.toStringAsFixed(2)}$code';
+  }
+
+  String _line() {
+    if (giving.inTrial) {
+      return 'Your trial hasn\'t been charged yet — the give-back starts with your first payment.';
+    }
+    if (giving.paymentsMade == 0) {
+      return 'Paid plans give 10% to ${GivingSummary.charityPlaceholder}. Yours starts the day you upgrade.';
+    }
+    final total = giving.generatedToDate;
+    if (total == null) {
+      // Entitled, but the store hasn't told the app what the plan costs, so
+      // there is no honest total to print.
+      return '10% of every payment you\'ve made goes to ${GivingSummary.charityPlaceholder}. That\'s ${giving.paymentsMade} payments so far.';
+    }
+    final each = _money(giving.perPayment ?? 0, giving.currencyCode);
+    return 'About ${_money(total, giving.currencyCode)} so far — 10% of each of your ${giving.paymentsMade} payments, $each a ${giving.period}.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.volunteer_activism_rounded, size: 18, color: cs.primary),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Giving', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              Text(
+                _line(),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

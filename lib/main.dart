@@ -9,6 +9,7 @@ import 'package:marking_prokect_v2/services/drive_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/overnight_service.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
+import 'package:marking_prokect_v2/services/push_service.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:marking_prokect_v2/services/student_class_links_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
@@ -57,6 +58,9 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProvider(create: (_) => BillingService()..init()),
+        // No permission is asked here — that waits until the teacher has
+        // actually queued a class set. See PushService.onBatchQueued.
+        ChangeNotifierProvider(create: (_) => PushService()..init()),
         ChangeNotifierProvider(create: (_) => AppState()),
         ChangeNotifierProvider(create: (_) => ClassesService()),
         ChangeNotifierProvider(create: (_) => StudentsService()),

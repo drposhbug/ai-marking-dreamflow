@@ -33,6 +33,9 @@ dependencies:
   purchases_flutter: ^10.7.0
   purchases_ui_flutter: ^10.7.0
   google_mlkit_text_recognition: ^0.16.0
+  # Push, so a teacher who queued a class set at bedtime hears that it's
+  # marked instead of having to reopen the app to find out.
+  onesignal_flutter: ^5.3.0
 
 dev_dependencies:
   flutter_test:
