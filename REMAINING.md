@@ -72,9 +72,13 @@ reference it precisely. Delete anything already done; add anything missing.
 - [ ] **R4.1** Release signing configured (keystore, key.properties, gitignored).
 - [ ] **R4.2** Signed release AAB builds cleanly.
 - [ ] **R4.3** App icon, app name, and version code/name finalized in pubspec + manifest.
-- [ ] **R4.4** Privacy policy drafted and hosted at a public URL.
+- [~] **R4.4** Privacy policy drafted and hosted at a public URL. Page built at
+      `docs/index.html`; still needs GitHub Pages switching on (Settings → Pages →
+      main / /docs). See docs/README.md.
 - [ ] **R4.5** Store listing copy — title, short description, full description.
-- [ ] **R4.6** Screenshots and feature graphic produced.
+- [~] **R4.6** Screenshots and feature graphic produced. Icon done
+      (assets/icons/markless_icon_1024.png, replacing the Dreamflow builder logo);
+      screenshots still need a running app; feature graphic 1024x500 outstanding.
 
 **Manual on Play Console (do myself):**
 - [ ] **R4.7** Store listing filled in and assets uploaded.
@@ -112,18 +116,18 @@ reference it precisely. Delete anything already done; add anything missing.
 - Return short summaries, not full histories.
 ## R6 — Class item analysis (Shipaton demo feature)
 
-- [ ] **R6.1** After a class set completes, aggregate per-question results across
+- [x] **R6.1** After a class set completes, aggregate per-question results across
       all papers in the batch: % correct, average score, most common wrong answer
       or error pattern.
-- [ ] **R6.2** Class summary screen showing questions ranked worst→best, with the
+- [x] **R6.2** Class summary screen showing questions ranked worst→best, with the
       KTCA category and a one-line "what went wrong" per question.
-- [ ] **R6.3** "Reteach" suggestion per weak question — one short paragraph the
+- [x] **R6.3** "Reteach" suggestion per weak question — one short paragraph the
       teacher can use or ignore.
-- [ ] **R6.4** Per-student view: which questions this student missed that most of
+- [x] **R6.4** Per-student view: which questions this student missed that most of
       the class got, and vice versa.
-- [ ] **R6.5** No new schema tables if avoidable — derive from existing per-mark
+- [x] **R6.5** No new schema tables if avoidable — derive from existing per-mark
       results. If a table is genuinely needed, propose it before creating it.
-- [ ] **R6.6** Must not add cost per mark — analysis runs once per batch, not per paper.
+- [x] **R6.6** Must not add cost per mark — analysis runs once per batch, not per paper.
 ---
 
 ## R7 — Push notifications (OneSignal)
@@ -155,9 +159,9 @@ reference it precisely. Delete anything already done; add anything missing.
 > sandbox `test_` key, public-by-design; the Supabase anon key is `--dart-define`, not
 > baked in). The repo is safe to make public.
 
-- [ ] **R8.1** LICENSE file added (MIT or Apache-2.0 — must be machine-detectable).
+- [x] **R8.1** LICENSE file added (MIT or Apache-2.0 — must be machine-detectable).
 - [ ] **R8.2** Repo flipped to public.
-- [ ] **R8.3** README rewritten — it is still the Flutter template. This is the first
+- [x] **R8.3** README rewritten — it is still the Flutter template. This is the first
       thing a Next Gen judge reads: what it does, the architecture, and how the
       RevenueCat integration works.
 - [ ] **R8.4** Confirm active-student status evidence (.edu email) for the submission.
@@ -173,7 +177,7 @@ reference it precisely. Delete anything already done; add anything missing.
 - [ ] **R9.1** Name the actual charity and commit to it publicly.
 - [ ] **R9.2** Settings "Giving" row: dollars generated to date, derived from real
       subscription revenue — not a hardcoded number.
-- [ ] **R9.3** A public receipt (monthly post or page) so the claim is evidenced.
+- [~] **R9.3** A public receipt (monthly post or page) so the claim is evidenced.
 
 ---
 
