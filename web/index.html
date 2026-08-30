@@ -176,6 +176,17 @@
   <noscript><style>#splash { display: none; }</style></noscript>
 </head>
 <body>
+  <!-- pdfx renders PDFs on web through pdf.js, and without this the stack
+       splitter, PDF answer keys and dropped PDFs all fail on an assertion.
+       Served from our own origin rather than a CDN, deliberately: schools
+       block CDNs often enough to matter, and a third-party script that parses
+       a page of a child's work is a dependency worth not having. Vendored
+       from pdfjs-dist 4.6.82 — bump both files together. -->
+  <script src="pdfjs/pdf.min.mjs" type="module"></script>
+  <script type="module">
+    const { pdfjsLib } = globalThis;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/pdf.worker.min.mjs';
+  </script>
   <noscript>
     <div id="noscript-message">
       <h1>Markless needs JavaScript</h1>
