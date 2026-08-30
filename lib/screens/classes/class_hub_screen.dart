@@ -9,6 +9,7 @@ import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/screens/classes/paste_roster_sheet.dart';
+import 'package:marking_prokect_v2/services/class_analysis.dart';
 import 'package:marking_prokect_v2/services/roster_paste.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
@@ -115,6 +116,9 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
 
     final filteredStudents = students.where((s) => _search.text.trim().isEmpty || s.name.toLowerCase().contains(_search.text.trim().toLowerCase())).toList();
 
+    final sets = ClassAnalysis.setsFor(submissions: submissions, classId: widget.classId);
+    final latestSet = sets.isEmpty ? null : sets.first;
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(onPressed: () => context.pop(), icon: Icon(Icons.arrow_back_rounded, color: cs.primary)),
@@ -174,6 +178,25 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              // Offered the moment a set has been marked, because this is
+              // the question a teacher has right after marking one — not
+              // "how did each of them do", but "what did we get wrong".
+              if (latestSet != null) ...[
+                Card(
+                  color: cs.primary.withValues(alpha: 0.07),
+                  child: ListTile(
+                    leading: Icon(Icons.insights_rounded, color: cs.primary),
+                    title: Text('What the class got wrong', style: Theme.of(context).textTheme.titleSmall),
+                    subtitle: Text(
+                      '${latestSet.subject} · ${latestSet.papers.length} paper${latestSet.papers.length == 1 ? '' : 's'} — ranked worst first, with a reteach idea for each.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
+                    ),
+                    trailing: Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral),
+                    onTap: () => context.push('${AppRoutes.classAnalysis}?classId=${widget.classId}'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               // The marked work itself — teachers look for it HERE, in the
               // class, not just on the dashboard.
               if (classSubmissions.isNotEmpty) ...[
