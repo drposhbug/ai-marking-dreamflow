@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -15,6 +16,7 @@ import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/csv_import.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
+import 'package:marking_prokect_v2/services/import_run.dart';
 import 'package:marking_prokect_v2/services/student_class_links_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
@@ -37,7 +39,6 @@ class _ImportResponsesScreenState extends State<ImportResponsesScreen> {
   String _fileName = '';
   String? _classId;
   bool _marking = false;
-  String _progress = '';
 
   Future<void> _pickCsv() async {
     try {
@@ -91,164 +92,262 @@ class _ImportResponsesScreenState extends State<ImportResponsesScreen> {
     final klass = classes.getById(classId);
     final subject = klass?.subject ?? 'General';
 
-    setState(() {
-      _marking = true;
-      _progress = 'Marking multiple choice…';
-    });
+    const checkpoints = ImportCheckpoints();
+    final importId = ImportCheckpoints.idFor(classId: classId, headers: sheet.headers);
+    final alreadyFiled = (await checkpoints.load(importId)).filed;
+    if (!mounted) return;
+    // A file this class has already been marked from. Running it again would
+    // buy every written answer a second time and leave two results under each
+    // child's name, so ask — and make the safe answer the easy one.
+    if (sheet.rows.isNotEmpty && alreadyFiled.length >= sheet.rows.length) {
+      final again = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Already marked'),
+          content: Text('These ${sheet.rows.length} responses have already been marked into '
+              '${klass?.name ?? 'this class'} and are on your dashboard. Marking them again '
+              'costs credits for the written questions and gives every student a second result.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Mark again')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('See the results')),
+          ],
+        ),
+      );
+      if (again != true) {
+        if (mounted) context.go(AppRoutes.dashboard);
+        return;
+      }
+      await checkpoints.forget(importId);
+    }
+    if (!mounted) return;
+
+    // Answers are already anonymous — they go up keyed by row number, never
+    // by name. Scrub any name a student typed into their own answer (signing
+    // an essay, naming a classmate) as well.
+    final rosterNames = [
+      for (var r = 0; r < sheet.rows.length; r++) sheet.studentName(r),
+      ...students.byClass(classId).map((s) => s.name),
+    ];
+    final maxScore = included.fold<double>(0, (s, q) => s + q.marks);
+    final written = included.where((q) => q.kind != ImportColumnKind.multipleChoice).toList();
+    final ai = AiGradingService();
+    final built = <int, Submission>{};
+
+    setState(() => _marking = true);
+    var stopRequested = false;
+    var label = written.isEmpty ? 'Saving results…' : 'Marking the written answers…';
+    var fraction = 0.0;
+    // Nullable, and reassigned on every rebuild: the first count can land
+    // before the dialog has had a frame to build in, and the builder runs
+    // again each time it is refreshed.
+    StateSetter? refresh;
+
+    // Held as a route rather than closed through the builder's context, for
+    // the reason blocking_progress.dart spells out: a run that finishes
+    // before the dialog has painted leaves nothing to pop with.
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final progressRoute = DialogRoute<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        // Back must not take the dialog away from a run that is still going.
+        // This is the whole of defect two: a teacher who walked out mid-import
+        // never found out whether it had worked, so she ran it again and paid
+        // twice. Stop is the way out, and it keeps everything already done.
+        canPop: false,
+        child: AlertDialog(
+          content: StatefulBuilder(builder: (ctx, setInner) {
+            refresh = setInner;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label),
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  child: LinearProgressIndicator(value: fraction == 0 ? null : fraction),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'You can stop. Everything marked so far is kept, and running this file '
+                  'again picks up where it left off without charging twice.',
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+                ),
+              ],
+            );
+          }),
+          actions: [
+            TextButton(onPressed: () => stopRequested = true, child: const Text('Stop')),
+          ],
+        ),
+      ),
+    );
+    unawaited(navigator.push(progressRoute));
 
     try {
-      // ── 1. Multiple choice: free, on-device. ─────────────────────────
-      // marksByRow[row][columnIndex] = (score, correct, feedback)
-      final marksByRow = <int, Map<int, (double, bool, String)>>{};
-      for (var r = 0; r < sheet.rows.length; r++) {
-        marksByRow[r] = {};
-        for (final q in included.where((q) => q.kind == ImportColumnKind.multipleChoice)) {
-          final answer = q.index < sheet.rows[r].length ? sheet.rows[r][q.index].trim() : '';
-          final correct = CsvImport.mcCorrect(answer, q.correctAnswer);
-          final blank = answer.isEmpty;
-          marksByRow[r]![q.index] = (
-            correct ? q.marks : 0,
-            correct,
-            blank ? 'No answer given.' : (correct ? 'Correct.' : 'Correct answer: ${q.correctAnswer}'),
+      final outcome = await runImport(
+        sheet: sheet,
+        questions: included,
+        importId: importId,
+        checkpoints: checkpoints,
+        onProgress: (p) {
+          label = p.phase == ImportPhase.marking
+              ? 'Marking "${p.question}" (${p.done} of ${p.total})…'
+              : 'Saving ${p.done} of ${p.total} students…';
+          fraction = p.total == 0 ? 0 : p.done / p.total;
+          refresh?.call(() {});
+        },
+        isStopped: () => stopRequested,
+        markQuestion: (q, rows) async {
+          final answers = <Map<String, dynamic>>[];
+          for (final r in rows) {
+            final raw = q.index < sheet.rows[r].length ? sheet.rows[r][q.index].trim() : '';
+            final text = appState.anonymizeUploads ? Anonymizer.scrubNames(raw, rosterNames) : raw;
+            answers.add({'i': r, 'text': text.isEmpty ? '(no answer)' : text});
+          }
+          final res = await ai.markResponses(
+            teacherId: auth.id,
+            subject: subject,
+            gradeLevel: klass?.gradeLevel,
+            harshness: appState.defaultHarshness,
+            questions: [
+              {
+                'label': q.header,
+                'prompt': q.header,
+                'kind': q.kind == ImportColumnKind.paragraph ? 'paragraph' : 'short',
+                'maxMarks': q.marks,
+                if (q.keyAnswer.trim().isNotEmpty) 'keyAnswer': q.keyAnswer.trim(),
+                'answers': answers,
+              }
+            ],
           );
-        }
-      }
+          // One question per call, so the marks come back as the only entry.
+          final byRow = res.isEmpty ? const <int, Map<String, dynamic>>{} : res.first;
+          return {
+            for (final r in rows)
+              r: ImportRowMark(
+                (byRow[r]?['score'] as num?)?.toDouble() ?? 0,
+                byRow[r]?['correct'] == true,
+                (byRow[r]?['feedback'] ?? '').toString(),
+              ),
+          };
+        },
+        prepareRow: (r, rowMarks) async {
+          final name = sheet.studentName(r);
+          // Re-read the roster each row so two rows with the same name share
+          // one student instead of creating a duplicate.
+          var student = students.byClass(classId).cast<Student?>().firstWhere(
+                (s) => s!.name.trim().toLowerCase() == name.trim().toLowerCase(),
+                orElse: () => null,
+              );
+          student ??= await students.create(teacherId: auth.id, classId: classId, name: name, studentId: '');
+          await links.upsert(studentId: student.id, classId: classId, subject: subject);
 
-      // ── 2. Written answers: one AI call per question. ────────────────
-      final written = included.where((q) => q.kind != ImportColumnKind.multipleChoice).toList();
-      final ai = AiGradingService();
-      for (var w = 0; w < written.length; w++) {
-        final q = written[w];
-        if (mounted) setState(() => _progress = 'Marking "${q.header}" (${w + 1} of ${written.length})…');
-        // Answers are already anonymous — they go up keyed by row number,
-        // never by name. Scrub any name a student typed into their own
-        // answer (signing an essay, naming a classmate) as well.
-        final rosterNames = [
-          for (var r = 0; r < sheet.rows.length; r++) sheet.studentName(r),
-          ...students.byClass(classId).map((s) => s.name),
-        ];
-        final answers = <Map<String, dynamic>>[];
-        for (var r = 0; r < sheet.rows.length; r++) {
-          final raw = q.index < sheet.rows[r].length ? sheet.rows[r][q.index].trim() : '';
-          final text = appState.anonymizeUploads ? Anonymizer.scrubNames(raw, rosterNames) : raw;
-          answers.add({'i': r, 'text': text.isEmpty ? '(no answer)' : text});
-        }
-        final res = await ai.markResponses(
-          teacherId: auth.id,
-          subject: subject,
-          gradeLevel: klass?.gradeLevel,
-          harshness: appState.defaultHarshness,
-          questions: [
-            {
-              'label': q.header,
-              'prompt': q.header,
-              'kind': q.kind == ImportColumnKind.paragraph ? 'paragraph' : 'short',
-              'maxMarks': q.marks,
-              if (q.keyAnswer.trim().isNotEmpty) 'keyAnswer': q.keyAnswer.trim(),
-              'answers': answers,
-            }
-          ],
-        );
-        // One question per call, so the marks come back as the only entry.
-        final byRow = res.isEmpty ? const <int, Map<String, dynamic>>{} : res.first;
-        for (var r = 0; r < sheet.rows.length; r++) {
-          final m = byRow[r];
-          marksByRow[r]![q.index] = (
-            (m?['score'] as num?)?.toDouble() ?? 0,
-            m?['correct'] == true,
-            (m?['feedback'] ?? '').toString(),
+          final score = rowMarks.values.fold<double>(0, (s, m) => s + m.score);
+          final breakdown = [
+            for (final q in included)
+              CriterionResult(
+                name: q.header.length > 60 ? '${q.header.substring(0, 57)}…' : q.header,
+                score: rowMarks[q.index]?.score ?? 0,
+                maxScore: q.marks,
+                feedback: rowMarks[q.index]?.feedback ?? '',
+              ),
+          ];
+          final full = [for (final q in included) if (rowMarks[q.index]?.correct ?? false) q.header];
+          final weak = [
+            for (final q in included)
+              if (!(rowMarks[q.index]?.correct ?? true) && (rowMarks[q.index]?.score ?? 0) <= q.marks / 2) q.header,
+          ];
+          final pct = maxScore <= 0 ? 0.0 : (score / maxScore * 100);
+
+          final result = AiGradeResult(
+            detectedSubject: subject,
+            detectedGrade: klass?.gradeLevel,
+            provider: 'import',
+            studentNameOnPaper: name,
+            gradingFormat: 'percentage',
+            percentage: pct,
+            percentageDisplay: '${pct.round()}%',
+            level: null,
+            levelDisplay: null,
+            rawScore: score,
+            maxScore: maxScore,
+            summary: 'Imported from $_fileName — ${score.toStringAsFixed(score.truncateToDouble() == score ? 0 : 1)}/${maxScore.toStringAsFixed(maxScore.truncateToDouble() == maxScore ? 0 : 1)}. '
+                '${weak.isEmpty ? 'Solid across the board.' : 'Review: ${weak.take(2).join(", ")}.'}',
+            strengths: full.take(3).toList(),
+            improvements: weak.take(3).toList(),
+            criteriaBreakdown: breakdown,
+            annotations: const [],
+            rawText: '',
+            confidence: written.isEmpty ? 98 : 88,
+            flags: const [],
+            triageStatus: TriageStatus.graded,
           );
-        }
-      }
 
-      // ── 3. One submission per student, filed into the class. ─────────
-      if (mounted) setState(() => _progress = 'Saving results…');
-      final maxScore = included.fold<double>(0, (s, q) => s + q.marks);
-      var saved = 0;
-      for (var r = 0; r < sheet.rows.length; r++) {
-        final name = sheet.studentName(r);
-        // Re-read the roster each row so two rows with the same name share
-        // one student instead of creating a duplicate.
-        var student = students.byClass(classId).cast<Student?>().firstWhere(
-              (s) => s!.name.trim().toLowerCase() == name.trim().toLowerCase(),
-              orElse: () => null,
-            );
-        student ??= await students.create(teacherId: auth.id, classId: classId, name: name, studentId: '');
-        await links.upsert(studentId: student.id, classId: classId, subject: subject);
-
-        final rowMarks = marksByRow[r]!;
-        final score = rowMarks.values.fold<double>(0, (s, m) => s + m.$1);
-        final breakdown = [
-          for (final q in included)
-            CriterionResult(
-              name: q.header.length > 60 ? '${q.header.substring(0, 57)}…' : q.header,
-              score: rowMarks[q.index]?.$1 ?? 0,
-              maxScore: q.marks,
-              feedback: rowMarks[q.index]?.$3 ?? '',
-            ),
-        ];
-        final full = [for (final q in included) if ((rowMarks[q.index]?.$2 ?? false)) q.header];
-        final weak = [for (final q in included) if (!(rowMarks[q.index]?.$2 ?? true) && (rowMarks[q.index]?.$1 ?? 0) <= q.marks / 2) q.header];
-        final pct = maxScore <= 0 ? 0.0 : (score / maxScore * 100);
-
-        final result = AiGradeResult(
-          detectedSubject: subject,
-          detectedGrade: klass?.gradeLevel,
-          provider: 'import',
-          studentNameOnPaper: name,
-          gradingFormat: 'percentage',
-          percentage: pct,
-          percentageDisplay: '${pct.round()}%',
-          level: null,
-          levelDisplay: null,
-          rawScore: score,
-          maxScore: maxScore,
-          summary: 'Imported from $_fileName — ${score.toStringAsFixed(score.truncateToDouble() == score ? 0 : 1)}/${maxScore.toStringAsFixed(maxScore.truncateToDouble() == maxScore ? 0 : 1)}. '
-              '${weak.isEmpty ? 'Solid across the board.' : 'Review: ${weak.take(2).join(", ")}.'}',
-          strengths: full.take(3).toList(),
-          improvements: weak.take(3).toList(),
-          criteriaBreakdown: breakdown,
-          annotations: const [],
-          rawText: '',
-          confidence: written.isEmpty ? 98 : 88,
-          flags: const [],
-          triageStatus: TriageStatus.graded,
-        );
-
-        final now = DateTime.now();
-        await submissions.create(Submission(
-          id: 'sub_${IdFactory.newId()}',
-          teacherId: auth.id,
-          studentId: student.id,
-          classId: classId,
-          presetId: GradingPreset.builtInTestId,
-          subject: subject,
-          gradingMode: GradingMode.testQuiz,
-          score: score,
-          maxScore: maxScore,
-          feedback: result.summary,
-          triageStatus: TriageStatus.graded,
-          overrideUsed: false,
-          triageFlags: const [],
-          confidence: result.confidence,
-          createdAt: now,
-          updatedAt: now,
-          resultJson: result.toJson(),
-        ));
-        saved++;
-      }
+          final now = DateTime.now();
+          final id = 'sub_${IdFactory.newId()}';
+          built[r] = Submission(
+            id: id,
+            teacherId: auth.id,
+            studentId: student.id,
+            classId: classId,
+            presetId: GradingPreset.builtInTestId,
+            subject: subject,
+            gradingMode: GradingMode.testQuiz,
+            score: score,
+            maxScore: maxScore,
+            feedback: result.summary,
+            triageStatus: TriageStatus.graded,
+            overrideUsed: false,
+            triageFlags: const [],
+            confidence: result.confidence,
+            createdAt: now,
+            updatedAt: now,
+            resultJson: result.toJson(),
+          );
+          return id;
+        },
+        fileRows: (rows) => submissions.createAll([for (final r in rows) built[r]!]),
+      );
 
       if (!mounted) return;
-      _snack('Marked $saved student${saved == 1 ? '' : 's'} — they\'re on your dashboard.');
-      context.go(AppRoutes.dashboard);
+      if (progressRoute.isActive) navigator.removeRoute(progressRoute);
+      _snack(_outcomeMessage(outcome));
+      // A stopped run stays put, so finishing it is one more tap rather than
+      // finding her way back to this screen.
+      if (!outcome.stopped && outcome.saved > 0) context.go(AppRoutes.dashboard);
     } on UsageLimitException catch (e) {
+      // The spinner comes down first, so the reason is the thing she is
+      // looking at rather than something behind a dialog.
+      if (progressRoute.isActive) navigator.removeRoute(progressRoute);
       if (mounted) _snack(e.message);
     } catch (e) {
       debugPrint('Import marking failed: $e');
-      if (mounted) _snack('Marking didn\'t finish: ${e.toString().replaceFirst('Exception: ', '')}');
+      if (progressRoute.isActive) navigator.removeRoute(progressRoute);
+      if (mounted) {
+        _snack('Marking didn\'t finish: ${e.toString().replaceFirst('Exception: ', '')} '
+            'Run this file again to carry on — you won\'t be charged twice.');
+      }
     } finally {
+      if (progressRoute.isActive) navigator.removeRoute(progressRoute);
       if (mounted) setState(() => _marking = false);
     }
+  }
+
+  /// What actually happened, in the terms the teacher was worried about:
+  /// who is marked, who was already done, and what is left.
+  String _outcomeMessage(ImportRunOutcome o) {
+    final parts = <String>[];
+    if (o.saved > 0) parts.add('Marked ${o.saved} student${o.saved == 1 ? '' : 's'}');
+    if (o.alreadySaved > 0) parts.add('${o.alreadySaved} were already marked from this file');
+    if (o.failed > 0) parts.add('${o.failed} couldn\'t be filed');
+    if (o.stopped) {
+      return '${parts.isEmpty ? 'Stopped' : '${parts.join(' · ')} — stopped there'}. '
+          'Run this file again to finish the rest; the marks already bought are kept.';
+    }
+    if (parts.isEmpty) return 'Nothing left to mark in this file.';
+    return '${parts.join(' · ')} — they\'re on your dashboard.';
   }
 
   @override
@@ -256,26 +355,36 @@ class _ImportResponsesScreenState extends State<ImportResponsesScreen> {
     final sheet = _sheet;
     final classes = context.watch<ClassesService>().classes;
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => context.pop()),
-        title: const Text('Import responses'),
-      ),
-      body: sheet == null ? _pickerBody() : _mappingBody(sheet, classes),
-      bottomNavigationBar: sheet == null
-          ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: FilledButton.icon(
-                  onPressed: _marking ? null : _mark,
-                  icon: _marking
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.checklist_rounded),
-                  label: Text(_marking ? _progress : 'Mark ${sheet.rows.length} students'),
+    // Leaving mid-run is blocked rather than allowed-and-recovered: the work
+    // is credits being spent, and a teacher who walks away from it has no way
+    // of knowing what she has bought. Stop, in the progress dialog, is the
+    // honest exit — it keeps what is done and says so.
+    return PopScope(
+      canPop: !_marking,
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: _marking ? null : () => context.pop(),
+          ),
+          title: const Text('Import responses'),
+        ),
+        body: sheet == null ? _pickerBody() : _mappingBody(sheet, classes),
+        bottomNavigationBar: sheet == null
+            ? null
+            : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: FilledButton.icon(
+                    onPressed: _marking ? null : _mark,
+                    icon: _marking
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.checklist_rounded),
+                    label: Text(_marking ? 'Marking…' : 'Mark ${sheet.rows.length} students'),
+                  ),
                 ),
               ),
-            ),
+      ),
     );
   }
 
