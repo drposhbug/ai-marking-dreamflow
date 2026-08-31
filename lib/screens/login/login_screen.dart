@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +9,8 @@ import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/widgets/paper.dart';
+import 'package:marking_prokect_v2/widgets/responsive.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 
@@ -44,10 +46,41 @@ class _LoginScreenState extends State<LoginScreen> {
     // A session may already exist (stay signed in from a previous run) or
     // land mid-frame (OAuth deep link the router bounced back here) —
     // adopt it and continue instead of asking for the password again.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _adoptSessionIfAny());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _prefillEmailFromSite();
+      _adoptSessionIfAny();
+    });
     _authSub = auth.authStateChanges?.listen((s) {
       if (s.session != null) _adoptSessionIfAny();
     });
+  }
+
+  /// The marketing site has no backend, so its sign-in section can only
+  /// hand the teacher's address across in the link it opens the app with
+  /// (`?email=...`). Fill it in so she does not type it twice.
+  ///
+  /// It is a prefill and nothing more: a URL is not proof of who anyone
+  /// is, so this never touches the password, never signs anything in, and
+  /// never overwrites an address she or her browser already put there.
+  /// The value is somebody's text off a link, so anything that is not
+  /// plainly an email address is dropped rather than shown to her.
+  void _prefillEmailFromSite() {
+    if (!kIsWeb || _email.text.isNotEmpty) return;
+    String? raw;
+    try {
+      raw = GoRouterState.of(context).uri.queryParameters['email'];
+    } catch (_) {
+      // No router above us (a test harness, say) — the address bar still
+      // answers below.
+    }
+    // The app is served under a hash route, so the site's query sits on
+    // the page URL ahead of the '#/login' the router sees.
+    if (raw == null || raw.isEmpty) raw = Uri.base.queryParameters['email'];
+    final email = (raw ?? '').trim();
+    if (email.isEmpty || email.length > 254) return;
+    if (!RegExp(r'^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$').hasMatch(email)) return;
+    _email.text = email;
   }
 
   /// Completes sign-in from an already-established Supabase session.
@@ -245,123 +278,279 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Two shapes, from the app's own breakpoints: a phone gets one
+        // column, a desk gets the sheet with the marking beside the form.
+        final layout = Breakpoints.layoutFor(constraints.maxWidth);
+        final tones = PaperTones.of(context);
+        return layout == AppLayout.expanded ? _deskLayout(context, tones) : _pageLayout(context, tones);
+      },
+    );
+  }
+
+  /// Phone. The screen is the page: paper out to the edges, the red margin
+  /// rule of an exercise book running its whole height, and everything
+  /// written to the right of that rule.
+  Widget _pageLayout(BuildContext context, PaperTones tones) {
+    const gutter = 22.0;
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: cs.primary.withValues(alpha: 0.10),
-                        border: Border.all(color: cs.primary.withValues(alpha: 0.20)),
-                      ),
-                      child: Icon(Icons.school_rounded, color: cs.primary, size: 32),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text('Markless', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: cs.primary)),
-                  const SizedBox(height: 6),
-                  Text('Mark less. Teach more. ✨', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
-                  const SizedBox(height: 22),
-                  AutofillGroup(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TextField(
-                          controller: _email,
-                          keyboardType: TextInputType.emailAddress,
-                          autofillHints: const [AutofillHints.username, AutofillHints.email],
-                          decoration: const InputDecoration(hintText: 'teacher@school.edu', labelText: 'Email'),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _password,
-                          obscureText: _obscure,
-                          autofillHints: const [AutofillHints.password],
-                          onSubmitted: (_) => _loading ? null : _signIn(),
-                          decoration: InputDecoration(
-                            hintText: 'Password',
-                            labelText: 'Password',
-                            suffixIcon: IconButton(
-                              onPressed: () => setState(() => _obscure = !_obscure),
-                              icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded, color: AiMarkerColors.neutral),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton(
-                    onPressed: _loading ? null : _signIn,
-                    style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
-                    child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Sign In'),
-                  ),
-                  const SizedBox(height: 10),
-                  OutlinedButton(
-                    onPressed: _loading ? null : _openCreateAccount,
-                    child: Text('Create Account', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
-                  ),
-                  if (_oauthButtons.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Expanded(child: Divider()),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Text('or continue with', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                        ),
-                        const Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        for (var i = 0; i < _oauthButtons.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 10),
-                          Expanded(child: _oauthButtons[i]),
+      backgroundColor: tones.paper,
+      // Expand, not the default: a loose Stack lets the scroll view shrink
+      // to its content, and then the rule stops halfway down the page.
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // The rule runs the height of the page whether or not there is
+          // writing beside it -- that is what makes it a page rather than a
+          // divider between two boxes.
+          Positioned(
+            left: gutter,
+            top: 0,
+            bottom: 0,
+            width: 1,
+            child: ColoredBox(color: tones.pen.withValues(alpha: 0.45)),
+          ),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, page) => SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(gutter + 16, 26, 20, 28),
+                child: ConstrainedBox(
+                  // Sits in the middle of the page when it fits, the way it
+                  // always has, and scrolls from the top when it does not.
+                  constraints: BoxConstraints(minHeight: page.maxHeight > 54 ? page.maxHeight - 54 : 0),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 460),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _wordmark(context),
+                          const SizedBox(height: 18),
+                          _promise(context, tones, fontSize: 22),
+                          const SizedBox(height: 26),
+                          ..._signInColumn(context, tones, heading: false),
                         ],
-                      ],
+                      ),
                     ),
-                  ],
-                  const SizedBox(height: 18),
-                  Text(
-                    'Signing in with the same account always brings back your name, school, and marking preferences.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
                   ),
-                  // Debug builds only. This signs in to a local-only account
-                  // that never syncs, so a teacher who tapped it in a shipped
-                  // build would do a term's marking and find none of it on
-                  // her next device -- quite apart from handing anyone who
-                  // installed the app a way straight past sign-up.
-                  if (kDebugMode) ...[
-                    const SizedBox(height: 10),
-                    TextButton.icon(
-                      onPressed: _loading ? null : _devMode,
-                      icon: Icon(Icons.build_rounded, size: 16, color: AiMarkerColors.neutral),
-                      label: Text('Developer mode — skip sign-in & setup', style: TextStyle(color: AiMarkerColors.neutral)),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Desk. One sheet of paper on the page colour, with the margin rule as
+  /// the seam: what the marking gives back on one side of it, sign-in on
+  /// the other. A 1440px browser used to be a small box marooned in grey.
+  Widget _deskLayout(BuildContext context, PaperTones tones) {
+    return Scaffold(
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, outer) {
+            final room = outer.maxHeight.isFinite ? outer.maxHeight - 56 : 0.0;
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: room < 0 ? 0 : room),
+                child: Center(
+                  child: PaperSheet(
+                    raised: true,
+                    child: LayoutBuilder(
+                      builder: (context, sheet) {
+                        final seam = (sheet.maxWidth * 0.5).roundToDouble();
+                        return Stack(
+                          children: [
+                            Positioned(
+                              left: seam,
+                              top: 0,
+                              bottom: 0,
+                              width: 1,
+                              child: ColoredBox(color: tones.pen.withValues(alpha: 0.45)),
+                            ),
+                            // Centred against the taller half, so the form
+                            // sits in the page rather than stranded at the
+                            // top of it with blank paper underneath.
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: seam,
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(38, 36, 30, 36),
+                                    child: _promisePanel(context, tones),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(31, 36, 38, 36),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: _signInColumn(context, tones, heading: true),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
+  }
+
+  Widget _wordmark(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const MarklessMark(size: 32),
+          const SizedBox(width: 11),
+          Text('Markless', style: Theme.of(context).textTheme.titleLarge?.copyWith(letterSpacing: -0.7)),
+        ],
+      );
+
+  /// The line she read on the way in, in the same words and with the same
+  /// red underline under the same three of them.
+  Widget _promise(BuildContext context, PaperTones tones, {required double fontSize}) => Text.rich(
+        TextSpan(
+          children: [
+            const TextSpan(text: 'Marking eats your evenings. Markless takes '),
+            TextSpan(
+              text: 'the first pass.',
+              style: TextStyle(decoration: TextDecoration.underline, decorationColor: tones.pen, decorationThickness: 2.5),
+            ),
+          ],
+        ),
+        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: fontSize, height: 1.14, letterSpacing: -0.7),
+      );
+
+  /// The wide window's other half: what she gets for signing in, drawn on
+  /// the same paper the site is drawn on.
+  Widget _promisePanel(BuildContext context, PaperTones tones) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _wordmark(context),
+          const SizedBox(height: 28),
+          _promise(context, tones, fontSize: 27),
+          const SizedBox(height: 14),
+          Text(
+            'Question-by-question marks, a written reason for every deduction, and feedback a student will read.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral, height: 1.5),
+          ),
+          const SizedBox(height: 24),
+          const MarkedPaperPreview(),
+          const SizedBox(height: 12),
+          // Hung in the margin, right up against the rule, the way the site
+          // hangs the teacher's asides.
+          const MarginNote('An illustration of what comes back, not a screenshot.', hangingInMargin: true, fontSize: 12.5),
+        ],
+      );
+
+  /// Sign-in itself. One list, used by both layouts, so a phone and a
+  /// laptop can never drift into offering different ways in.
+  List<Widget> _signInColumn(BuildContext context, PaperTones tones, {required bool heading}) {
+    final cs = Theme.of(context).colorScheme;
+    return [
+      if (heading) ...[
+        Text('Sign in', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 18),
+      ],
+      AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.username, AutofillHints.email],
+              // Fields are ruled onto the paper rather than floated on it:
+              // a white box on a warm sheet loses its own edges.
+              decoration: InputDecoration(hintText: 'teacher@school.edu', labelText: 'Email', fillColor: tones.shade),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _password,
+              obscureText: _obscure,
+              autofillHints: const [AutofillHints.password],
+              onSubmitted: (_) => _loading ? null : _signIn(),
+              decoration: InputDecoration(
+                hintText: 'Password',
+                labelText: 'Password',
+                fillColor: tones.shade,
+                suffixIcon: IconButton(
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                  icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded, color: AiMarkerColors.neutral),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 14),
+      FilledButton(
+        onPressed: _loading ? null : _signIn,
+        style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
+        child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Sign In'),
+      ),
+      const SizedBox(height: 10),
+      OutlinedButton(
+        onPressed: _loading ? null : _openCreateAccount,
+        child: Text('Create Account', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
+      ),
+      if (_oauthButtons.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: Divider(color: tones.rule)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text('or continue with', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+            ),
+            Expanded(child: Divider(color: tones.rule)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            for (var i = 0; i < _oauthButtons.length; i++) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(child: _oauthButtons[i]),
+            ],
+          ],
+        ),
+      ],
+      const SizedBox(height: 20),
+      Text(
+        'Signing in with the same account always brings back your name, school, and marking preferences.',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+      ),
+      // Debug builds only. This signs in to a local-only account
+      // that never syncs, so a teacher who tapped it in a shipped
+      // build would do a term's marking and find none of it on
+      // her next device -- quite apart from handing anyone who
+      // installed the app a way straight past sign-up.
+      if (kDebugMode) ...[
+        const SizedBox(height: 6),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _loading ? null : _devMode,
+            icon: Icon(Icons.build_rounded, size: 16, color: AiMarkerColors.neutral),
+            label: Text('Developer mode — skip sign-in & setup', style: TextStyle(color: AiMarkerColors.neutral)),
+          ),
+        ),
+      ],
+    ];
   }
 }
 

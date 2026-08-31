@@ -97,6 +97,97 @@ class AiMarkerColors {
   static const darkBg = Color(0xFF0F172A);
   static const darkCard = Color(0xFF1E293B);
   static const darkOutline = Color(0xFF334155);
+
+  // ---------------------------------------------------------------------
+  // Marked paper
+  //
+  // The marketing site is a sheet of marked paper on a desk. A teacher who
+  // arrives from it should feel she is still on the same sheet, so the app
+  // keeps the same tones. Read these through [PaperTones] rather than
+  // reaching for the light or dark one directly.
+  // ---------------------------------------------------------------------
+
+  /// The sheet itself: warm, a shade off white, so it reads as paper next
+  /// to the plain white of a text field.
+  static const paper = Color(0xFFFCFCFA);
+
+  /// A second, duller sheet — what sits *on* the page, like a scanned
+  /// answer or a field the teacher types into.
+  static const paperShade = Color(0xFFF4F5F1);
+
+  /// The faint printed rules between questions on a page.
+  static const paperRule = Color(0xFFE0E3E9);
+
+  /// Biro red. This is annotation — a margin rule, a teacher's note, a mark
+  /// she took off. It never means "something broke"; that is [error].
+  static const pen = Color(0xFFC1272D);
+
+  /// The pencil grey of a student's handwriting in an illustration.
+  static const graphite = Color(0xFFCBD0D8);
+
+  /// A full mark written in green — darker than [secondary] so a small
+  /// number stays readable on paper.
+  static const tickInk = Color(0xFF10703A);
+
+  static const darkPaper = Color(0xFF1A2434);
+  static const darkPaperShade = Color(0xFF141C2A);
+  static const darkPaperRule = Color(0xFF2E3B4E);
+  static const darkPen = Color(0xFFFF8078);
+  static const darkGraphite = Color(0xFF3B4759);
+  static const darkTickInk = Color(0xFF6EE79A);
+}
+
+/// The paper tones for whichever theme is in play.
+///
+/// A screen asks once and gets the right sheet, so marking at 11pm in dark
+/// mode does not glare like a photocopy.
+class PaperTones {
+  /// The sheet.
+  final Color paper;
+
+  /// What sits on the sheet: fields, panels, an illustration.
+  final Color shade;
+
+  /// Hairlines printed on the sheet.
+  final Color rule;
+
+  /// Biro red, for the margin rule and the teacher's notes.
+  final Color pen;
+
+  /// Stylised handwriting.
+  final Color graphite;
+
+  /// A mark that lost nothing.
+  final Color tick;
+
+  const PaperTones({
+    required this.paper,
+    required this.shade,
+    required this.rule,
+    required this.pen,
+    required this.graphite,
+    required this.tick,
+  });
+
+  static const light = PaperTones(
+    paper: AiMarkerColors.paper,
+    shade: AiMarkerColors.paperShade,
+    rule: AiMarkerColors.paperRule,
+    pen: AiMarkerColors.pen,
+    graphite: AiMarkerColors.graphite,
+    tick: AiMarkerColors.tickInk,
+  );
+
+  static const dark = PaperTones(
+    paper: AiMarkerColors.darkPaper,
+    shade: AiMarkerColors.darkPaperShade,
+    rule: AiMarkerColors.darkPaperRule,
+    pen: AiMarkerColors.darkPen,
+    graphite: AiMarkerColors.darkGraphite,
+    tick: AiMarkerColors.darkTickInk,
+  );
+
+  static PaperTones of(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? dark : light;
 }
 
 /// Font size constants
