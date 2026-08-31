@@ -8,6 +8,7 @@ This folder is the public website. GitHub Pages serves it at
 | `index.html` | **The landing page.** What Markless does, the four ways to mark, the privacy story, plans. Served at the site root. |
 | `privacy.html` | The privacy policy as a self-contained page. This is the URL both stores want. |
 | `delete-account.html` | Standalone account-deletion instructions. Google Play requires this as its own URL — a section inside the privacy policy does not satisfy it. |
+| `app/` | **The built web app.** Produced by `tool/build_web.ps1`; served at `/app/` so the landing page can sign a teacher straight in. Committed on purpose — Pages serves what is committed. |
 | `icon.png` | Copy of `assets/icons/markless_icon_1024.png`. Backs the favicon and the Open Graph / Twitter card image. |
 | `privacy-policy.md` | The policy in Markdown. Source of truth — edit this first, then mirror the change into `privacy.html`. |
 | `security-and-compliance.md` | What leaves the device, subprocessors, retention, known gaps. For district review. |
@@ -21,10 +22,11 @@ light and dark via `prefers-color-scheme`.
 
 ---
 
-## The three public URLs
+## The public URLs
 
 ```
 https://drposhbug.github.io/ai-marking-dreamflow/                      ← landing page
+https://drposhbug.github.io/ai-marking-dreamflow/app/                  ← the web app
 https://drposhbug.github.io/ai-marking-dreamflow/privacy.html          ← privacy policy
 https://drposhbug.github.io/ai-marking-dreamflow/delete-account.html   ← account deletion
 ```
@@ -44,6 +46,34 @@ will show raw Markdown or download it — so when linking the compliance write-u
 to a school district, link the rendered GitHub view instead:
 `https://github.com/drposhbug/ai-marking-dreamflow/blob/main/docs/security-and-compliance.md`.
 That is what `index.html` links to.
+
+---
+
+## The app, served from the same origin
+
+`docs/app/` is the built Flutter web app. It lives here on purpose: Pages then
+serves the site and the app from one origin, which is what lets the landing
+page's **Sign in** hand off with a plain relative `app/` link and no CORS, no
+second host, and no second deploy.
+
+Build it with:
+
+```powershell
+pwsh tool/build_web.ps1
+```
+
+That runs `flutter build web --release` with `--base-href /ai-marking-dreamflow/app/`
+and copies the output into `docs/app/`. **Commit the result** — Pages serves the
+files that are committed, so an uncommitted build changes nothing.
+
+Keys are passed at build time, never committed. The script reads
+`SUPABASE_ANON_KEY`, `REVENUECAT_ANDROID_KEY` and `ONESIGNAL_APP_ID` from the
+environment (or from parameters) and warns if the Supabase key is missing,
+because a build without it runs local-only and cannot mark anything.
+
+On a custom domain the app sits at the root instead, so build with
+`pwsh tool/build_web.ps1 -BasePath /app/` and update the app-URL constant at the
+top of `index.html`.
 
 ---
 
