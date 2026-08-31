@@ -1,54 +1,88 @@
 import { Underline } from './Ink';
-import { MarkedPaper } from './MarkedPaper';
 import { LAUNCH_MAILTO, ROUTES } from '../lib/content';
 
+/**
+ * The first screen: a dark band edge to edge, the biggest type on the page
+ * running the full width of the column, and the product underneath it.
+ *
+ * The visual is a real screenshot of the Flutter web app, captured from the
+ * running build. It is captioned as a screenshot because that is what it is.
+ * Every drawn visual elsewhere on this page is captioned as an illustration
+ * for the same reason: the two are never allowed to be mistaken for each other.
+ *
+ * Under it, the only numbers Markless actually has - how long each route takes
+ * for a class of thirty - in a strip whose rules run the full width of the
+ * screen. There are no adoption rates, no hours-saved claims and no user
+ * counts here, because none has ever been measured.
+ */
 export function Hero() {
   return (
-    <section className="band band--hero row" aria-labelledby="h-hero">
-      <div className="hero-grid">
-        <div>
-          <p className="eyebrow">
-            Marking assistant for teachers · <b>not on any app store yet</b>
-          </p>
-          <h1 id="h-hero">
-            Marking eats your evenings. Markless takes <Underline>the first pass.</Underline>
-          </h1>
-          <p className="lede">
-            Import a Google Form, scan a stack from the photocopier, or photograph papers one at a
-            time. Back come question-by-question marks, a written reason for every deduction, and
-            feedback a fourteen-year-old will actually read — all of which you can override.
-          </p>
+    <section className="s s--dark s--hero" aria-labelledby="h-hero">
+      <div className="wrap">
+        <p className="eyebrow">
+          Marking assistant for teachers · <b>not on any app store yet</b>
+        </p>
+        <h1 id="h-hero">
+          Marking eats your evenings. Markless takes <Underline>the first pass.</Underline>
+        </h1>
 
-          <div className="cta-row">
-            <a className="btn btn-primary" href="#signin">
-              Sign in and start marking
-            </a>
-            {/* TODO: replace this mailto with the Google Play listing URL once the app is live. */}
-            <a className="btn btn-ghost" href={LAUNCH_MAILTO}>
-              Ask to be told when it launches
-            </a>
+        <div className="hero-grid">
+          <div className="hero-copy">
+            <p className="lede">
+              Import a Google Form, scan a stack from the photocopier, or photograph papers one at a
+              time. Back come question-by-question marks, a written reason for every deduction, and
+              feedback a fourteen-year-old will actually read — all of which you can override.
+            </p>
+
+            <div className="cta-row">
+              <a className="btn btn-primary" href="#signin">
+                Sign in and start marking
+              </a>
+              {/* TODO: replace this mailto with the Google Play listing URL once the app is live. */}
+              <a className="btn btn-ghost" href={LAUNCH_MAILTO}>
+                Ask to be told when it launches
+              </a>
+            </div>
+            <p className="note-small">
+              There is no app store listing yet — signing in opens the browser version.
+            </p>
           </div>
-          <p className="note-small">
-            There is no app store listing yet — signing in opens the browser version.
-          </p>
 
-          <ul className="hero-times">
-            {ROUTES.map((r) => (
-              <li key={r.id}>
-                <b>
-                  {r.minutes}
-                  <em>min</em>
-                </b>
-                <span>{r.tab}</span>
-              </li>
-            ))}
-          </ul>
+          <figure className="shot hero-shot">
+            <div className="device">
+              <div className="device-bar" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="shots/app-grading-home.png"
+                width={2880}
+                height={1800}
+                alt="A screenshot of the Markless web app on its grading screen. A navigation rail lists Grading, Dashboard, Classes, Answers and Settings. A Scan Assignment card offers From Gallery and From Drive, and below it sit the routes: import a Google Form, prepare a test to print, split a scanned stack, plan with Mark, and report card comments."
+              />
+            </div>
+            <figcaption>
+              A screenshot of the Markless web app, running in a browser. The teacher name on it is
+              sample data typed into a demo account.
+            </figcaption>
+          </figure>
         </div>
+      </div>
 
-        <figure className="illo hero-illo">
-          <MarkedPaper />
-          <figcaption>An illustration of what comes back, not a screenshot.</figcaption>
-        </figure>
+      <div className="hero-times-strip">
+        <ul className="hero-times">
+          {ROUTES.map((r) => (
+            <li key={r.id}>
+              <b>
+                {r.minutes}
+                <em>min</em>
+              </b>
+              <span>{r.tab}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );

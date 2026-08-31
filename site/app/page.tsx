@@ -6,39 +6,43 @@ import { Beliefs } from '../components/Beliefs';
 import { Closing, Plans, Privacy, SignIn, SiteFooter, SiteHeader } from '../components/Sections';
 
 /**
- * One page, in the order a teacher meets the product:
+ * One page, in the order a teacher meets the product, and one band per step.
  *
- *   Hero            what it is, and the four real timings
- *   RouteTabs       the four routes, compared, with the timing as the number
- *   PinnedSequence  the scroll-locked walk through one class set
- *   FlipCards       one question, both sides: the answer and the marking
- *   Beliefs         the dark band - seven rules, including the awkward ones
- *   Privacy         what leaves the phone, and where the promise stops
- *   Plans           the four tiers, at the prices the app states
- *   SignIn          the handoff into the app
- *   Closing         who built it and what state it is in
+ * Every band is full-bleed: it paints its own background across the whole
+ * screen and holds its words on a centred column inside itself. Nothing here
+ * wraps the page in a frame, and nothing should.
+ *
+ * The bands alternate dark and light all the way down:
+ *
+ *   Hero            dark    what it is, and the four real timings
+ *   RouteTabs       paper   the four routes, with the timing as the number
+ *   PinnedSequence  dark    the scroll-locked walk through one class set
+ *   FlipCards       tint    one question, both sides: the answer and the marking
+ *   Beliefs         dark    seven rules, including the awkward ones
+ *   Privacy         paper   what leaves the phone, and where the promise stops
+ *   Plans           dark    the four tiers, at the prices the app states
+ *   SignIn          paper   the handoff into the app
+ *   Closing         dark    who built it and what state it is in
  */
 export default function Page() {
   return (
-    <div className="desk">
+    <>
       <a className="skip" href="#main">
         Skip to content
       </a>
-      <div className="sheet">
-        <SiteHeader />
-        <main id="main">
-          <Hero />
-          <RouteTabs />
-          <PinnedSequence />
-          <FlipCards />
-          <Beliefs />
-          <Privacy />
-          <Plans />
-          <SignIn />
-          <Closing />
-        </main>
-      </div>
+      <SiteHeader />
+      <main id="main">
+        <Hero />
+        <RouteTabs />
+        <PinnedSequence />
+        <FlipCards />
+        <Beliefs />
+        <Privacy />
+        <Plans />
+        <SignIn />
+        <Closing />
+      </main>
       <SiteFooter />
-    </div>
+    </>
   );
 }
