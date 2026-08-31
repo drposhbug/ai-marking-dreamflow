@@ -16,6 +16,17 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthState, OAuthProvider;
 
+/// The widest the sign-in half of the sheet is allowed to get. Email,
+/// password and three buttons need about this much and nothing beyond it —
+/// a field stretched across a monitor looks like a mistake.
+const double _signInHalfMax = 560;
+
+/// How much bigger this sheet is than the one that fitted the old 960px
+/// column, and the interpolation that spends it. Both live in [Breakpoints]
+/// with the rest of the app's sizing numbers so they can be tested.
+const _growth = Breakpoints.sheetGrowthFor;
+const _at = Breakpoints.grown;
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -362,41 +373,82 @@ class _LoginScreenState extends State<LoginScreen> {
                     raised: true,
                     child: LayoutBuilder(
                       builder: (context, sheet) {
-                        final seam = (sheet.maxWidth * 0.5).roundToDouble();
-                        return Stack(
-                          children: [
-                            Positioned(
-                              left: seam,
-                              top: 0,
-                              bottom: 0,
-                              width: 1,
-                              child: ColoredBox(color: tones.pen.withValues(alpha: 0.45)),
-                            ),
-                            // Centred against the taller half, so the form
-                            // sits in the page rather than stranded at the
-                            // top of it with blank paper underneath.
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  width: seam,
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(38, 36, 30, 36),
-                                    child: _promisePanel(context, tones),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(31, 36, 38, 36),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: _signInColumn(context, tones, heading: true),
+                        final width = sheet.maxWidth;
+                        // Half and half until the sheet outgrows the form.
+                        // Past that the form stops growing: a 700px slot for
+                        // a password is worse than a 500px one, not better,
+                        // so everything extra goes to the marking, the gap
+                        // and plain paper.
+                        final signIn = width * 0.5 > _signInHalfMax ? _signInHalfMax : width * 0.5;
+                        final seam = (width - signIn).roundToDouble();
+                        // A bigger sheet wants bigger margins, the way a
+                        // bigger page does. 38 at the size it has always
+                        // been, up to 72 on a 27" monitor.
+                        final pad = (width * 0.042).clamp(30.0, 72.0);
+                        final gap = pad * 0.8;
+                        final grow = _growth(width);
+                        // The display face, on the same ramp the site's hero
+                        // runs: 27 in a laptop window, 46 on a monitor. The
+                        // measure is kept in ems, not pixels, so the sentence
+                        // still breaks over two lines however big it gets.
+                        final display = _at(27, 46, grow);
+                        // A floor, not a cap: below it the panel takes the
+                        // room it has, which is what it does today.
+                        final promiseMeasure = display * 18;
+                        return ConstrainedBox(
+                          // A page's proportion is a floor, not a shape. Once
+                          // the writing on it has grown too, the writing is
+                          // what decides the height and there is no band of
+                          // blank paper left over.
+                          constraints: BoxConstraints(minHeight: _sheetFloor(width, room)),
+                          child: Stack(
+                            // The writing sits in the middle of the page, not
+                            // at the top of it with the rest of the sheet
+                            // blank underneath.
+                            alignment: Alignment.center,
+                            children: [
+                              Positioned(
+                                left: seam,
+                                top: 0,
+                                bottom: 0,
+                                width: 1,
+                                child: ColoredBox(color: tones.pen.withValues(alpha: 0.45)),
+                              ),
+                              // Centred against the taller half, so the form
+                              // sits in the page rather than stranded at the
+                              // top of it with blank paper underneath.
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: seam,
+                                    child: Padding(
+                                      padding: EdgeInsets.fromLTRB(pad, pad, gap, pad),
+                                      // Centred in its half rather than pushed
+                                      // against the rule, so the extra paper
+                                      // reads as margin on both sides instead
+                                      // of a gap somebody forgot to fill.
+                                      child: Center(
+                                        child: ConstrainedBox(
+                                          constraints: BoxConstraints(maxWidth: promiseMeasure),
+                                          child: _promisePanel(context, tones, grow: grow),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
+                                  Expanded(
+                                    child: Padding(
+                                      padding: EdgeInsets.fromLTRB(gap, pad, pad, pad),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: _signInColumn(context, tones, heading: true, grow: grow),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -410,12 +462,25 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _wordmark(BuildContext context) => Row(
+  /// The shortest the sheet may be.
+  ///
+  /// It stops a wide sheet from becoming a strip when there is little on it,
+  /// and it is deliberately below what the grown writing actually needs, so
+  /// on a monitor the content sets the height and the sheet ends where the
+  /// writing ends.
+  double _sheetFloor(double width, double room) {
+    if (room <= 0) return 0;
+    final wants = width * 0.5;
+    final ceiling = room * 0.86;
+    return wants > ceiling ? ceiling : wants;
+  }
+
+  Widget _wordmark(BuildContext context, {double scale = 1}) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const MarklessMark(size: 32),
-          const SizedBox(width: 11),
-          Text('Markless', style: Theme.of(context).textTheme.titleLarge?.copyWith(letterSpacing: -0.7)),
+          MarklessMark(size: 32 * scale),
+          SizedBox(width: 11 * scale),
+          Text('Markless', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 22 * scale, letterSpacing: -0.7 * scale)),
         ],
       );
 
@@ -427,7 +492,10 @@ class _LoginScreenState extends State<LoginScreen> {
             const TextSpan(text: 'Marking eats your evenings. Markless takes '),
             TextSpan(
               text: 'the first pass.',
-              style: TextStyle(decoration: TextDecoration.underline, decorationColor: tones.pen, decorationThickness: 2.5),
+              // The rule under the words is drawn by hand on the site, so it
+              // thickens with the words rather than staying a hairline under
+              // a 46px headline.
+              style: TextStyle(decoration: TextDecoration.underline, decorationColor: tones.pen, decorationThickness: fontSize <= 27 ? 2.5 : 2.5 * (fontSize / 27)),
             ),
           ],
         ),
@@ -436,34 +504,51 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// The wide window's other half: what she gets for signing in, drawn on
   /// the same paper the site is drawn on.
-  Widget _promisePanel(BuildContext context, PaperTones tones) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _wordmark(context),
-          const SizedBox(height: 28),
-          _promise(context, tones, fontSize: 27),
-          const SizedBox(height: 14),
-          Text(
-            'Question-by-question marks, a written reason for every deduction, and feedback a student will read.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral, height: 1.5),
-          ),
-          const SizedBox(height: 24),
-          const MarkedPaperPreview(),
-          const SizedBox(height: 12),
-          // Hung in the margin, right up against the rule, the way the site
-          // hangs the teacher's asides.
-          const MarginNote('An illustration of what comes back, not a screenshot.', hangingInMargin: true, fontSize: 12.5),
-        ],
-      );
+  ///
+  /// [grow] is how much bigger than a laptop window this sheet is. Every
+  /// measurement here is written in terms of it, so the panel fills the paper
+  /// it is given instead of sitting small in the top corner of it.
+  Widget _promisePanel(BuildContext context, PaperTones tones, {double grow = 0}) {
+    final display = _at(27, 46, grow);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _wordmark(context, scale: _at(1, 1.55, grow)),
+        SizedBox(height: _at(28, 44, grow)),
+        _promise(context, tones, fontSize: display),
+        SizedBox(height: _at(14, 22, grow)),
+        Text(
+          'Question-by-question marks, a written reason for every deduction, and feedback a student will read.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: _at(14, 19, grow), color: AiMarkerColors.neutral, height: 1.5),
+        ),
+        SizedBox(height: _at(24, 38, grow)),
+        // The drawn page is the thing worth looking at on this half, so it
+        // grows with the sheet rather than sitting at its old size in the
+        // middle of it.
+        MarkedPaperPreview(scale: _at(1, 1.6, grow)),
+        SizedBox(height: _at(12, 19, grow)),
+        // Hung in the margin, right up against the rule, the way the site
+        // hangs the teacher's asides.
+        MarginNote('An illustration of what comes back, not a screenshot.', hangingInMargin: true, fontSize: _at(12.5, 19, grow)),
+      ],
+    );
+  }
 
   /// Sign-in itself. One list, used by both layouts, so a phone and a
   /// laptop can never drift into offering different ways in.
-  List<Widget> _signInColumn(BuildContext context, PaperTones tones, {required bool heading}) {
+  ///
+  /// [grow] spends a wide sheet's extra height on the form's own rhythm —
+  /// taller fields, more air between them — rather than leaving it as blank
+  /// paper under a form floating at the top of the page. The fields
+  /// themselves never get wider: the column that holds them is capped.
+  List<Widget> _signInColumn(BuildContext context, PaperTones tones, {required bool heading, double grow = 0}) {
     final cs = Theme.of(context).colorScheme;
+    final field = EdgeInsets.symmetric(horizontal: _at(16, 20, grow), vertical: _at(14, 26, grow));
+    final button = EdgeInsets.symmetric(horizontal: _at(18, 24, grow), vertical: _at(14, 26, grow));
     return [
       if (heading) ...[
-        Text('Sign in', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 18),
+        Text('Sign in', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: _at(22, 30, grow))),
+        SizedBox(height: _at(18, 47, grow)),
       ],
       AutofillGroup(
         child: Column(
@@ -475,9 +560,9 @@ class _LoginScreenState extends State<LoginScreen> {
               autofillHints: const [AutofillHints.username, AutofillHints.email],
               // Fields are ruled onto the paper rather than floated on it:
               // a white box on a warm sheet loses its own edges.
-              decoration: InputDecoration(hintText: 'teacher@school.edu', labelText: 'Email', fillColor: tones.shade),
+              decoration: InputDecoration(hintText: 'teacher@school.edu', labelText: 'Email', fillColor: tones.shade, contentPadding: field),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: _at(12, 20, grow)),
             TextField(
               controller: _password,
               obscureText: _obscure,
@@ -487,6 +572,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 hintText: 'Password',
                 labelText: 'Password',
                 fillColor: tones.shade,
+                contentPadding: field,
                 suffixIcon: IconButton(
                   onPressed: () => setState(() => _obscure = !_obscure),
                   icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded, color: AiMarkerColors.neutral),
@@ -496,19 +582,20 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ),
-      const SizedBox(height: 14),
+      SizedBox(height: _at(14, 34, grow)),
       FilledButton(
         onPressed: _loading ? null : _signIn,
-        style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
+        style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white, padding: button),
         child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Sign In'),
       ),
-      const SizedBox(height: 10),
+      SizedBox(height: _at(10, 20, grow)),
       OutlinedButton(
         onPressed: _loading ? null : _openCreateAccount,
+        style: OutlinedButton.styleFrom(padding: button),
         child: Text('Create Account', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
       ),
       if (_oauthButtons.isNotEmpty) ...[
-        const SizedBox(height: 16),
+        SizedBox(height: _at(16, 28, grow)),
         Row(
           children: [
             Expanded(child: Divider(color: tones.rule)),
@@ -529,7 +616,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ],
-      const SizedBox(height: 20),
+      SizedBox(height: _at(20, 38, grow)),
       Text(
         'Signing in with the same account always brings back your name, school, and marking preferences.',
         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
@@ -700,9 +787,7 @@ class _CreateAccountSheetState extends State<_CreateAccountSheet> {
             FilledButton(
               onPressed: _creating ? null : _create,
               style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
-              child: _creating
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Create Account'),
+              child: _creating ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Create Account'),
             ),
           ],
         ),

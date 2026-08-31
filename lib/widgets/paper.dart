@@ -106,8 +106,10 @@ class MarginNote extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         note,
-        const SizedBox(height: 7),
-        Container(width: 18, height: 1, color: tones.pen.withValues(alpha: 0.5)),
+        // The dash is written under the note, so it grows with it rather
+        // than staying a 13px-note's dash under a 20px note.
+        SizedBox(height: fontSize * 0.54),
+        Container(width: fontSize * 1.38, height: 1, color: tones.pen.withValues(alpha: 0.5)),
       ],
     );
   }
@@ -173,38 +175,44 @@ class MarklessMark extends StatelessWidget {
 ///
 /// It is an illustration and says so — the app never shows a teacher a
 /// screenshot of marking that did not happen.
+/// [scale] grows every measurement on the drawn page together — the padding,
+/// the handwriting, the marks, the note. A big monitor gets a bigger page,
+/// not the same small page with more blank paper around it.
 class MarkedPaperPreview extends StatelessWidget {
-  const MarkedPaperPreview({super.key});
+  final double scale;
+
+  const MarkedPaperPreview({super.key, this.scale = 1.0});
 
   @override
   Widget build(BuildContext context) {
     final tones = PaperTones.of(context);
+    final s = scale;
     final label = Theme.of(context).textTheme.labelSmall?.copyWith(
           color: AiMarkerColors.neutral,
-          letterSpacing: 1.0,
-          fontSize: 10,
+          letterSpacing: 1.0 * s,
+          fontSize: 10 * s,
         );
 
     return Container(
       decoration: BoxDecoration(
         color: tones.shade,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(4 * s),
         border: Border.all(color: tones.rule),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
+      padding: EdgeInsets.fromLTRB(16 * s, 14 * s, 16 * s, 15 * s),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Text('NAME', style: label),
-              const SizedBox(width: 9),
+              SizedBox(width: 9 * s),
               // The name is painted out before the page leaves the phone.
               // Blacked out in either theme -- a pale bar in dark mode would
               // read as a highlighter, which is the opposite of the point.
               Container(
-                width: 84,
-                height: 11,
+                width: 84 * s,
+                height: 11 * s,
                 decoration: BoxDecoration(color: const Color(0xFF080C13), border: Border.all(color: tones.rule)),
               ),
               const Spacer(),
@@ -213,24 +221,24 @@ class MarkedPaperPreview extends StatelessWidget {
                 child: Text.rich(
                   TextSpan(
                     children: [
-                      TextSpan(text: '17½', style: markStyle(context, size: 21, color: tones.pen)),
-                      TextSpan(text: '/20', style: markStyle(context, size: 12, color: tones.pen.withValues(alpha: 0.8), weight: FontWeight.w600)),
+                      TextSpan(text: '17½', style: markStyle(context, size: 21 * s, color: tones.pen)),
+                      TextSpan(text: '/20', style: markStyle(context, size: 12 * s, color: tones.pen.withValues(alpha: 0.8), weight: FontWeight.w600)),
                     ],
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 11),
+          SizedBox(height: 11 * s),
           _rule(tones),
-          const _QuestionRow(q: 'Q1', strokes: [0.88, 0.61], mark: '5', full: true),
+          _QuestionRow(q: 'Q1', strokes: const [0.88, 0.61], mark: '5', full: true, scale: s),
           _rule(tones),
-          const _QuestionRow(q: 'Q2', strokes: [0.94, 0.47], slip: 1, mark: '3¾'),
+          _QuestionRow(q: 'Q2', strokes: const [0.94, 0.47], slip: 1, mark: '3¾', scale: s),
           _rule(tones),
-          const _QuestionRow(q: 'Q3', strokes: [0.79, 0.88, 0.34], mark: '4¾'),
+          _QuestionRow(q: 'Q3', strokes: const [0.79, 0.88, 0.34], mark: '4¾', scale: s),
           _rule(tones),
-          const SizedBox(height: 11),
-          const MarginNote('Q2 — right method, arithmetic slip in the last line.', fontSize: 12.5),
+          SizedBox(height: 11 * s),
+          MarginNote('Q2 — right method, arithmetic slip in the last line.', fontSize: 12.5 * s),
         ],
       ),
     );
@@ -248,43 +256,45 @@ class _QuestionRow extends StatelessWidget {
   final int? slip;
   final String mark;
   final bool full;
+  final double scale;
 
-  const _QuestionRow({required this.q, required this.strokes, required this.mark, this.slip, this.full = false});
+  const _QuestionRow({required this.q, required this.strokes, required this.mark, this.slip, this.full = false, this.scale = 1.0});
 
   @override
   Widget build(BuildContext context) {
     final tones = PaperTones.of(context);
     final colour = full ? tones.tick : tones.pen;
+    final s = scale;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 9),
+      padding: EdgeInsets.symmetric(vertical: 9 * s),
       child: Row(
         children: [
           SizedBox(
-            width: 20,
+            width: 20 * s,
             child: Text(
               q,
-              style: markStyle(context, size: 11, color: AiMarkerColors.neutral, weight: FontWeight.w600),
+              style: markStyle(context, size: 11 * s, color: AiMarkerColors.neutral, weight: FontWeight.w600),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10 * s),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (var i = 0; i < strokes.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 5),
+                  if (i > 0) SizedBox(height: 5 * s),
                   FractionallySizedBox(
                     alignment: Alignment.centerLeft,
                     widthFactor: strokes[i],
                     child: Column(
                       children: [
                         Container(
-                          height: 4,
-                          decoration: BoxDecoration(color: tones.graphite, borderRadius: BorderRadius.circular(2)),
+                          height: 4 * s,
+                          decoration: BoxDecoration(color: tones.graphite, borderRadius: BorderRadius.circular(2 * s)),
                         ),
                         if (i == slip) ...[
-                          const SizedBox(height: 3),
-                          Container(height: 1.5, color: tones.pen),
+                          SizedBox(height: 3 * s),
+                          Container(height: 1.5 * s, color: tones.pen),
                         ],
                       ],
                     ),
@@ -293,12 +303,12 @@ class _QuestionRow extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12 * s),
           if (full) ...[
-            Icon(Icons.check_rounded, size: 14, color: tones.tick),
-            const SizedBox(width: 3),
+            Icon(Icons.check_rounded, size: 14 * s, color: tones.tick),
+            SizedBox(width: 3 * s),
           ],
-          Text(mark, style: markStyle(context, size: 14, color: colour)),
+          Text(mark, style: markStyle(context, size: 14 * s, color: colour)),
         ],
       ),
     );

@@ -7,6 +7,7 @@ import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/blocking_progress.dart';
+import 'package:marking_prokect_v2/widgets/responsive.dart';
 import 'package:marking_prokect_v2/widgets/teacher_topbar.dart';
 import 'package:provider/provider.dart';
 
@@ -219,41 +220,46 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ),
                 )
               else
-                for (final key in _keys) ...[
-                  Card(
-                    child: ListTile(
-                      leading: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: (key.id == activeKeyId ? AiMarkerColors.secondary : cs.primary).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(Icons.key_rounded, color: key.id == activeKeyId ? AiMarkerColors.secondary : cs.primary),
-                      ),
-                      title: Text(key.name, style: Theme.of(context).textTheme.titleSmall),
-                      subtitle: Text(
-                        [
-                          if ((key.subject ?? '').isNotEmpty) key.subject!,
-                          if (key.totalMarks != null) '${key.totalMarks!.round()} marks',
-                          if (key.id == activeKeyId) 'Active for next grade',
-                        ].join(' · '),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: key.id == activeKeyId ? AiMarkerColors.secondary : AiMarkerColors.neutral,
+                // A shelf of keys reads as a shelf on a monitor: two across,
+                // so a teacher with ten of them sees ten rather than four.
+                CardColumns(
+                  spacing: 10,
+                  children: [
+                    for (final key in _keys)
+                      Card(
+                        child: ListTile(
+                          leading: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: (key.id == activeKeyId ? AiMarkerColors.secondary : cs.primary).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(14),
                             ),
+                            child: Icon(Icons.key_rounded, color: key.id == activeKeyId ? AiMarkerColors.secondary : cs.primary),
+                          ),
+                          title: Text(key.name, style: Theme.of(context).textTheme.titleSmall),
+                          subtitle: Text(
+                            [
+                              if ((key.subject ?? '').isNotEmpty) key.subject!,
+                              if (key.totalMarks != null) '${key.totalMarks!.round()} marks',
+                              if (key.id == activeKeyId) 'Active for next grade',
+                            ].join(' · '),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: key.id == activeKeyId ? AiMarkerColors.secondary : AiMarkerColors.neutral,
+                                ),
+                          ),
+                          trailing: key.id == activeKeyId
+                              ? IconButton(
+                                  tooltip: 'Stop using this key',
+                                  onPressed: _clearActiveKey,
+                                  icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral),
+                                )
+                              : Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
+                          onTap: () => _useKey(key),
+                        ),
                       ),
-                      trailing: key.id == activeKeyId
-                          ? IconButton(
-                              tooltip: 'Stop using this key',
-                              onPressed: _clearActiveKey,
-                              icon: Icon(Icons.close_rounded, color: AiMarkerColors.neutral),
-                            )
-                          : Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),
-                      onTap: () => _useKey(key),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
+                  ],
+                ),
             ],
           ),
         ),
