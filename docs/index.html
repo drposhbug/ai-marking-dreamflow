@@ -638,6 +638,194 @@ figure.illo figcaption {
 .site-footer p { margin: 0 0 .35rem; max-width: 78ch; }
 .site-footer p:last-child { margin-bottom: 0; }
 
+/* --- the wide grid: 1400px and up --------------------------------------- */
+
+/* Past a laptop the sheet is wide enough to be laid out rather than merely
+   filled, so every band becomes the same four-column grid and no section
+   opens with a heading and a standfirst stacked in the left third of the row.
+   A section that has an object of its own - the illustration, the promise
+   about the first paper, the sign-in card - gives that object half the row
+   and keeps its words in the other half; a section that has none splits the
+   header row itself, heading across the first half, standfirst across the
+   second. Everything below sits on the same four tracks, and the paragraphs
+   that used to run the width of the sheet are set in columns of the grid, so
+   nothing runs past about seventy-five characters - the device the Limits
+   panel already used for its list.
+
+   Two steps, because how many columns a page can carry depends on how much
+   room a column has: halves from 1400px, and from 2200px quarters, where a
+   quarter is still wide enough to read a paragraph in. There the header row
+   splits into heading and standfirst and each object moves down onto the row
+   it belongs with. Below 1400px none of this applies and the page is exactly
+   what it was; on a phone it is one column. */
+
+@media (min-width: 87.5rem) {
+  :root {
+    --colgap: clamp(2.6rem, 1rem + 1.9vw, 4rem);
+    --rowgap: clamp(1.6rem, .7rem + 1.4vw, 3.4rem);
+  }
+
+  .band, .site-footer {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: var(--colgap);
+    row-gap: var(--rowgap);
+    align-items: start;
+  }
+  /* the note in the margin is still hung off the sheet's own edge, so it has
+     to keep the band's padding box as its containing block, not a grid area */
+  .band > :not(.note-margin) { grid-column: 1 / -1; }
+
+  /* the wrappers that existed only to stack things dissolve, so the heading,
+     the standfirst and the section's object all become items of the grid */
+  .head,
+  .split--head,
+  #signin .split,
+  #signin .split > div,
+  .close-row,
+  .close-row > div:not(.cta-row) { display: contents; }
+
+  /* --- the header row --- */
+  .head > h2 { grid-column: 1 / span 2; }
+  .head > h2, .close-row h2, .band--hero h1 { max-width: none; }
+  .head > .sub {
+    grid-column: 3 / span 2;
+    margin: .4rem 0 0;
+    max-width: 62ch;
+    font-size: clamp(1.05rem, .5rem + .62vw, 1.4rem);
+    line-height: 1.5;
+  }
+
+  /* a section that has an object of its own keeps heading and standfirst
+     stacked in the left half and gives the object the right half, so the row
+     is full rather than half a row of words and half a row of nothing */
+  #how .head,
+  .split--head .head { display: block; grid-column: 1 / span 2; grid-row: 1; }
+  #how .head > .sub,
+  .split--head .head > .sub { margin-top: .8rem; }
+  .split--head > figure.illo { grid-column: 3 / span 2; }
+  #how .first-paper { grid-column: 3 / span 2; grid-row: 1; margin-top: 0; }
+  #how .first-paper p { max-width: 64ch; font-size: 1.05rem; }
+  #how .routes { grid-row: 2; }
+
+  /* --- hero: the illustration takes the second half instead of hanging off
+     the right edge of it, so the only gap beside the text is the column gap */
+  .hero-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: var(--colgap);
+    align-items: center;
+  }
+  .hero-grid > div { grid-column: 1 / span 2; }
+  .hero-grid > figure.illo { grid-column: 3 / span 2; max-width: none; }
+  /* filling the half makes the sheet wide, so its rows grow with it and it
+     still reads as a page rather than a strip */
+  .band--hero .page { padding: 1.7rem 2rem 1.9rem; }
+  .band--hero .pg-top { padding-bottom: 1.1rem; }
+  .band--hero .qlist li { padding: .82rem 0 .72rem; }
+  .band--hero .pg-note { margin-top: 1.2rem; }
+  .lede { max-width: 60ch; font-size: clamp(1.2rem, .55rem + .78vw, 1.6rem); }
+  .note-small { max-width: 62ch; }
+
+  /* --- the claims, the limits, and the notes that close a section --- */
+  .claims-row { column-gap: var(--colgap); }
+  .limits { margin-top: 0; }
+  .limits ul { columns: 20rem; column-gap: var(--colgap); }
+  .limits .after { max-width: 62ch; }
+  /* a footnote stays a footnote: it takes the left half of the row, under the
+     rule that closes the section, and keeps its own measure */
+  .band > .more, .band > .fine {
+    grid-column: 1 / span 2;
+    margin-top: 0;
+    max-width: 64ch;
+  }
+
+  /* --- sign in: the notes on the left half, the handoff card and the caveat
+     that belongs to it on the right */
+  #signin .claims { grid-column: 1 / span 2; }
+  #signin .claims p { max-width: 60ch; }
+  #signin .signin-form,
+  #signin .signin-form + .note-small { grid-column: 3 / span 2; }
+  #signin .signin-form + .note-small { margin-top: 0; }
+
+  /* --- closing row --- */
+  .close-row h2 { grid-column: 1 / span 2; }
+  .close-row p { grid-column: 3 / span 2; margin-top: 0; max-width: 62ch; }
+  .close-row .cta-row { grid-column: 3 / span 2; }
+
+  /* --- the footer is a colophon across the desk, not a strip in its corner */
+  .site-footer nav {
+    grid-column: 1 / span 2;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(3, auto);
+    grid-auto-flow: column;
+    justify-items: start;
+    gap: .5rem var(--colgap);
+    margin-bottom: 0;
+  }
+  /* the colophon lines sit one under the other in the right half, so they
+     take a paragraph gap rather than the band gap */
+  .site-footer { row-gap: .4rem; }
+  .site-footer p { grid-column: 3 / span 2; max-width: 62ch; }
+}
+
+/* At 2200px a quarter of the sheet is still a readable column, so the header
+   row splits into heading and standfirst and each object moves down onto the
+   row it belongs with: the illustration becomes the first of the four things
+   on the claims row, the promise about the first paper sits under the
+   standfirst, the sign-in notes go side by side beside the card and its
+   caveat, and the footer's colophon and trademark line take a column each. */
+@media (min-width: 137.5rem) {
+  .split--head .head { display: contents; }
+  .split--head .head > .sub { margin-top: .4rem; }
+
+  .split--head > figure.illo { grid-column: 1; }
+  .band > .claims-row {
+    grid-column: 2 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* the limits panel: the label and the caveat that qualifies it on a rail,
+     the limits themselves in columns across the rest */
+  .limits {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+    column-gap: var(--colgap);
+    align-items: start;
+  }
+  .limits h3 { grid-column: 1; grid-row: 1; }
+  .limits ul { grid-column: 2; grid-row: 1 / span 2; }
+  .limits .after { grid-column: 1; grid-row: 2; margin: 0; max-width: none; }
+
+  #signin .claims {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--colgap);
+    align-items: start;
+  }
+  #signin .claims li {
+    border-top: 2px solid var(--claim-rule); border-bottom: 0;
+    padding: .7rem 0 0; margin: 0;
+  }
+  #signin .claims p { max-width: none; }
+  #signin .signin-form { grid-column: 3; }
+  #signin .signin-form + .note-small { grid-column: 4; }
+
+  /* wide enough for the footnote to be two columns of the half it sits in */
+  .band > .more, .band > .fine {
+    max-width: none;
+    columns: 20rem;
+    column-gap: var(--colgap);
+  }
+
+  .close-row p { grid-column: 3; max-width: none; }
+  .close-row .cta-row { grid-column: 4; }
+
+  .site-footer p:nth-of-type(1) { grid-column: 3; }
+  .site-footer p:nth-of-type(2) { grid-column: 4; }
+  .site-footer p { max-width: none; }
+}
+
 /* --- responsive --------------------------------------------------------- */
 
 @media (max-width: 61.99rem) {
