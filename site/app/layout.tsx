@@ -1,5 +1,21 @@
 import type { Metadata, Viewport } from 'next';
+import { IBM_Plex_Mono, Inter } from 'next/font/google';
 import './globals.css';
+
+/* next/font fetches and self-hosts these at build time, so the static export
+   carries the files and a visitor's browser never asks Google for a font. */
+const sans = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-sans',
+});
+const mono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-mono',
+});
 
 const SITE = 'https://drposhbug.github.io/ai-marking-dreamflow/';
 const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -43,7 +59,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

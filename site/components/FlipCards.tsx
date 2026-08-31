@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { FLIP_CARDS, type FlipCard } from '../lib/content';
+import { MarkedPaper } from './MarkedPaper';
 import { useReducedMotionSafe } from './useMedia';
 
 /* ==========================================================================
@@ -24,35 +25,46 @@ import { useReducedMotionSafe } from './useMedia';
 
 export function FlipCards() {
   return (
-    <section className="band row" id="marking" aria-labelledby="h-flip">
-      <p className="note-margin">Turn one over.</p>
+    <section className="s s--tint" id="marking" aria-labelledby="h-flip">
+      <div className="wrap">
+        <p className="kicker">Turn one over</p>
 
-      <div className="head head--wide">
-        <h2 id="h-flip">Real marking, not a vibe check</h2>
-        <p className="sub">
-          Every card is one question. The front is what the student wrote; the back is what came
-          back — the mark, the quarter mark, the reason for the deduction, and something to do
-          differently. You can change any of it.
+        <div className="head head--wide">
+          <h2 id="h-flip">Real marking, not a vibe check</h2>
+          <p className="sub">
+            Every card is one question. The front is what the student wrote; the back is what came
+            back — the mark, the quarter mark, the reason for the deduction, and something to do
+            differently. You can change any of it.
+          </p>
+        </div>
+
+        {/* One whole paper first, then one question of it turned over. */}
+        <figure className="illo marking-paper">
+          <MarkedPaper />
+          <figcaption>
+            An illustration of one whole marked paper — the name blacked out, half and quarter
+            marks down the page, the slip on Q2 underlined. Not a screenshot.
+          </figcaption>
+        </figure>
+
+        <figure className="illo">
+          <div className="flip-grid">
+            {FLIP_CARDS.map((card, i) => (
+              <Card key={card.id} card={card} index={i} />
+            ))}
+          </div>
+          <figcaption>
+            Illustrations of marked answers, not screenshots. Half and quarter marks, a written
+            reason for every deduction, and a question handed back rather than guessed at.
+          </figcaption>
+        </figure>
+
+        <p className="more">
+          <strong>Also in the app:</strong> answer keys, scanned once or learned from the first
+          paper of a stack · Ontario KTCA categories and curriculum expectations for your region ·
+          gradebook CSV and Google Drive export · drafted quizzes, worksheets and lesson plans.
         </p>
       </div>
-
-      <figure className="illo">
-        <div className="flip-grid">
-          {FLIP_CARDS.map((card, i) => (
-            <Card key={card.id} card={card} index={i} />
-          ))}
-        </div>
-        <figcaption>
-          Illustrations of marked answers, not screenshots. Half and quarter marks, a written reason
-          for every deduction, and a question handed back rather than guessed at.
-        </figcaption>
-      </figure>
-
-      <p className="more">
-        <strong>Also in the app:</strong> answer keys, scanned once or learned from the first paper
-        of a stack · Ontario KTCA categories and curriculum expectations for your region · gradebook
-        CSV and Google Drive export · drafted quizzes, worksheets and lesson plans.
-      </p>
     </section>
   );
 }

@@ -163,6 +163,53 @@ const ok = (name, pass, detail = '') => {
   await ctx.close();
 }
 
+/* ------------------------------------------------------------ full bleed */
+/* The one thing that has to stay true: the page has no frame. Every band
+   paints its own background from x=0 to the right edge of the viewport, and
+   the hairlines inside them do too. A design that insets the whole page in a
+   card fails this at every width, which is exactly what it is here to catch.
+   Count only elements that actually paint - a background or a horizontal
+   border - so an invisible full-width wrapper cannot pass on its own. */
+{
+  const MIN_BLEED = 12;
+  for (const width of [2557, 1920, 1440, 1280, 390]) {
+    const ctx = await browser.newContext({ viewport: { width, height: width < 500 ? 844 : 1100 } });
+    const page = await ctx.newPage();
+    await page.goto(URL_, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(500);
+
+    const r = await page.evaluate(() => {
+      const W = window.innerWidth;
+      const clear = (c) => c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
+      const bleed = [];
+      for (const el of document.querySelectorAll('body *')) {
+        const b = el.getBoundingClientRect();
+        if (b.width < 1 || b.left > 0.5 || b.right < W - 0.5) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const paints =
+          !clear(cs.backgroundColor) ||
+          cs.backgroundImage !== 'none' ||
+          (parseFloat(cs.borderTopWidth) > 0 && !clear(cs.borderTopColor)) ||
+          (parseFloat(cs.borderBottomWidth) > 0 && !clear(cs.borderBottomColor));
+        if (paints) bleed.push(el.tagName.toLowerCase() + '.' + String(el.className).slice(0, 24));
+      }
+      return {
+        bleed,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    });
+
+    ok(
+      `${width}: many elements reach both edges of the screen`,
+      r.bleed.length >= MIN_BLEED,
+      `${r.bleed.length} (need ${MIN_BLEED}) — ${r.bleed.slice(0, 3).join(', ')}`,
+    );
+    ok(`${width}: no horizontal overflow`, r.overflow === 0, `${r.overflow}px`);
+    await ctx.close();
+  }
+}
+
 /* -------------------------------------------------------- reduced motion */
 {
   const ctx = await browser.newContext({
