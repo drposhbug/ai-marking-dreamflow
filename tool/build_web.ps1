@@ -1,5 +1,13 @@
-# Builds the Flutter web app into docs/app/ so GitHub Pages serves the
-# marketing site and the app from ONE origin:
+# Builds the Flutter web app into docs/app/.
+#
+# This is one of TWO scripts that write into docs/, and they do not overlap:
+#   tool/build_web.ps1   (this file) -> docs/app/    the Flutter web app
+#   tool/build_site.ps1              -> docs/*       the marketing site
+# build_site.ps1 refuses to touch docs/app/, and this one only ever replaces
+# docs/app/. Run them in either order; both outputs must be committed.
+#
+# The app lives under docs/ so GitHub Pages serves the marketing site and the
+# app from ONE origin:
 #
 #   https://drposhbug.github.io/ai-marking-dreamflow/       -> docs/index.html
 #   https://drposhbug.github.io/ai-marking-dreamflow/app/   -> docs/app/index.html

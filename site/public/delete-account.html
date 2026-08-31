@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Markless — Delete your account</title>
+<meta name="description" content="How to delete your Markless account and everything in it, from inside the app or by email: what is erased, what is kept, and how long it takes.">
+<link rel="canonical" href="https://drposhbug.github.io/ai-marking-dreamflow/delete-account.html">
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="theme-color" content="#2563EB">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Markless">
+<meta property="og:url" content="https://drposhbug.github.io/ai-marking-dreamflow/delete-account.html">
+<meta property="og:title" content="Markless — Delete your account">
+<meta property="og:description" content="How to delete your Markless account and everything in it: what is erased, what is kept, and how long it takes.">
+<meta property="og:image" content="https://drposhbug.github.io/ai-marking-dreamflow/icon.png">
+<meta property="og:image:alt" content="The Markless app icon.">
+<meta name="twitter:card" content="summary">
+
+<style>
+/* Same sheet-of-paper shell as the home page: a page on a desk, with the
+   exercise-book margin rule down the left. */
+
+:root {
+  color-scheme: light dark;
+
+  --desk:      #dee3ec;
+  --desk-edge: #cbd3e1;
+  --paper:     #fcfcfa;
+  --paper-2:   #f4f5f1;
+  --ink:       #12161e;
+  --ink-2:     #3a4353;
+  --muted:     #5c6478;
+  --pen:       #c1272d;
+  --brand:     #2563eb;
+  --brand-2:   #1d4ed8;
+  --rule:      #e0e3e9;
+  --graphite:  #cbd0d8;
+
+  --page-shadow: 0 1px 0 rgba(16, 22, 34, .05), 0 26px 54px -34px rgba(16, 22, 34, .55);
+
+  --gutter: 5rem;
+  --pad-r:  2.6rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --desk:      #070a10;
+    --desk-edge: #0d111a;
+    --paper:     #151922;
+    --paper-2:   #1b2029;
+    --ink:       #edf1f7;
+    --ink-2:     #c2cadb;
+    --muted:     #8d97ad;
+    --pen:       #ff8078;
+    --brand:     #8fb3ff;
+    --brand-2:   #b3ccff;
+    --rule:      #262e3c;
+    --graphite:  #38414f;
+
+    --page-shadow: 0 0 0 1px rgba(255, 255, 255, .04), 0 30px 60px -36px rgba(0, 0, 0, .9);
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--desk);
+  color: var(--ink);
+  font: 400 1.0625rem/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--brand); text-underline-offset: .18em; }
+a:hover { color: var(--brand-2); }
+:where(a):focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.desk {
+  min-height: 100vh;
+  padding: clamp(0rem, 3.2vw, 2.6rem) clamp(0rem, 3vw, 2.5rem) clamp(1.5rem, 3vw, 2.6rem);
+  background: radial-gradient(120% 70% at 50% 0%, var(--desk-edge) 0%, var(--desk) 62%);
+}
+.sheet {
+  position: relative;
+  max-width: 48rem;
+  margin-inline: auto;
+  background: var(--paper);
+  box-shadow: var(--page-shadow);
+  border-radius: 2px;
+}
+.sheet::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: var(--gutter);
+  width: 1px;
+  background: var(--pen);
+  opacity: .38;
+  pointer-events: none;
+}
+
+.site-header {
+  display: flex; align-items: center; gap: 1.4rem; flex-wrap: wrap;
+  min-height: 4.25rem;
+  padding-inline: calc(var(--gutter) + 1.4rem) var(--pad-r);
+  border-bottom: 1px solid var(--rule);
+}
+.brand {
+  display: inline-flex; align-items: center; gap: .6rem; margin-right: auto;
+  font-weight: 700; font-size: 1rem; letter-spacing: -.025em;
+  color: var(--ink); text-decoration: none;
+}
+.brand img { width: 26px; height: 26px; border-radius: 6px; display: block; }
+.site-nav { display: flex; align-items: center; gap: clamp(.9rem, 2.1vw, 1.6rem); }
+.site-nav a {
+  color: var(--ink-2); text-decoration: none;
+  font-size: .9125rem; font-weight: 500; letter-spacing: -.005em;
+}
+.site-nav a:hover { color: var(--pen); text-decoration: underline; }
+
+main {
+  max-width: 48rem;
+  padding: clamp(2rem, 3.4vw, 2.9rem) var(--pad-r) clamp(2.6rem, 4.5vw, 3.6rem)
+           calc(var(--gutter) + 1.4rem);
+}
+
+h1 {
+  margin: 0 0 .35rem;
+  font-size: clamp(1.8rem, 4.2vw, 2.3rem);
+  line-height: 1.1;
+  letter-spacing: -.034em;
+  font-weight: 800;
+  text-wrap: balance;
+}
+h2 {
+  margin: 2.3rem 0 .6rem;
+  padding-top: 1.35rem;
+  border-top: 1px solid var(--rule);
+  font-size: 1.2rem;
+  line-height: 1.25;
+  letter-spacing: -.024em;
+  font-weight: 700;
+}
+h3 {
+  margin: 1.6rem 0 .35rem;
+  font-size: .8125rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--pen);
+}
+
+p, li { margin: 0 0 .9rem; }
+p { text-wrap: pretty; }
+ul { padding-left: 1.25rem; margin: 0 0 .9rem; }
+li { margin-bottom: .5rem; }
+strong { font-weight: 650; }
+
+.updated {
+  margin: 0 0 1.5rem;
+  font: 600 .8125rem/1.4 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+        "Liberation Mono", monospace;
+  letter-spacing: .04em; color: var(--muted);
+}
+.updated strong { font-weight: 600; }
+.lede { font-size: 1.075rem; color: var(--ink-2); }
+
+.contact {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--pen);
+  border-radius: 3px;
+  padding: .85rem 1.05rem;
+  margin: 0 0 1.75rem;
+}
+.contact p { margin: 0; }
+
+footer {
+  margin-top: 2.6rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: .875rem;
+  line-height: 1.6;
+}
+footer p { margin: 0 0 .4rem; }
+footer p:last-child { margin-bottom: 0; }
+
+@media (max-width: 61.99rem) {
+  :root { --gutter: 1.5rem; --pad-r: 1.6rem; }
+  .site-header { padding-inline: 2.6rem var(--pad-r); }
+  main { padding-left: 2.6rem; }
+}
+@media (max-width: 34rem) {
+  :root { --gutter: 1rem; --pad-r: 1.25rem; }
+  body { font-size: 1rem; }
+  .desk { padding-inline: 0; }
+  .sheet { border-radius: 0; }
+  .site-header { padding-inline: 1.95rem var(--pad-r); min-height: 0; padding-block: .9rem; gap: .8rem 1.1rem; }
+  .brand { margin-right: 0; width: 100%; }
+  .site-nav { flex-wrap: wrap; gap: .65rem 1rem; }
+  main { padding-left: 1.95rem; }
+}
+
+/* --- delete-account only ------------------------------------------------ */
+
+.panel {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--pen);
+  border-radius: 3px;
+  padding: 1rem 1.15rem;
+  margin: 0 0 1.75rem;
+}
+.panel p:last-child { margin-bottom: 0; }
+
+ol { padding-left: 1.3rem; margin: 0 0 .9rem; }
+
+.steps { counter-reset: step; list-style: none; padding-left: 0; }
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 2.35rem;
+  margin-bottom: .85rem;
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: .1em;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--paper-2);
+  border: 1px solid var(--graphite);
+  font: 700 .8rem/1 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+        "Liberation Mono", monospace;
+  color: var(--pen);
+}
+
+/* this page's footer is printed on the desk, below the sheet */
+footer {
+  max-width: 48rem;
+  margin: clamp(1.3rem, 2.8vw, 2.1rem) auto 0;
+  padding: 0 clamp(1.1rem, 3vw, 2rem) clamp(1.4rem, 3vw, 2.2rem);
+  border-top: 0;
+  font-size: .875rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+footer nav { display: flex; flex-wrap: wrap; gap: .5rem 1.35rem; margin: 0 0 .9rem; }
+footer nav a { font-weight: 500; }
+footer p { margin: 0; }
+</style>
+</head>
+<body>
+
+<div class="desk">
+<div class="sheet">
+
+<header class="site-header">
+  <a class="brand" href="./">
+    <img src="icon.png" width="26" height="26" alt="The Markless app icon">
+    Markless
+  </a>
+  <nav class="site-nav" aria-label="Primary">
+    <a href="./">Home</a>
+    <a href="privacy.html">Privacy policy</a>
+    <a href="https://github.com/drposhbug/ai-marking-dreamflow">Source</a>
+    <a href="./#signin">Sign in</a>
+  </nav>
+</header>
+
+<main>
+
+  <h1>Delete your Markless account</h1>
+  <p class="updated"><strong>App:</strong> Markless: AI Marking
+  (<code>com.markless.app</code>)</p>
+
+  <p class="lede">You can delete your Markless account, and everything in it,
+  from inside the app or by asking us. This page explains both routes, exactly
+  what is erased, what is kept and why, and how long it takes.</p>
+
+  <div class="panel">
+    <p><strong>Deletion is irreversible.</strong> It cannot be undone by you or
+    by us. Cancelling a subscription is a separate thing and is done in the Play
+    Store or the App Store — see below.</p>
+  </div>
+
+  <h2>Delete it yourself, in the app</h2>
+
+  <ol class="steps">
+    <li>Open Markless and sign in to the account you want deleted.</li>
+    <li>Go to <strong>Settings</strong>.</li>
+    <li>Tap <strong>Delete my account</strong>.</li>
+    <li>Read the consequences and tap <strong>Continue</strong>.</li>
+    <li>Type <strong>DELETE</strong> to confirm, then tap
+    <strong>Delete for good</strong>.</li>
+  </ol>
+
+  <p>The app asks twice on purpose: once for the consequences, once with the
+  word typed out. The request is verified against your own signed-in session, so
+  nobody else can delete your account.</p>
+
+  <h2>Ask us to delete it, without the app</h2>
+
+  <p>Email <strong><a href="mailto:oscar.cs.lee@gmail.com?subject=Delete%20my%20Markless%20account">oscar.cs.lee@gmail.com</a></strong>
+  from the email address the account uses, and ask for the account to be
+  deleted. Send it from that address so we can tell it is you; we do not ask for
+  your password, and we will never ask you for one.</p>
+
+  <h2>What is deleted</h2>
+
+  <p>Everything below is erased, on the phone and on our servers:</p>
+
+  <ul>
+    <li>Your <strong>profile</strong> — your email, name, honorific, school and
+    curriculum region.</li>
+    <li><strong>Every marked result</strong> — scores, feedback, question
+    breakdowns and annotations.</li>
+    <li><strong>Every class and every student</strong> you entered, including
+    your own student codes and any notes.</li>
+    <li><strong>Your answer keys</strong>, including keys the app learned from a
+    first paper.</li>
+    <li><strong>Your saved settings</strong> and marking defaults.</li>
+    <li><strong>Your usage records</strong> — the credit and cost log kept to
+    enforce your plan's allowance.</li>
+    <li><strong>Your sign-in itself.</strong> The login is deleted last, so a
+    failure earlier never leaves data behind an account you can no longer sign
+    in to.</li>
+  </ul>
+
+  <p>Page images were never stored on our servers in the first place — they are
+  passed through for marking and discarded, and the copies kept on your phone go
+  when the app's data is cleared.</p>
+
+  <h2>What is kept, and why</h2>
+
+  <p>One thing survives: the <strong>anonymous marking cache</strong>. When a
+  page is marked, a one-way hash of the image is stored alongside the model's
+  output, so that re-marking an identical page can be served from cache instead
+  of being paid for and processed again. A hash cannot be turned back into the
+  picture.</p>
+
+  <p>Those rows are keyed by the content hash and are shared across accounts.
+  They carry <strong>no name, no email and no account id</strong>, so there is
+  nothing in them that identifies you or a student, and nothing that could be
+  linked back to a deleted account.</p>
+
+  <!-- TODO: state a retention period for the anonymous marking cache. Neither
+       docs/privacy-policy.md nor docs/security-and-compliance.md gives one, and
+       Play's Data Safety form asks for it. Do not guess a number here. -->
+  <p><strong>TODO:</strong> the retention period for the anonymous marking cache
+  is not yet stated in our published documentation and must be filled in here
+  before launch.</p>
+
+  <h2>How long it takes</h2>
+
+  <p><strong>In the app:</strong> immediately. By the time the app tells you the
+  account has been deleted, the records have already been removed on the server
+  and the login has been deleted.</p>
+
+  <!-- TODO: state the turnaround for emailed deletion requests. No SLA is
+       stated in docs/privacy-policy.md or docs/security-and-compliance.md, and
+       Play requires a processing time. Decide the commitment, then replace the
+       sentence below. -->
+  <p><strong>By email: TODO</strong> — a turnaround for emailed deletion
+  requests has not been committed to in writing yet, and is to be stated here
+  before launch rather than guessed at.</p>
+
+  <h2>Two things deletion does not do</h2>
+
+  <h3>It does not cancel your subscription</h3>
+  <p>Subscriptions are held by the store, not by us. Cancel in the Play Store or
+  the App Store — deleting your Markless account does not stop a subscription
+  renewing.</p>
+
+  <h3>It does not touch files already exported to your Google Drive</h3>
+  <p>If you switched on Drive export, the documents Markless created live in the
+  <em>Markless</em> folder in your own Drive and belong to you. Markless does not
+  delete them; delete them in Drive if you want them gone.</p>
+
+  <h2>Questions</h2>
+  <p>Email <a href="mailto:oscar.cs.lee@gmail.com">oscar.cs.lee@gmail.com</a>.
+  The full detail of what is stored and for how long is in the
+  <a href="privacy.html">privacy policy</a>.</p>
+
+</main>
+
+</div>
+
+<footer>
+  <nav aria-label="Footer">
+    <a href="./">Markless home</a>
+    <a href="privacy.html">Privacy policy</a>
+    <a href="https://github.com/drposhbug/ai-marking-dreamflow">GitHub repository</a>
+    <a href="mailto:oscar.cs.lee@gmail.com">oscar.cs.lee@gmail.com</a>
+  </nav>
+  <p>Markless — account deletion. Contact
+  <a href="mailto:oscar.cs.lee@gmail.com">oscar.cs.lee@gmail.com</a>.</p>
+</footer>
+</div>
+
+</body>
+</html>
