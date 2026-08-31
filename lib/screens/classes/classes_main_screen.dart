@@ -8,6 +8,7 @@ import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/widgets/responsive.dart';
 import 'package:marking_prokect_v2/widgets/teacher_topbar.dart';
 import 'package:provider/provider.dart';
 
@@ -80,10 +81,12 @@ class _ClassesMainScreenState extends State<ClassesMainScreen> {
             for (final entry in bySubject.entries) ...[
               Text(entry.key.toUpperCase(), style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
               const SizedBox(height: 10),
-              for (final c in entry.value.cast())
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: InkWell(
+              // A phone reads a class list as one column. A monitor has room
+              // for two, and a teacher with six classes would rather see all
+              // six than scroll past four.
+              CardColumns(children: [
+                for (final c in entry.value.cast())
+                  InkWell(
                     splashFactory: NoSplash.splashFactory,
                     onTap: () => context.push('${AppRoutes.classHub}?classId=${c.id}'),
                     child: Card(
@@ -130,10 +133,13 @@ class _ClassesMainScreenState extends State<ClassesMainScreen> {
                       ),
                     ),
                   ),
-                ),
+              ]),
+              const SizedBox(height: 12),
             ],
-            ...[
-              const SizedBox(height: 4),
+            // One child, so it is the full width of a phone and one column
+            // wide on a monitor — an Add button stretched across a 27" screen
+            // reads as a banner, not a button.
+            CardColumns(children: [
               InkWell(
                 splashFactory: NoSplash.splashFactory,
                 onTap: _openCreateSheet,
@@ -157,7 +163,7 @@ class _ClassesMainScreenState extends State<ClassesMainScreen> {
                   ),
                 ),
               ),
-            ],
+            ]),
           ],
         ),
       ),

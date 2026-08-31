@@ -41,6 +41,29 @@ class AppRouter {
   static Page<void> _page(Widget child) => MaterialPage<void>(child: AppPageFrame(child: child));
   static Page<void> _instantPage(Widget child) => NoTransitionPage<void>(child: AppPageFrame(child: child));
 
+  // Screens that are a run of cards rather than a run of sentences. They keep
+  // the reading measure on a laptop and grow with a desk monitor, because a
+  // card is not a paragraph and two of them side by side beats one tall
+  // column with half the monitor empty beside it.
+  static Page<void> _wideInstantPage(Widget child) => NoTransitionPage<void>(
+        child: AppPageFrame(
+          maxWidth: Breakpoints.maxWideContentWidth,
+          widthFor: Breakpoints.wideContentWidthFor,
+          child: child,
+        ),
+      );
+
+  // Sign-in is one illustration beside one short form and the first thing a
+  // teacher ever sees, so it fills the monitor instead of sitting in a
+  // 960px column in the middle of it.
+  static Page<void> _splashPage(Widget child) => NoTransitionPage<void>(
+        child: AppPageFrame(
+          maxWidth: Breakpoints.maxSplashWidth,
+          widthFor: Breakpoints.splashWidthFor,
+          child: child,
+        ),
+      );
+
   static final GoRouter router = GoRouter(
     navigatorKey: _rootKey,
     initialLocation: AppRoutes.login,
@@ -55,15 +78,15 @@ class AppRouter {
       return null;
     },
     routes: [
-      GoRoute(path: AppRoutes.login, name: 'login', pageBuilder: (context, state) => _instantPage(const LoginScreen())),
+      GoRoute(path: AppRoutes.login, name: 'login', pageBuilder: (context, state) => _splashPage(const LoginScreen())),
       GoRoute(path: AppRoutes.onboarding, name: 'onboarding', pageBuilder: (context, state) => _instantPage(const OnboardingScreen())),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => BottomNavShell(shell: shell),
         branches: [
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.grading, name: 'grading', pageBuilder: (context, state) => _instantPage(const GradingHomeScreen()))]),
+          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.grading, name: 'grading', pageBuilder: (context, state) => _wideInstantPage(const GradingHomeScreen()))]),
           StatefulShellBranch(routes: [GoRoute(path: AppRoutes.dashboard, name: 'dashboard', pageBuilder: (context, state) => _instantPage(const DashboardScreen()))]),
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.classes, name: 'classes', pageBuilder: (context, state) => _instantPage(const ClassesMainScreen()))]),
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.library, name: 'library', pageBuilder: (context, state) => _instantPage(const LibraryScreen()))]),
+          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.classes, name: 'classes', pageBuilder: (context, state) => _wideInstantPage(const ClassesMainScreen()))]),
+          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.library, name: 'library', pageBuilder: (context, state) => _wideInstantPage(const LibraryScreen()))]),
           StatefulShellBranch(routes: [GoRoute(path: AppRoutes.settings, name: 'settings', pageBuilder: (context, state) => _instantPage(const SettingsScreen()))]),
         ],
       ),
