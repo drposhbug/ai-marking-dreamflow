@@ -44,7 +44,7 @@ export function RouteTabs() {
   const route = ROUTES[selected];
 
   return (
-    <section className="s s--paper" id="how" aria-labelledby="h-how">
+    <section className="s s--dark" id="how" aria-labelledby="h-how">
       <div className="wrap">
         <p className="kicker">Times are for a class of thirty</p>
 

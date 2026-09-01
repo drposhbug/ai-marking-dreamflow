@@ -1,19 +1,32 @@
 import type { Metadata, Viewport } from 'next';
-import { IBM_Plex_Mono, Inter } from 'next/font/google';
+import { Besley, Courier_Prime, Public_Sans } from 'next/font/google';
 import './globals.css';
 
 /* next/font fetches and self-hosts these at build time, so the static export
-   carries the files and a visitor's browser never asks Google for a font. */
-const sans = Inter({
+   carries the files and a visitor's browser never asks Google for a font.
+
+   The three faces are the three instruments a mark actually passes through:
+     Besley        - a Clarendon, the letterform of school primers and report
+                     cards. Display headings, and the pen-written marks.
+     Public Sans   - the plain civic sans of official documents. Body text.
+     Courier Prime - the school-office typewriter. Labels, codes, the CSV,
+                     the counters. */
+const display = Besley({
   subsets: ['latin'],
   display: 'swap',
-  weight: ['400', '500', '600', '700'],
+  style: ['normal', 'italic'],
+  variable: '--font-display',
+});
+const sans = Public_Sans({
+  subsets: ['latin'],
+  display: 'swap',
+  style: ['normal', 'italic'],
   variable: '--font-sans',
 });
-const mono = IBM_Plex_Mono({
+const mono = Courier_Prime({
   subsets: ['latin'],
   display: 'swap',
-  weight: ['400', '500', '600', '700'],
+  weight: ['400', '700'],
   variable: '--font-mono',
 });
 
@@ -52,14 +65,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#2563EB',
+  themeColor: '#143528',
   width: 'device-width',
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

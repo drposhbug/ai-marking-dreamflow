@@ -1,6 +1,6 @@
 /**
- * The drawing primitives the illustrations are made of: a line of handwriting,
- * a green tick, the red pen underline.
+ * The drawing primitives the illustrations are made of: a line of handwriting
+ * and a green tick.
  *
  * Everything here is deterministic. The "random" wobble comes from a seeded
  * generator, so the server and the browser draw the same path and hydration
@@ -91,17 +91,5 @@ export function Tick({ className }: { className?: string }) {
     >
       <path d="M2.5 8.8 6 12.5 13.5 3.5" />
     </svg>
-  );
-}
-
-/** The red pen stroke under a run of words in the headline. */
-export function Underline({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="underline">
-      {children}
-      <svg viewBox="0 0 480 12" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-        <path d="M4 8.5C72 3.4 150 10.6 224 6.2 300 1.7 388 10.2 476 5" />
-      </svg>
-    </span>
   );
 }
