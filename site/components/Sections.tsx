@@ -14,7 +14,7 @@ import {
 
 export function SiteHeader() {
   return (
-    <header className="site-header s--dark">
+    <header className="site-header s--paper">
       <div className="wrap">
         <a className="brand" href="./">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -304,7 +304,7 @@ export function Closing() {
 
 export function SiteFooter() {
   return (
-    <footer className="site-footer s--dark">
+    <footer className="site-footer">
       <div className="wrap">
         <nav aria-label="Footer">
           <a href="privacy.html">Privacy policy</a>

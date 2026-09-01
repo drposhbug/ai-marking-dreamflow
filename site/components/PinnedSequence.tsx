@@ -7,7 +7,12 @@ import { Handwriting, Tick } from './Ink';
 import { useNarrow, useReducedMotionSafe } from './useMedia';
 
 /* ==========================================================================
-   The scroll-locked sequence: one class set, from the copier to the gradebook.
+   The scroll-locked sequence: one class set, from the copier to the gradebook,
+   as a split screen. While pinned, the left half of the viewport is an
+   exam-paper panel holding the stage's illustration and the red-pen note; the
+   right half is the board, with one enormous chalk word, the stage title, and
+   the body. The two surfaces are painted on `.seq-sticky` itself, so stages
+   cross-fade over stable backgrounds.
 
    HOW THE PIN WORKS
    -----------------
@@ -29,16 +34,19 @@ import { useNarrow, useReducedMotionSafe } from './useMedia';
 
    HOW IT DEGRADES
    ---------------
-   `prefers-reduced-motion: reduce` (and any viewport under 62rem, because
-   pinning is wrong on a phone) collapses the track to `height: auto`, makes the
-   sticky child `position: static`, and forces every stage to opacity 1 with no
-   transform - in CSS, with `!important`, so it beats the inline styles this
-   file would otherwise write. The five stages then read as five ordinary
-   blocks down the page, in order, with a rule between them. The JavaScript
-   also stands down (`staticMode` below), so no scroll listener runs and no
-   inline style is written at all. Trapping a reader who cannot process motion
-   inside a 500vh pin would be a serious accessibility failure; the CSS rule is
-   the guarantee and the JavaScript is the optimisation.
+   The split and the pin exist only inside
+   `(min-width: 62rem) and (prefers-reduced-motion: no-preference)`. Under
+   `prefers-reduced-motion: reduce`, and on any viewport under 62rem (because
+   pinning is wrong on a phone), the base CSS applies instead: the track is
+   `height: auto`, the sticky child is `position: static`, and the five stages
+   read as five ordinary blocks down the page, in order, with a rule between
+   them and the rail hidden. A reduced-motion block at the end of globals.css
+   additionally forces every stage to opacity 1 with no transform, with
+   `!important`, so it beats any inline style this file had already written.
+   The JavaScript also stands down (`staticMode` below), so no scroll listener
+   runs and no inline style is written at all. Trapping a reader who cannot
+   process motion inside a 500vh pin would be a serious accessibility failure;
+   the CSS rule is the guarantee and the JavaScript is the optimisation.
    ========================================================================== */
 
 const N = STAGES.length;
@@ -103,7 +111,7 @@ export function PinnedSequence() {
   };
 
   return (
-    <section className="s s--dark s--seq" id="sequence" aria-labelledby="h-seq">
+    <section className="s s--paper s--seq" id="sequence" aria-labelledby="h-seq">
       <div className="wrap">
         <p className="kicker">One class set, start to finish</p>
 
@@ -116,15 +124,47 @@ export function PinnedSequence() {
         </div>
       </div>
 
+      {/* While the track is passing, the viewport is split: the exam-paper
+          panel on the left holds the stage's illustration, the board on the
+          right holds one enormous chalk word and two short paragraphs. Both
+          surfaces are painted once, on the sticky element, so the stages can
+          cross-fade over them without the backgrounds flickering. */}
       <div
         className="seq-track"
         ref={trackRef}
         style={{ ['--seq-count' as string]: N }}
       >
         <div className="seq-sticky">
-         {/* The frame stops the stage floating in the middle of a 1300px
-             monitor: it fills the viewport up to a point, then holds. */}
-         <div className="seq-frame">
+          <div className="seq-stages">
+            {STAGES.map((stage, i) => (
+              <motion.article
+                key={stage.id}
+                className="seq-stage"
+                data-active={active === i}
+                style={{
+                  opacity: staticMode ? 1 : stageMotion[i].opacity,
+                  y: staticMode ? 0 : stageMotion[i].y,
+                }}
+              >
+                <div className="seq-half seq-half--board">
+                  <div className="seq-board-in">
+                    <span className="seq-n">Stage {stage.n}</span>
+                    <h3 className="seq-word">{stage.label}</h3>
+                    <p className="seq-lead">{stage.title}</p>
+                    <p className="seq-body">{stage.body}</p>
+                    <p className="seq-meta">The paper route · a class of thirty</p>
+                  </div>
+                </div>
+                <div className="seq-half seq-half--paper">
+                  <div className="seq-paper-in">
+                    <StageVisual id={stage.id} local={stageMotion[i].local} staticMode={staticMode} />
+                    <p className="seq-note">{stage.note}</p>
+                  </div>
+                </div>
+              </motion.article>
+            ))}
+          </div>
+
           <div className="seq-rail">
             {STAGES.map((s, i) => (
               <button
@@ -143,39 +183,6 @@ export function PinnedSequence() {
               {String(active + 1).padStart(2, '0')} / {String(N).padStart(2, '0')}
             </span>
           </div>
-
-          <div className="seq-stages">
-            {STAGES.map((stage, i) => (
-              <motion.article
-                key={stage.id}
-                className="seq-stage"
-                data-active={active === i}
-                style={{
-                  opacity: staticMode ? 1 : stageMotion[i].opacity,
-                  y: staticMode ? 0 : stageMotion[i].y,
-                }}
-              >
-                <div className="seq-stage-main">
-                  <div className="seq-stage-copy">
-                    <span className="seq-n">
-                      <b>{stage.n}</b>
-                      {stage.label}
-                    </span>
-                    <h3>{stage.title}</h3>
-                    <p className="seq-body">{stage.body}</p>
-                  </div>
-                  <div className="seq-stage-vis">
-                    <StageVisual id={stage.id} local={stageMotion[i].local} staticMode={staticMode} />
-                  </div>
-                </div>
-                <div className="seq-stage-foot">
-                  <p className="seq-note">{stage.note}</p>
-                  <p className="seq-meta">The paper route · a class of thirty</p>
-                </div>
-              </motion.article>
-            ))}
-          </div>
-         </div>
         </div>
       </div>
     </section>

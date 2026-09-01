@@ -12,17 +12,17 @@ import { Closing, Plans, Privacy, SignIn, SiteFooter, SiteHeader } from '../comp
  * screen and holds its words on a centred column inside itself. Nothing here
  * wraps the page in a frame, and nothing should.
  *
- * The bands alternate dark and light all the way down:
+ * The bands alternate paper and board all the way down:
  *
- *   Hero            dark    what it is, and the four real timings
- *   RouteTabs       paper   the four routes, with the timing as the number
- *   PinnedSequence  dark    the scroll-locked walk through one class set
- *   FlipCards       tint    one question, both sides: the answer and the marking
- *   Beliefs         dark    seven rules, including the awkward ones
+ *   Hero            paper   the exam-booklet cover, and the four real timings
+ *   RouteTabs       board   the four routes chalked up, timing as the number
+ *   PinnedSequence  split   paper panel left, one chalk word right
+ *   FlipCards       manila  one question, both sides: the answer and the marking
+ *   Beliefs         board   seven rules, including the awkward ones
  *   Privacy         paper   what leaves the phone, and where the promise stops
- *   Plans           dark    the four tiers, at the prices the app states
+ *   Plans           board   the four tiers, at the prices the app states
  *   SignIn          paper   the handoff into the app
- *   Closing         dark    who built it and what state it is in
+ *   Closing         board   who built it and what state it is in
  */
 export default function Page() {
   return (
