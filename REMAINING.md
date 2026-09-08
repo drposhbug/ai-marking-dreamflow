@@ -490,3 +490,30 @@ p50 2.6s. Whole test's AI cost, confirmed via admin_stats: **$0.0011**.
 - [ ] **R17.5** Cleanup: the test left `loadtest-*` rows. SQL to remove them is
       printed by `tool/load_test.mjs` (delete from submissions_cloud /
       collections_cloud / usage_log / profiles where teacher_id like 'loadtest-%').
+
+---
+
+## R18 — Full performance battery (2026-09-08, `tool/load_test.mjs` modes)
+
+Run against the LIVE deployment (pre-R17 fixes — the get_usage rewrite and
+referred_by index were written and committed but the deploy was blocked
+pending owner approval, so these numbers are the "before" baseline).
+
+| Test | Result |
+|---|---|
+| **Load (target 500)** | FAIL at 500. Healthy to ~200 (0-0.6% errors); 250 = 5.4% errors and first BOOT_ERRORs; 500 = 45% errors, get_usage 498/500 timeouts, Cloudflare interstitials. |
+| **Stress (ceiling)** | Knee between 250 and 500 concurrent full sessions. Break mode is COLLAPSE, not graceful: throughput plateaus ~31 req/s from 100 up, then goes retrograde (24 req/s at 500) as timeouts cascade. |
+| **Spike (50→500)** | Failure is immediate on the jump — BOOT_ERROR (edge autoscale lag), "upstream connect error / connection timeout" (pool exhaustion), 41% errors. Scaled down from the requested 2,000 because steady-state already collapses at 500; a 2k spike would only prove the same thing for 26k invocations. |
+| **Soak (4h, 3 VUs)** | Running in background → `tool/soak_results.log`, drift table at the end. |
+| **Volume** | PASS. 3,000 papers on one account + a 5,000-student roster: list_submissions p95 670ms vs 582ms on a 1-row account — no degradation; seeding sustained 50-concurrent writes flawlessly. (5M rows is dishonest against a 500MB free-tier DB; this is the worst realistic single account.) Note: a full list_submissions page ≈ 4MB — paginate for mobile data someday. |
+| **Scalability** | NOT horizontally scalable on this tier. Throughput is pinned at ~31 req/s regardless of offered load — a fixed shared ceiling (free-tier DB pool + edge concurrency), confirmed by BOOT_ERRORs and upstream connect resets. More client load cannot raise it; only (a) the R17.2 query-count fix (~3× fewer DB round trips on the hottest path) and (b) a paid tier can. |
+
+- [ ] **R18.1** Deploy the R17 fixes, re-run `--mode ramp --stages 100,250,500`,
+      and record the after numbers. Expect the knee to move right substantially.
+- [ ] **R18.2** "One concurrent full session" ≈ several real teachers (real users
+      idle between taps). Rough translation: today's ceiling ≈ low thousands of
+      teachers active in the same minute — fine for launch, nowhere near a press
+      hit. Decide the paid-tier trigger BEFORE any launch push.
+- [ ] **R18.3** Transient `save_profile` 500 "JWT issued at future" seen once at
+      100 VUs — edge node clock skew. The client should treat it as retryable.
+- [ ] **R18.4** Battery used ~45k of the 500k monthly free edge invocations.
