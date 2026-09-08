@@ -517,3 +517,34 @@ pending owner approval, so these numbers are the "before" baseline).
 - [ ] **R18.3** Transient `save_profile` 500 "JWT issued at future" seen once at
       100 VUs — edge node clock skew. The client should treat it as retryable.
 - [ ] **R18.4** Battery used ~45k of the 500k monthly free edge invocations.
+
+---
+
+## R19 — Getting to thousands of users (2026-09-08)
+
+Shipped and DEPLOYED today (owner authorized): the spendBuckets single-query
+rewrite, the referred_by index (SETUP-DB re-run), in-isolate 60s caches for
+plan + referral lookups and a 30s display-only cache for get_usage's sums
+(budgetGate always sums fresh — the gate is the margin guarantee and is
+deliberately uncached), the list_batches IDOR guard (verified 403 in prod).
+
+After-numbers: get_usage at 250 users went 12% timeouts → ZERO failures, p50
+15.7s → 7.3s; overall errors at 250: 5.4% → 3.8%. **The ceiling did not
+move**: throughput still pins ~33-35 req/s and 500 still collapses. The
+ceiling is the free tier's pool + compute, not any query.
+
+- [ ] **R19.1 Upgrade to Supabase Pro ($25/mo). This is THE unlock** — bigger
+      pool, more compute, no 7-day pause (kills R17.3), and the margin model
+      absorbs it trivially. Owner action; dashboard billing. Re-run the ramp
+      after and record the new ceiling.
+- [ ] **R19.2** Client resilience (in progress): retry+backoff on transient
+      failures for FREE actions only — billed actions never auto-retry, a
+      timed-out grade may have billed and a retry would buy it twice — plus a
+      45s client cache for get_usage.
+- [ ] **R19.3** Next code multiplier once on Pro: a batched `bootstrap_sync`
+      action returning profile+usage+keys+collections in ONE invocation.
+      App-open cost drops ~5 invocations → 1; at any tier that multiplies the
+      user ceiling by the same factor.
+- [ ] **R19.4** Keep-warm ping until Pro (Pages/cron hitting get_usage every
+      few days) so the first teacher after a quiet week doesn't wake a paused
+      project — or just do R19.1, which makes it moot.
