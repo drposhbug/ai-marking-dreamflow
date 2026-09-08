@@ -102,7 +102,10 @@ class _PlansScreenState extends State<PlansScreen> {
       final auth = context.read<AuthService>().currentUser;
       if (auth == null) return;
       try {
-        final u = await AiGradingService().getUsage(teacherId: auth.id);
+        // force: this screen IS the usage meter — a teacher opens it to see
+        // their real allowance (often straight after buying a plan), so a
+        // cached number from 45 seconds ago isn't good enough here.
+        final u = await AiGradingService().getUsage(teacherId: auth.id, force: true);
         if (mounted) setState(() => _usage = u);
       } catch (e) {
         debugPrint('PlansScreen usage load failed: $e');
