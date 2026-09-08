@@ -1171,30 +1171,50 @@ async function countSince(teacherId: string, action: string, sinceIso: string): 
   return count ?? 0;
 }
 
-async function spendSince(teacherId: string, sinceIso: string): Promise<number> {
+/// All three spend windows from ONE query. get_usage runs on every app open
+/// and budgetGate in front of every paid action; the three separate
+/// row-fetches this replaces were the biggest share of the 10-second
+/// get_usage tails the 2026-09-08 scaling test measured at fifty teachers.
+async function spendBuckets(teacherId: string): Promise<{ day: number; week: number; month: number }> {
+  const p = periodStarts();
+  // The rolling week can reach back past the 1st of the month, so fetch from
+  // whichever boundary is older and split the rows here. Compared as parsed
+  // times, not strings — PostgREST timestamps and toISOString() differ in
+  // suffix, and a midnight row must not fall out of its bucket over "+00:00"
+  // versus "Z".
+  const since = Date.parse(p.week) < Date.parse(p.month) ? p.week : p.month;
+  const [dayT, weekT, monthT] = [Date.parse(p.day), Date.parse(p.week), Date.parse(p.month)];
   const { data, error } = await serviceDb()
     .from("usage_log")
-    .select("cost_usd")
+    .select("cost_usd, created_at")
     .eq("teacher_id", teacherId)
-    .gte("created_at", sinceIso);
+    .gte("created_at", since);
   if (error) throw error;
+  let day = 0, week = 0, month = 0;
   // deno-lint-ignore no-explicit-any
-  return (data ?? []).reduce((s: number, r: any) => s + Number(r.cost_usd ?? 0), 0);
+  for (const r of (data ?? []) as any[]) {
+    const c = Number(r.cost_usd ?? 0);
+    const at = Date.parse(String(r.created_at ?? ""));
+    if (!Number.isFinite(at) || !Number.isFinite(c)) continue;
+    if (at >= dayT) day += c;
+    if (at >= weekT) week += c;
+    if (at >= monthT) month += c;
+  }
+  return { day, week, month };
 }
 
 /// Null when within the plan's caps; otherwise the 429 response to return.
 async function budgetGate(teacherId: string, pacing: boolean): Promise<Response | null> {
   if (!teacherId) return null;
   try {
-    const plan = await planFor(teacherId);
-    const caps = PLAN_CAPS[plan];
-    const p = periodStarts();
-    const [day, week, month, paidRefs] = await Promise.all([
-      spendSince(teacherId, p.day),
-      spendSince(teacherId, p.week),
-      spendSince(teacherId, p.month),
+    // One wave of queries, not two: the plan lookup does not depend on the
+    // spend sums, and this gate sits in front of every paid action.
+    const [plan, { day, week, month }, paidRefs] = await Promise.all([
+      planFor(teacherId),
+      spendBuckets(teacherId),
       paidReferralCount(teacherId),
     ]);
+    const caps = PLAN_CAPS[plan];
     const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
     const block = (scope: string, message: string): Response =>
       json({ error: "usage_limit", scope, plan, message }, 429);
@@ -1579,15 +1599,12 @@ Deno.serve(async (req) => {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
     try {
-      const plan = await planFor(teacherId);
-      const caps = PLAN_CAPS[plan];
-      const p = periodStarts();
-      const [day, week, month, paidRefs] = await Promise.all([
-        spendSince(teacherId, p.day),
-        spendSince(teacherId, p.week),
-        spendSince(teacherId, p.month),
+      const [plan, { day, week, month }, paidRefs] = await Promise.all([
+        planFor(teacherId),
+        spendBuckets(teacherId),
         paidReferralCount(teacherId),
       ]);
+      const caps = PLAN_CAPS[plan];
       const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
       return json({
         plan,
@@ -2759,7 +2776,8 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     const cachedOrder = Array.isArray(hit.image_hashes) ? hit.image_hashes.map(String) : [];
     const map = pageIndexMap(cachedOrder, imageHashes);
     if (map) {
-      normalized.annotations = normalized.annotations.map((a) => ({
+      // deno-lint-ignore no-explicit-any
+      normalized.annotations = normalized.annotations.map((a: any) => ({
         ...a,
         pageIndex: map[a.pageIndex] ?? a.pageIndex,
       }));
