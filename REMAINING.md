@@ -454,3 +454,39 @@ Verified in a real Chrome against a debug web build:
       **Test with a real OS drag before trusting this feature.** It may well be
       an artifact of synthetic events, which cannot be assumed either way.
 - [ ] **R16.2** Paste is untested end to end for the same reason.
+
+---
+
+## R17 — Scaling test findings (2026-09-08, `tool/load_test.mjs`)
+
+Ramped 1 → 5 → 10 → 25 → 50 concurrent simulated teachers against the LIVE
+backend (sign-up, two classes, 30 students, links, three saved marked papers,
+reads). 1,001 DB requests, **zero failures**; throughput scaled cleanly to
+~32 req/s. Then 10 CONCURRENT real `mark_responses` calls: all succeeded,
+p50 2.6s. Whole test's AI cost, confirmed via admin_stats: **$0.0011**.
+
+- [x] **R17.1** `profiles.referred_by` had no index, and `paidReferralCount`
+      (called by `get_usage` on every app open) seq-scans on it. Added a partial
+      index to SETUP-DB — **re-run SETUP-DB to apply it**.
+- [ ] **R17.2** `get_usage` is the scaling bottleneck: p50 2.8s / p95 10.3s /
+      max 11.2s at 50 teachers, while every other action held p95 ≤ 1.7s. Cause:
+      ~6 DB round trips per call — `planFor`, THREE separate `spendSince`
+      queries that fetch every usage_log row and sum in JS, and the seq-scan
+      count. Fix when next touching MARKING-PROCESS: one SQL aggregate
+      (`sum(cost_usd) filter (where created_at > ...)` × day/week/month in a
+      single query) instead of three row-fetches, and R17.1's index. This is a
+      real morning-rush problem: get_usage runs on app open AND before marking
+      choices.
+- [ ] **R17.3** **The free-tier Supabase project PAUSES after ~7 days idle.**
+      The first smoke run hit a woken-from-pause project: every table came back
+      "Could not find the table in the schema cache" for about a minute, then
+      recovered. The first teacher after a quiet week gets a broken app.
+      Before launch: upgrade the project (or accept and add retry/backoff on
+      cold start). This WILL fire during Shipaton judging if judges try the app
+      after a quiet spell.
+- [ ] **R17.4** Deployed MARKING-PROCESS is the pre-2026-08-30 build: no
+      `list_batches`, no IDOR guard (probe returns 400 fall-through, not 403),
+      no sweeper. The repo is ~2 weeks ahead of production. Deploy.
+- [ ] **R17.5** Cleanup: the test left `loadtest-*` rows. SQL to remove them is
+      printed by `tool/load_test.mjs` (delete from submissions_cloud /
+      collections_cloud / usage_log / profiles where teacher_id like 'loadtest-%').
