@@ -139,6 +139,11 @@ Deno.serve(async (req) => {
     await sql`alter table public.profiles add column if not exists referred_by text`;
     await sql`alter table public.profiles add column if not exists referral_count int not null default 0`;
     await sql`create unique index if not exists profiles_referral_code_idx on public.profiles (referral_code)`;
+    // paidReferralCount filters on referred_by, and get_usage calls it on
+    // every app open. Without this it is a sequential scan of profiles per
+    // open — the 2026-09-08 scaling test measured get_usage at p95 10.3s
+    // with 50 teachers online while every indexed action held under 1.7s.
+    await sql`create index if not exists profiles_referred_by_idx on public.profiles (referred_by) where referred_by is not null`;
     await sql.end();
     return Response.json({ ok: true });
   } catch (e) {
