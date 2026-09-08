@@ -4,7 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:marking_prokect_v2/services/csv_import.dart';
 
 void main() {
-  final raw = File(r'C:\Users\tyler\AppData\Local\Temp\sample_form.csv').readAsStringSync();
+  // In the repo, not the OS temp directory: Windows evicts temp on its own
+  // schedule, and five tests silently failing to LOAD on a clean machine is
+  // how a fixture goes missing for weeks before anyone notices.
+  final raw = File('test/fixtures/sample_form.csv').readAsStringSync();
 
   test('parses a Google Form export, quoted commas and all', () {
     final rows = CsvImport.parse(raw);

@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
@@ -531,9 +533,140 @@ const _quickActions = {
 const _markingTimeout = Duration(minutes: 4);
 const _quickTimeout = Duration(seconds: 30);
 
+/// Actions [_invokeFn] may quietly try again when the server hiccups.
+///
+/// THE RULE THAT MATTERS MOST — never auto-retry an action that bills.
+/// The server charges for AI work on completion, and a client that gave up
+/// waiting may have been billed anyway: retrying `grade` after a timeout can
+/// buy the same marking twice, on a teacher's own money. So this is an
+/// explicit ALLOWLIST of reads and idempotent upserts, where running twice
+/// produces the same row and the same bill (none). Everything else — grade,
+/// mark_responses, extract_key, extract_roster, report_comments, plan,
+/// explain, group_pages, suggest_schools, batch_submit, and any action added
+/// later — gets exactly one attempt; its failure surfaces, and the existing
+/// retryable-tray-job flow re-runs it only with the teacher's consent.
+///
+/// DO NOT add a billed action here, however transient its failure looks.
+/// A 503 on `grade` is a paper in the tray, not a bug.
+const retryableEdgeActions = <String>{
+  'get_usage',
+  'get_profile',
+  'list_keys',
+  'list_submissions',
+  'list_batches',
+  'get_collection',
+  'get_referral',
+  'save_profile',
+  'save_collection',
+  'save_submission',
+  'search_schools',
+  'batch_status',
+  'delete_key',
+  'delete_submission',
+  'infer_region',
+};
+
+/// How many times a retryable action is attempted before its failure
+/// surfaces, and the shape of the pause between attempts: full jitter over
+/// an exponentially growing window (0–400ms, then 0–1200ms). Jitter matters
+/// more than the curve — 500 phones retrying on the same beat is exactly
+/// the stampede that collapsed the backend in the 2026-09-08 scaling test.
+const _maxAttempts = 3;
+const _backoffBase = Duration(milliseconds: 400);
+const _backoffFactor = 3;
+
+/// One attempt against an edge function — the seam tests inject to stand in
+/// for the network. The default is what the app always did: Supabase's
+/// functions client, resolved at call time.
+typedef EdgeTransport = Future<FunctionResponse> Function(String function, {Map<String, dynamic>? body});
+
 // ---------- Service ----------
 
 class AiGradingService {
+  /// The default wiring is exactly the live app; every parameter exists so a
+  /// test can hold the network, the pauses and the dice in its hand.
+  ///
+  /// [sleep] is the backoff pause (tests record it instead of waiting) and
+  /// [random] the jitter roll in [0, 1).
+  AiGradingService({
+    EdgeTransport? transport,
+    Future<void> Function(Duration)? sleep,
+    double Function()? random,
+  })  : _transport = transport ?? _liveTransport,
+        _sleep = sleep ?? _liveSleep,
+        _random = random ?? _liveRandom;
+
+  final EdgeTransport _transport;
+  final Future<void> Function(Duration) _sleep;
+  final double Function() _random;
+
+  static Future<FunctionResponse> _liveTransport(String function, {Map<String, dynamic>? body}) =>
+      Supabase.instance.client.functions.invoke(function, body: body);
+
+  static Future<void> _liveSleep(Duration d) => Future<void>.delayed(d);
+
+  static final _rng = math.Random();
+  static double _liveRandom() => _rng.nextDouble();
+
+  /// Every call to an edge function goes through here, so not one of them
+  /// can hang forever — and so a transient server stumble is retried before
+  /// a teacher ever sees it. The timeout is picked from the action in the
+  /// body (see [timeoutFor]) and is the budget for ALL attempts together,
+  /// sleeps included.
+  ///
+  /// Only actions on [retryableEdgeActions] are ever retried, and only on
+  /// transient failures (see [_isTransientEdgeFailure]) — up to
+  /// [_maxAttempts] attempts with full-jitter exponential backoff.
+  /// Everything else gets one attempt, exactly as before. A timeout never
+  /// retries at all, even on a retryable action: the budget is spent, and on
+  /// a billed action the work may have completed and been charged after the
+  /// client stopped listening.
+  Future<FunctionResponse> _invokeFn(
+    String function, {
+    Map<String, dynamic>? body,
+  }) async {
+    final action = body?['action']?.toString();
+    final budget = timeoutFor(action);
+    final canRetry = retryableEdgeActions.contains(action);
+    final clock = Stopwatch()..start();
+
+    Object? originalError;
+    StackTrace? originalStack;
+
+    for (var attempt = 1; ; attempt++) {
+      final remaining = budget - clock.elapsed;
+      try {
+        if (remaining <= Duration.zero) throw TimeoutException('budget spent');
+        final res = await _transport(function, body: body).timeout(remaining);
+        // A 2xx whose body is a webpage will fail every `data is Map` check
+        // downstream — for a retryable action, treat it as the transient
+        // server stumble it is and go around again. A billed action's
+        // response is handed back untouched.
+        if (canRetry && _looksLikeHtml(res.data)) throw const GarbledServerReplyException();
+        return res;
+      } on TimeoutException {
+        throw const MarkingTimeoutException();
+      } catch (e, st) {
+        if (!canRetry || !_isTransientEdgeFailure(e)) rethrow;
+        originalError ??= e;
+        originalStack ??= st;
+        if (attempt >= _maxAttempts) {
+          // Out of attempts: surface the ORIGINAL failure, not a wrapper.
+          Error.throwWithStackTrace(originalError, originalStack);
+        }
+        // Full jitter: anywhere from zero to the whole window, so 500
+        // phones that failed together don't all come back together.
+        final windowMs = _backoffBase.inMilliseconds * math.pow(_backoffFactor, attempt - 1);
+        final delay = Duration(milliseconds: (windowMs * _random()).round());
+        if (clock.elapsed + delay >= budget) {
+          // No room left to sleep and try again inside the budget.
+          Error.throwWithStackTrace(originalError, originalStack);
+        }
+        await _sleep(delay);
+      }
+    }
+  }
+
   /// How long to wait on one call before giving up on it.
   ///
   /// Marking a class set is legitimately slow — thirty photographs go up
@@ -550,8 +683,7 @@ class AiGradingService {
     required List<GradingPreset> schemes,
   }) async {
     try {
-      final client = Supabase.instance.client;
-      final res = await _invokeFn(client, 
+      final res = await _invokeFn(
         'detect_scheme',
         body: {
           'image_base64': base64Encode(imageBytes),
@@ -591,9 +723,8 @@ class AiGradingService {
     String? subject,
     String? region,
   }) async {
-    final client = Supabase.instance.client;
     try {
-      final res = await _invokeFn(client, 
+      final res = await _invokeFn(
         'MARKING-PROCESS',
         body: {
           'action': 'plan',
@@ -619,16 +750,45 @@ class AiGradingService {
     }
   }
 
+  /// The usage answer each teacher last got, and when. Static because the
+  /// app constructs a fresh AiGradingService at every call site — a cache
+  /// held per instance would never be hit twice.
+  static final Map<String, ({UsageSummary summary, DateTime at})> _usageCache = {};
+
+  /// How long a usage answer stays good for. get_usage runs on app open AND
+  /// before marking choices — it was the #1 hot path in the scaling test —
+  /// and a 45-second-old percentage misleads nobody.
+  static const usageCacheTtl = Duration(seconds: 45);
+
+  /// Forgets the cached usage for [teacherId] (or for everyone, when null)
+  /// so the next [getUsage] asks the server. Called whenever billed work
+  /// completes client-side — the usage bar has to move.
+  static void invalidateUsageCache([String? teacherId]) {
+    if (teacherId == null) {
+      _usageCache.clear();
+    } else {
+      _usageCache.remove(teacherId);
+    }
+  }
+
   /// Usage meter (percent of the daily/weekly/monthly credit allowance).
-  Future<UsageSummary> getUsage({required String teacherId}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+  ///
+  /// Answers from cache for [usageCacheTtl] per teacher; pass [force] where
+  /// the UI deliberately refreshes and staleness would be visible.
+  Future<UsageSummary> getUsage({required String teacherId, bool force = false}) async {
+    if (!force) {
+      final hit = _usageCache[teacherId];
+      if (hit != null && DateTime.now().difference(hit.at) < usageCacheTtl) {
+        return hit.summary;
+      }
+    }
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'get_usage', 'teacherId': teacherId},
     );
     final data = res.data;
     if (data is Map) {
-      return UsageSummary(
+      final summary = UsageSummary(
         planLabel: (data['planLabel'] ?? 'Preview').toString(),
         dayPct: (data['dayPct'] as num?)?.toInt() ?? 0,
         weekPct: (data['weekPct'] as num?)?.toInt() ?? 0,
@@ -638,22 +798,22 @@ class AiGradingService {
         liveUsdPerPaper: (data['liveUsdPerPaper'] as num?)?.toDouble() ?? 0.039,
         overnightUsdPerPaper: (data['overnightUsdPerPaper'] as num?)?.toDouble() ?? 0.0078,
       );
+      _usageCache[teacherId] = (summary: summary, at: DateTime.now());
+      return summary;
     }
     throw Exception('Usage lookup failed: $data');
   }
 
   /// Cloud copy of a marked result — results follow the account.
   Future<void> saveSubmissionCloud({required String teacherId, required Map<String, dynamic> submission}) async {
-    final client = Supabase.instance.client;
-    await _invokeFn(client, 
+    await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'save_submission', 'teacherId': teacherId, 'submission': submission},
     );
   }
 
   Future<void> deleteSubmissionCloud({required String teacherId, required String id}) async {
-    final client = Supabase.instance.client;
-    await _invokeFn(client, 
+    await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'delete_submission', 'teacherId': teacherId, 'id': id},
     );
@@ -666,8 +826,7 @@ class AiGradingService {
     required String teacherId,
     required List<Map<String, dynamic>> items,
   }) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'batch_submit', 'teacherId': teacherId, 'items': items},
     );
@@ -683,8 +842,7 @@ class AiGradingService {
   /// Polls an overnight batch. `ended` means every paper is finished and
   /// [BatchOutcome.results] holds them; anything else means keep waiting.
   Future<BatchOutcome> batchStatus({required String teacherId, required String batchId}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'batch_status', 'teacherId': teacherId, 'batchId': batchId},
     );
@@ -708,6 +866,9 @@ class AiGradingService {
       }
     }
     final counts = (data['counts'] as Map?)?.cast<String, dynamic>() ?? const {};
+    // A batch that came back with marked papers is billed work completing on
+    // this device — the cached usage number is stale the moment it lands.
+    if (results.isNotEmpty) invalidateUsageCache(teacherId);
     return BatchOutcome(status: status, results: results, failures: failures, counts: counts);
   }
 
@@ -730,8 +891,7 @@ class AiGradingService {
     int? gradeLevel,
     int harshness = 5,
   }) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {
         'action': 'mark_responses',
@@ -760,6 +920,8 @@ class AiGradingService {
         }
       }
     }
+    // Billed work just completed — the usage bar must move.
+    invalidateUsageCache(teacherId);
     return out;
   }
 
@@ -790,9 +952,8 @@ class AiGradingService {
     // before it calls the model, so a long class cannot truncate one reply
     // and a group that fails costs only itself — chunking again here would
     // just re-send the system prompt more often.
-    final client = Supabase.instance.client;
     try {
-      final res = await _invokeFn(client, 
+      final res = await _invokeFn(
         'MARKING-PROCESS',
         body: {
           'action': 'report_comments',
@@ -849,8 +1010,7 @@ class AiGradingService {
     required String teacherId,
     required List<Uint8List> pages,
   }) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {
         'action': 'group_pages',
@@ -883,8 +1043,7 @@ class AiGradingService {
   /// checks the caller's own signed-in token, so this only ever deletes the
   /// teacher who asked. Throws when anything is left behind.
   Future<void> deleteAccountCloud({required String teacherId}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'delete_account', 'teacherId': teacherId},
     );
@@ -895,8 +1054,7 @@ class AiGradingService {
   }
 
   Future<List<Map<String, dynamic>>> listSubmissionsCloud({required String teacherId}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'list_submissions', 'teacherId': teacherId},
     );
@@ -909,8 +1067,7 @@ class AiGradingService {
 
   /// The teacher's referral code + how many colleagues joined with it.
   Future<ReferralStatus> getReferral({required String teacherId, String? email}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {
         'action': 'get_referral',
@@ -931,9 +1088,8 @@ class AiGradingService {
 
   /// Redeems a colleague's code — this unlocks Planning for THEM.
   Future<void> redeemReferral({required String teacherId, required String code}) async {
-    final client = Supabase.instance.client;
     try {
-      final res = await _invokeFn(client, 
+      final res = await _invokeFn(
         'MARKING-PROCESS',
         body: {'action': 'redeem_referral', 'teacherId': teacherId, 'code': code},
       );
@@ -965,9 +1121,8 @@ class AiGradingService {
   /// from every saved profile); falls back to AI suggestions while the
   /// directory is still filling in.
   Future<List<String>> suggestSchools({required String query}) async {
-    final client = Supabase.instance.client;
     try {
-      final res = await _invokeFn(client, 
+      final res = await _invokeFn(
         'MARKING-PROCESS',
         body: {'action': 'search_schools', 'query': query},
       );
@@ -979,7 +1134,7 @@ class AiGradingService {
     } catch (e) {
       debugPrint('search_schools failed: $e');
     }
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'suggest_schools', 'query': query},
     );
@@ -994,8 +1149,7 @@ class AiGradingService {
   /// the AI is confident; several when the name exists in multiple regions
   /// (the UI then shows the place in brackets for the teacher to pick).
   Future<List<RegionCandidate>> inferRegion({required String school}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'infer_region', 'school': school},
     );
@@ -1025,8 +1179,7 @@ class AiGradingService {
     String? plan,
     List<String>? markingFeedback,
   }) async {
-    final client = Supabase.instance.client;
-    await _invokeFn(client, 'MARKING-PROCESS', body: {
+    await _invokeFn('MARKING-PROCESS', body: {
       'action': 'save_profile',
       'teacherId': teacherId,
       if (email != null) 'email': email,
@@ -1045,9 +1198,8 @@ class AiGradingService {
     required List<Uint8List> pages,
     required Map<String, dynamic> resultJson,
   }) async {
-    final client = Supabase.instance.client;
     try {
-      final res = await _invokeFn(client, 'MARKING-PROCESS', body: {
+      final res = await _invokeFn('MARKING-PROCESS', body: {
         'action': 'explain',
         'teacherId': teacherId,
         'imagesBase64': pages.map(base64Encode).toList(growable: false),
@@ -1067,8 +1219,7 @@ class AiGradingService {
 
   /// Permanently removes a saved answer key.
   Future<void> deleteAnswerKey({required String teacherId, required String id}) async {
-    final client = Supabase.instance.client;
-    await _invokeFn(client, 
+    await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'delete_key', 'teacherId': teacherId, 'id': id},
     );
@@ -1076,8 +1227,7 @@ class AiGradingService {
 
   /// The account's saved profile, or null when it has never been saved.
   Future<CloudProfile?> getProfile({required String teacherId}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'get_profile', 'teacherId': teacherId},
     );
@@ -1099,8 +1249,7 @@ class AiGradingService {
   /// Reads student names (and IDs when shown) off photos of an attendance
   /// sheet or class roster — used by onboarding to auto-populate a class.
   Future<List<RosterEntry>> extractRoster({required List<Uint8List> pages}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {
         'action': 'extract_roster',
@@ -1128,8 +1277,7 @@ class AiGradingService {
   /// Scans of a teacher's answer key → structured key stored in the cloud.
   /// Costs AI tokens once; every later grade reuses the stored key text.
   Future<AnswerKeySummary> extractAnswerKey({required String teacherId, required List<Uint8List> pages}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {
         'action': 'extract_key',
@@ -1153,8 +1301,7 @@ class AiGradingService {
 
   /// Lists the teacher's cloud-saved answer keys, newest first.
   Future<List<AnswerKeySummary>> listAnswerKeys({required String teacherId}) async {
-    final client = Supabase.instance.client;
-    final res = await _invokeFn(client, 
+    final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {'action': 'list_keys', 'teacherId': teacherId},
     );
@@ -1186,8 +1333,7 @@ class AiGradingService {
         : req.pageImages!;
 
     try {
-      final client = Supabase.instance.client;
-      final res = await _invokeFn(client, 
+      final res = await _invokeFn(
       'MARKING-PROCESS',
         body: {
           'teacherId': req.teacherId,
@@ -1213,7 +1359,10 @@ class AiGradingService {
 
       final data = res.data;
       if (data is Map) {
-        return _parseResponse(data.cast<String, dynamic>(), req);
+        final result = _parseResponse(data.cast<String, dynamic>(), req);
+        // Billed work just completed — the usage bar must move.
+        invalidateUsageCache(req.teacherId);
+        return result;
       }
       throw Exception('Unexpected response shape: $data');
     } catch (e) {
@@ -1370,18 +1519,54 @@ class GroupingOutcome {
   const GroupingOutcome({required this.groups, required this.unresolved});
 }
 
-/// Every call to an edge function goes through here, so not one of them can
-/// hang forever. The timeout is picked from the action in the body — see
-/// [AiGradingService.timeoutFor].
-Future<FunctionResponse> _invokeFn(
-  SupabaseClient client,
-  String function, {
-  Map<String, dynamic>? body,
-}) async {
-  final timeout = AiGradingService.timeoutFor(body?['action']?.toString());
-  try {
-    return await client.functions.invoke(function, body: body).timeout(timeout);
-  } on TimeoutException {
-    throw const MarkingTimeoutException();
-  }
+/// The server answered, but with something that isn't a result — usually a
+/// Cloudflare HTML error page standing in front of a struggling backend.
+/// Transient by nature, so retryable actions try again; when it survives the
+/// retries it surfaces with words a teacher can act on.
+class GarbledServerReplyException implements Exception {
+  final String message;
+  const GarbledServerReplyException([
+    this.message = 'The marking server is having a moment — give it a few seconds and try again.',
+  ]);
+
+  @override
+  String toString() => message;
 }
+
+/// A failure that says "the server was busy or unreachable", not "this
+/// request is wrong". Retrying it can help. Anything else — a 400, a usage
+/// limit, a parse bug — would fail identically the second time, so it is
+/// surfaced at once.
+///
+/// The signatures here are verbatim what clients saw when the backend
+/// collapsed at 500 concurrent sessions (REMAINING.md, R18).
+bool _isTransientEdgeFailure(Object e) {
+  if (e is GarbledServerReplyException) return true; // HTML where JSON should be
+  if (e is http.ClientException) return true; // network layer: refused, dropped, DNS
+  if (e is FunctionException) {
+    if (e.status == 503) return true; // overloaded, or "no available instances"
+    final d = e.details;
+    // {"code":"BOOT_ERROR","message":"Function failed to start"}
+    if (d is Map && d['code'] == 'BOOT_ERROR') return true;
+    if (d is String && d.contains('BOOT_ERROR')) return true;
+    // Edge node clock skew — HTTP 500 {"error":"JWT issued at future"}
+    if (e.status == 500) {
+      final err = d is Map ? (d['error'] ?? '').toString() : (d is String ? d : '');
+      if (err.contains('JWT issued at future')) return true;
+    }
+    // A Cloudflare HTML error page delivered with an error status.
+    if (d is String && d.trimLeft().startsWith('<')) return true;
+    return false;
+  }
+  // Socket-level failures that escaped the http package's wrapping. Matched
+  // by name because dart:io can't be imported here (this file compiles for
+  // web), and a false negative only costs one un-retried attempt.
+  final s = e.toString();
+  return s.contains('SocketException') || s.contains('HandshakeException') || s.contains('Failed host lookup');
+}
+
+/// A body that should have been JSON but is a webpage — the load balancer
+/// answering instead of the function. Only ever checked for retryable
+/// actions; a billed action's response is handed back untouched.
+bool _looksLikeHtml(Object? data) => data is String && data.trimLeft().startsWith('<');
+
