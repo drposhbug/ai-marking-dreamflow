@@ -1074,7 +1074,35 @@ const PLAN_CAPS: Record<string, { monthlyUsd: number; plans: number; label: stri
 // Founder accounts (testing, demos) keep Pro-level room without paying.
 const FOUNDER_EMAILS = ["oscar.cs.lee@gmail.com"];
 
-async function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
+/// In-isolate TTL cache. A warm isolate serves many requests in a busy
+/// minute, and plans and referral counts change on the timescale of billing
+/// events, not requests. The 2026-09-08 scaling test pinned throughput at
+/// ~31 req/s with the database pool as the shared ceiling — every lookup
+/// served from here is a pool slot given back to a teacher.
+///
+/// What is deliberately NOT cached: the spend sums inside budgetGate. The
+/// gate is the margin guarantee, and a 30-second-stale month total would let
+/// a burst overshoot the cap. Display paths may be stale; the gate may not.
+const _ttlCache = new Map<string, { v: unknown; exp: number }>();
+function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+  const hit = _ttlCache.get(key);
+  if (hit && hit.exp > Date.now()) return Promise.resolve(hit.v as T);
+  return load().then((v) => {
+    // Crude bound: a pathological isolate resets rather than grows forever.
+    if (_ttlCache.size > 5000) _ttlCache.clear();
+    _ttlCache.set(key, { v, exp: Date.now() + ttlMs });
+    return v;
+  });
+}
+
+function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
+  // A plan change (webhook, upgrade) shows up within a minute. Nothing
+  // charges differently in that minute — caps are enforced against fresh
+  // sums either way — so the worst case is a progress bar briefly out of date.
+  return cached(`plan:${teacherId}`, 60_000, () => planForFresh(teacherId));
+}
+
+async function planForFresh(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
   try {
     const { data } = await serviceDb().from("profiles").select("plan, email").eq("teacher_id", teacherId).maybeSingle();
     const p = String(data?.plan ?? "").trim().toLowerCase();
@@ -1114,7 +1142,13 @@ const REFERRAL_BONUS_USD = 0.2;
 const MAX_REFERRAL_BONUS_USD = 1.0;
 const PAID_PLANS = ["starter", "pro", "pro_annual", "school"];
 
-async function paidReferralCount(teacherId: string): Promise<number> {
+function paidReferralCount(teacherId: string): Promise<number> {
+  // Same one-minute staleness argument as planFor: a new paid referral's
+  // bonus credits appearing sixty seconds late harms no one.
+  return cached(`refs:${teacherId}`, 60_000, () => paidReferralCountFresh(teacherId));
+}
+
+async function paidReferralCountFresh(teacherId: string): Promise<number> {
   try {
     const { count, error } = await serviceDb()
       .from("profiles")
@@ -1599,9 +1633,12 @@ Deno.serve(async (req) => {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
     try {
+      // The spend here paints a progress bar, so thirty seconds of staleness
+      // is invisible — unlike budgetGate, which always sums fresh because it
+      // is the thing that stops a subscription losing money.
       const [plan, { day, week, month }, paidRefs] = await Promise.all([
         planFor(teacherId),
-        spendBuckets(teacherId),
+        cached(`spend:${teacherId}`, 30_000, () => spendBuckets(teacherId)),
         paidReferralCount(teacherId),
       ]);
       const caps = PLAN_CAPS[plan];
