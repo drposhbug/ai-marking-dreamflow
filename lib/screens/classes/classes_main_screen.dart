@@ -203,6 +203,9 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
   }
 
   Future<void> _scanAttendance() async {
+    // Read before any await: the roster scan bills, and the server checks
+    // this id against the signed-in JWT (R14).
+    final teacherId = context.read<AuthService>().currentUser?.id ?? '';
     ImageSource? source = ImageSource.gallery;
     if (!kIsWeb) {
       source = await showModalBottomSheet<ImageSource>(
@@ -226,7 +229,7 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
       if (image == null || !mounted) return;
       setState(() => _scanning = true);
       final bytes = await image.readAsBytes();
-      final found = await AiGradingService().extractRoster(pages: [bytes]);
+      final found = await AiGradingService().extractRoster(teacherId: teacherId, pages: [bytes]);
       if (!mounted) return;
       final existing = _students.map((s) => s.name.toLowerCase()).toSet();
       final fresh = found.where((s) => !existing.contains(s.name.toLowerCase())).toList();

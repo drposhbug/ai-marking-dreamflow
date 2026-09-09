@@ -64,6 +64,21 @@ function jwtClaims(authHeader: string | null): Record<string, any> | null {
   }
 }
 
+/// R14: the anon key ships in the APK, so a teacherId in the request body is
+/// a request, not an identity. Every action that reads a teacher's data,
+/// writes it, or spends their marking credits calls this first: the gateway
+/// (verify_jwt = true) has already validated the token's signature, so what
+/// is left is checking that the signed-in account IS the teacherId in the
+/// payload. Same semantics delete_account has always had. Returns the 403 to
+/// send, or null when the caller checks out.
+function requireTeacher(req: Request, teacherId: string, message = "Sign in again to sync your account."): Response | null {
+  const claims = jwtClaims(req.headers.get("authorization"));
+  if (claims?.role !== "authenticated" || String(claims?.sub ?? "") !== teacherId) {
+    return json({ error: message }, 403);
+  }
+  return null;
+}
+
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
@@ -1268,6 +1283,75 @@ async function budgetGate(teacherId: string, pacing: boolean): Promise<Response 
   }
 }
 
+// ---------- Shared account readers ----------
+//
+// Each of these backs BOTH its single action (get_usage, get_profile,
+// list_keys, get_collection) and bootstrap_sync, so the two paths can never
+// drift — in particular the usage math lives here exactly once.
+
+async function usagePayload(teacherId: string) {
+  // The spend here paints a progress bar, so thirty seconds of staleness
+  // is invisible — unlike budgetGate, which always sums fresh because it
+  // is the thing that stops a subscription losing money.
+  const [plan, { day, week, month }, paidRefs] = await Promise.all([
+    planFor(teacherId),
+    cached(`spend:${teacherId}`, 30_000, () => spendBuckets(teacherId)),
+    paidReferralCount(teacherId),
+  ]);
+  const caps = PLAN_CAPS[plan];
+  const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
+  return {
+    plan,
+    planLabel: caps.label,
+    paidReferrals: paidRefs,
+    dayPct: Math.min(100, Math.round((day / (monthlyCap * 0.25)) * 100)),
+    weekPct: Math.min(100, Math.round((week / (monthlyCap * 0.5)) * 100)),
+    monthPct: Math.min(100, Math.round((month / monthlyCap) * 100)),
+    // So the app can show what a choice costs BEFORE it is made:
+    // "mark now" against "mark overnight" as a share of the month.
+    monthlyCapUsd: Number(monthlyCap.toFixed(4)),
+    liveUsdPerPaper: TYPICAL_LIVE_USD,
+    overnightUsdPerPaper: TYPICAL_OVERNIGHT_USD,
+    instantMarking: INSTANT_MARKING_PLANS.includes(plan),
+  };
+}
+
+// deno-lint-ignore no-explicit-any
+async function fetchProfileRow(teacherId: string): Promise<any> {
+  const { data, error } = await serviceDb()
+    .from("profiles")
+    .select("teacher_id, email, name, school, region, marking_feedback, default_mode, default_harshness, plan, updated_at")
+    .eq("teacher_id", teacherId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// deno-lint-ignore no-explicit-any
+async function fetchKeyRows(teacherId: string): Promise<any[]> {
+  const { data, error } = await serviceDb()
+    .from("answer_keys")
+    .select("id, name, subject, total_marks, created_at")
+    .eq("teacher_id", teacherId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+// deno-lint-ignore no-explicit-any
+async function fetchCollectionItems(teacherId: string, kind: string): Promise<any[]> {
+  const { data, error } = await serviceDb()
+    .from("collections_cloud")
+    .select("payload")
+    .eq("teacher_id", teacherId)
+    .eq("kind", kind)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const items = data?.payload;
+  return Array.isArray(items) ? items : [];
+}
+
 function gradeShape(includeTranscription: boolean): string {
   return `\n\nReturn ONLY a single JSON object with exactly these fields and no others:
 {
@@ -1503,6 +1587,8 @@ Deno.serve(async (req) => {
     const teacherId = String(payload?.teacherId ?? "").trim();
     const id = String(payload?.id ?? "").trim();
     if (!teacherId || !id) return json({ error: "teacherId and id are required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const { error } = await serviceDb()
       .from("answer_keys")
       .delete()
@@ -1513,15 +1599,14 @@ Deno.serve(async (req) => {
   }
 
   if (action === "list_keys") {
-    const teacherId = String(payload?.teacherId ?? "");
-    const { data, error } = await serviceDb()
-      .from("answer_keys")
-      .select("id, name, subject, total_marks, created_at")
-      .eq("teacher_id", teacherId)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (error) return json({ error: error.message }, 500);
-    return json({ keys: data ?? [] });
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
+    try {
+      return json({ keys: await fetchKeyRows(teacherId) });
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
   }
 
   // ── Account profile: saved from onboarding/settings, restored on sign-in
@@ -1530,6 +1615,8 @@ Deno.serve(async (req) => {
   if (action === "save_profile") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const row: Record<string, unknown> = {
       teacher_id: teacherId,
       updated_at: new Date().toISOString(),
@@ -1632,30 +1719,40 @@ Deno.serve(async (req) => {
   if (action === "get_usage") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     try {
-      // The spend here paints a progress bar, so thirty seconds of staleness
-      // is invisible — unlike budgetGate, which always sums fresh because it
-      // is the thing that stops a subscription losing money.
-      const [plan, { day, week, month }, paidRefs] = await Promise.all([
-        planFor(teacherId),
-        cached(`spend:${teacherId}`, 30_000, () => spendBuckets(teacherId)),
-        paidReferralCount(teacherId),
+      return json(await usagePayload(teacherId));
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  }
+
+  // ── One round trip on app open (R19.3) ────────────────────────────────
+  // The app used to make ~5 edge calls at startup: profile, usage, keys,
+  // and the three setup collections. This answers all of them at once by
+  // running the same readers the individual actions use, concurrently.
+  // Submissions stay out on purpose — they are the heavy payload, and
+  // list_submissions remains its own call.
+  if (action === "bootstrap_sync") {
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
+    try {
+      const [profile, usage, keys, classes, students, links] = await Promise.all([
+        fetchProfileRow(teacherId),
+        usagePayload(teacherId),
+        fetchKeyRows(teacherId),
+        fetchCollectionItems(teacherId, "classes"),
+        fetchCollectionItems(teacherId, "students"),
+        fetchCollectionItems(teacherId, "student_class_links"),
       ]);
-      const caps = PLAN_CAPS[plan];
-      const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
       return json({
-        plan,
-        planLabel: caps.label,
-        paidReferrals: paidRefs,
-        dayPct: Math.min(100, Math.round((day / (monthlyCap * 0.25)) * 100)),
-        weekPct: Math.min(100, Math.round((week / (monthlyCap * 0.5)) * 100)),
-        monthPct: Math.min(100, Math.round((month / monthlyCap) * 100)),
-        // So the app can show what a choice costs BEFORE it is made:
-        // "mark now" against "mark overnight" as a share of the month.
-        monthlyCapUsd: Number(monthlyCap.toFixed(4)),
-        liveUsdPerPaper: TYPICAL_LIVE_USD,
-        overnightUsdPerPaper: TYPICAL_OVERNIGHT_USD,
-        instantMarking: INSTANT_MARKING_PLANS.includes(plan),
+        profile,
+        usage,
+        keys,
+        collections: { classes, students, student_class_links: links },
       });
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, 500);
@@ -1668,6 +1765,8 @@ Deno.serve(async (req) => {
     const teacherId = String(payload?.teacherId ?? "").trim();
     const s = payload?.submission;
     if (!teacherId || !s || typeof s !== "object") return json({ error: "teacherId and submission are required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     // deno-lint-ignore no-explicit-any
     const id = String((s as any).id ?? "").trim();
     if (!id) return json({ error: "submission.id is required" }, 400);
@@ -1682,6 +1781,8 @@ Deno.serve(async (req) => {
     const teacherId = String(payload?.teacherId ?? "").trim();
     const id = String(payload?.id ?? "").trim();
     if (!teacherId || !id) return json({ error: "teacherId and id are required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     // teacher_id in the filter so one teacher can never delete another's work.
     const { error } = await serviceDb()
       .from("submissions_cloud")
@@ -1695,6 +1796,8 @@ Deno.serve(async (req) => {
   if (action === "list_submissions") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const { data, error } = await serviceDb()
       .from("submissions_cloud")
       .select("payload")
@@ -1718,6 +1821,8 @@ Deno.serve(async (req) => {
   if (action === "group_pages") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const imagesBase64: string[] = (Array.isArray(payload?.imagesBase64) ? payload.imagesBase64 : [])
       .map((s: unknown) => String(s ?? ""))
       .filter((s: string) => s.length > 0);
@@ -1820,6 +1925,8 @@ Deno.serve(async (req) => {
   if (action === "batch_submit") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const items = Array.isArray(payload?.items) ? payload.items : [];
     if (items.length === 0) return json({ error: "items are required" }, 400);
     if (items.length > 250) return json({ error: "Too many papers in one batch — split the set." }, 400);
@@ -1942,6 +2049,8 @@ Deno.serve(async (req) => {
     const teacherId = String(payload?.teacherId ?? "").trim();
     const batchId = String(payload?.batchId ?? "").trim();
     if (!teacherId || !batchId) return json({ error: "teacherId and batchId are required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
 
     const { data: row } = await serviceDb()
       .from("marking_batches")
@@ -2035,16 +2144,8 @@ Deno.serve(async (req) => {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
 
-    // Proved against the token, not taken on the payload's word. The anon key
-    // ships in the APK, so a teacherId in the body is a request, not an
-    // identity: without this, anyone holding that key could enumerate another
-    // teacher's class sets by id. Same check delete_account makes, and this
-    // action has no callers yet, so it starts strict rather than inheriting
-    // the looser habit of the older read actions.
-    const claims = jwtClaims(req.headers.get("authorization"));
-    if (claims?.role !== "authenticated" || String(claims?.sub ?? "") !== teacherId) {
-      return json({ error: "Sign in again to see your overnight batches." }, 403);
-    }
+    const guard = requireTeacher(req, teacherId, "Sign in again to see your overnight batches.");
+    if (guard) return guard;
 
     const since = new Date(Date.now() - 29 * 86400_000).toISOString();
     const { data, error } = await serviceDb()
@@ -2081,10 +2182,8 @@ Deno.serve(async (req) => {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
 
-    const claims = jwtClaims(req.headers.get("authorization"));
-    if (claims?.role !== "authenticated" || String(claims?.sub ?? "") !== teacherId) {
-      return json({ error: "Sign in again before deleting your account." }, 403);
-    }
+    const guard = requireTeacher(req, teacherId, "Sign in again before deleting your account.");
+    if (guard) return guard;
 
     const db = serviceDb();
     // Every table that holds this teacher's work. grade_cache is deliberately
@@ -2115,6 +2214,8 @@ Deno.serve(async (req) => {
   if (action === "mark_responses") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const questions = Array.isArray(payload?.questions) ? payload.questions : [];
     if (questions.length === 0) return json({ error: "questions are required" }, 400);
     const totalAnswers = questions.reduce(
@@ -2259,6 +2360,8 @@ ${rows.map((r) => `[${r.i}] ${r.text}`).join("\n")}`;
   if (action === "report_comments") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const students = Array.isArray(payload?.students) ? payload.students : [];
     if (students.length === 0) return json({ error: "students are required" }, 400);
     // Larger than any real class. A request past this is a bug or a whole
@@ -2406,17 +2509,15 @@ Return one comment for EVERY student above, echoing back the same "i" you were g
     const kind = String(payload?.kind ?? "").trim();
     const KINDS = ["classes", "students", "student_class_links"];
     if (!teacherId || !KINDS.includes(kind)) return json({ error: "teacherId and a known kind are required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
 
     if (action === "get_collection") {
-      const { data, error } = await serviceDb()
-        .from("collections_cloud")
-        .select("payload")
-        .eq("teacher_id", teacherId)
-        .eq("kind", kind)
-        .maybeSingle();
-      if (error) return json({ error: error.message }, 500);
-      const items = data?.payload;
-      return json({ items: Array.isArray(items) ? items : [] });
+      try {
+        return json({ items: await fetchCollectionItems(teacherId, kind) });
+      } catch (e) {
+        return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+      }
     }
 
     const items = payload?.items;
@@ -2438,6 +2539,8 @@ Return one comment for EVERY student above, echoing back the same "i" you were g
   if (action === "get_referral") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const db = serviceDb();
     const { data: prof } = await db
       .from("profiles")
@@ -2465,6 +2568,8 @@ Return one comment for EVERY student above, echoing back the same "i" you were g
     const teacherId = String(payload?.teacherId ?? "").trim();
     const code = String(payload?.code ?? "").trim().toUpperCase();
     if (!teacherId || !code) return json({ error: "teacherId and code are required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const db = serviceDb();
     const { data: owner } = await db
       .from("profiles")
@@ -2490,17 +2595,24 @@ Return one comment for EVERY student above, echoing back the same "i" you were g
   if (action === "get_profile") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
-    const { data, error } = await serviceDb()
-      .from("profiles")
-      .select("teacher_id, email, name, school, region, marking_feedback, default_mode, default_harshness, plan, updated_at")
-      .eq("teacher_id", teacherId)
-      .maybeSingle();
-    if (error) return json({ error: error.message }, 500);
-    return json({ profile: data });
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
+    try {
+      return json({ profile: await fetchProfileRow(teacherId) });
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
   }
 
   // ── Planning assistant: generate a lesson plan / assignment / quiz ──────
   if (action === "plan") {
+    // Billed action (fresh drafts spend real tokens and count against the
+    // monthly plan quota), so identity is proved before anything — even a
+    // cache hit — is served.
+    const planTeacherId = String(payload?.teacherId ?? "").trim();
+    if (!planTeacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, planTeacherId);
+    if (guard) return guard;
     const topic = String(payload?.topic ?? "").trim().slice(0, 600);
     if (!topic) return json({ error: "topic is required" }, 400);
     const kind = String(payload?.kind ?? "lesson plan").trim().slice(0, 40);
@@ -2532,7 +2644,6 @@ Return one comment for EVERY student above, echoing back the same "i" you were g
 
     // Fresh plans have their own monthly count per plan tier (cache hits
     // above are free and unlimited).
-    const planTeacherId = String(payload?.teacherId ?? "").trim();
     if (planTeacherId) {
       try {
         const tier = await planFor(planTeacherId);
@@ -2659,7 +2770,10 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
 
   // ── One-time answer key extraction (stored, then reused on grades) ──
   if (action === "extract_key") {
-    const teacherId = String(payload?.teacherId ?? "");
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     // deno-lint-ignore no-explicit-any
     let raw: any = null;
     const errs: string[] = [];
@@ -2702,6 +2816,8 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
   if (action === "explain") {
     const teacherId = String(payload?.teacherId ?? "").trim();
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     const gate = await budgetGate(teacherId, true);
     if (gate) return gate;
     const resultJson = JSON.stringify(payload?.result ?? {}).slice(0, 20000);
@@ -2728,6 +2844,12 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
 
   // ── Roster extraction (onboarding: attendance photo → student names) ──
   if (action === "extract_roster") {
+    // Billed vision call, so it carries a teacherId now (the app has always
+    // been signed in by the time a roster is scanned).
+    const teacherId = String(payload?.teacherId ?? "").trim();
+    if (!teacherId) return json({ error: "teacherId is required" }, 400);
+    const guard = requireTeacher(req, teacherId);
+    if (guard) return guard;
     // deno-lint-ignore no-explicit-any
     let raw: any = null;
     const errs: string[] = [];
@@ -2753,6 +2875,14 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
       .filter((s: any) => s.name.length > 0);
     return json({ students });
   }
+
+  // ── Default action: a billed grade. Identity comes first — before even
+  // the zero-token cache, so a spoofed teacherId can neither spend another
+  // account's credits nor read anything back. ───────────────────────────
+  const gradeTeacherId = String(payload?.teacherId ?? "").trim();
+  if (!gradeTeacherId) return json({ error: "teacherId is required" }, 400);
+  const gradeGuard = requireTeacher(req, gradeTeacherId);
+  if (gradeGuard) return gradeGuard;
 
   const mode = String(payload?.mode || "homework");
   const maxScore = Math.round(clamp(payload?.maxScore, 1, 10000, 100));
@@ -2824,7 +2954,6 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
 
   // Fresh marking costs money — check the teacher's budget first. Cache
   // hits above are free and never gated.
-  const gradeTeacherId = String(payload?.teacherId ?? "").trim();
   const gateHit = await budgetGate(gradeTeacherId, true);
   if (gateHit) return gateHit;
 

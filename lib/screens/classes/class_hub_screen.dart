@@ -401,7 +401,9 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
     setState(() => _scanningAttendance = true);
     try {
       final bytes = await image.readAsBytes();
-      final found = await AiGradingService().extractRoster(pages: [bytes]);
+      // R14: the roster scan bills, so the server checks this id against
+      // the signed-in JWT.
+      final found = await AiGradingService().extractRoster(teacherId: teacherId, pages: [bytes]);
       if (!mounted) return;
 
       final students = context.read<StudentsService>();

@@ -10,6 +10,7 @@ import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/overnight_service.dart';
 import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
+import 'package:marking_prokect_v2/services/cloud_collection.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/push_service.dart';
 import 'package:marking_prokect_v2/services/student_class_links_service.dart';
@@ -132,10 +133,46 @@ class _AppBootstrapState extends State<AppBootstrap> {
     }
     if (!mounted) return;
 
+    // ── R19.3: ONE bootstrap_sync round trip replaces the separate
+    // profile, usage, keys and three-collection fetches the app used to
+    // make on every open. The usage answer is primed into the getUsage
+    // cache (so _tellTheTeacher's meter read below is free) and the
+    // collections are primed into CloudCollection (so the service inits
+    // below are answered without their own edge calls).
+    BootstrapSnapshot? boot;
+    try {
+      boot = await AiGradingService().bootstrapSync(teacherId: userId);
+    } catch (e) {
+      // A transient failure only — the per-action calls below still run,
+      // so startup degrades to the old behaviour instead of breaking.
+      debugPrint('AppBootstrap bootstrap_sync failed (falling back): $e');
+    }
+    if (boot != null) {
+      CloudCollection.prime(
+        teacherId: userId,
+        // A local-only account (no Supabase session) has nothing in the
+        // cloud and every call would be refused — prime the three kinds
+        // empty so the services don't even ask.
+        collections: boot.localOnly
+            ? const {
+                CloudCollection.kClasses: [],
+                CloudCollection.kStudents: [],
+                CloudCollection.kLinks: [],
+              }
+            : boot.collections,
+      );
+    }
+    if (!mounted) return;
+
     // Pull the saved profile if available (default_mode / harshness).
     try {
-      final hook = context.read<SupabaseHook>();
-      final row = await hook.fetchProfile(teacherId: userId);
+      // VERSION TOLERANCE: bootstrapSync answers null when the deployed
+      // function predates bootstrap_sync — fall back to the individual
+      // get_profile call so an older backend can never brick app startup.
+      // Remove the fallback once the deploy is confirmed everywhere.
+      final row = boot != null
+          ? (boot.profile ?? const <String, dynamic>{})
+          : await context.read<SupabaseHook>().fetchProfile(teacherId: userId);
       if (row.isNotEmpty && mounted) {
         final rawMode = (row['default_mode'] ?? '').toString().trim();
         final mode = rawMode.isEmpty ? null : GradingMode.values.cast<GradingMode?>().firstWhere((m) => m?.name == rawMode, orElse: () => null);

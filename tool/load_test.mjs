@@ -7,6 +7,20 @@
 //   node tool/load_test.mjs --mode volume --rows 3000             # data volume, not traffic
 //   (legacy: --stages a,b,c with no --mode == ramp; --marking N adds real AI probes)
 //
+// R14 — THE BACKEND NOW CHECKS IDENTITY. Every teacherId-carrying action is
+// refused with 403 unless the caller's JWT is a signed-in user whose sub IS
+// that teacherId. With only the anon key, a wall of 403s is the guard
+// WORKING, not the backend failing. Two ways to run against it:
+//   --jwt <access token>   run as ONE real signed-in user: the token is sent
+//                          as the bearer and the teacherId for every session
+//                          is derived from its sub. Traffic shape is intact;
+//                          all rows land on that one account (volume mode's
+//                          hot/cold comparison collapses to one identity).
+//   no --jwt               the classic fleet-of-fake-teachers ("loadtest-*")
+//                          only works against a PRE-R14 deployment, or with a
+//                          service-role key in SUPABASE_ANON_KEY's place.
+//                          Do NOT weaken the guard to make this mode pass.
+//
 // COST: every session action is a DB read or write — zero AI calls unless
 // --marking is passed (capped at 200; each real call ~$0.001-0.005; the
 // simulated teachers are on the trial plan so budgetGate caps them anyway).
@@ -54,7 +68,29 @@ let anonKey = process.env.SUPABASE_ANON_KEY ?? "";
 if (!anonKey) { try { anonKey = readFileSync(KEY_FILE, "utf8").trim(); } catch { /* */ } }
 if (!anonKey) { console.error(`No anon key: set SUPABASE_ANON_KEY or ${KEY_FILE}`); process.exit(1); }
 
+// --jwt: a real user's access token. Sent as the bearer, and its sub becomes
+// the teacherId for every simulated session (the R14 guard accepts nothing
+// else). Without it the fake-teacher fleet needs a pre-R14 backend.
+const JWT = argOf("jwt", null);
+const bearer = JWT ?? anonKey;
+const jwtSub = (() => {
+  if (!JWT) return null;
+  try {
+    const body = JWT.split(".")[1];
+    const sub = JSON.parse(Buffer.from(body, "base64url").toString())?.sub;
+    if (!sub) throw new Error("no sub claim");
+    return String(sub);
+  } catch (e) {
+    console.error(`--jwt token could not be decoded (${e?.message ?? e})`);
+    process.exit(1);
+  }
+})();
+if (jwtSub) console.log(`running as signed-in user ${jwtSub} (from --jwt)`);
+
 const RUN = `loadtest-${new Date().toISOString().slice(5, 16).replace(/[-T:]/g, "")}`;
+// The teacherId a session sends: the real user's sub when --jwt is given,
+// else the cleanup-friendly fake id.
+const tid = (fake) => jwtSub ?? fake;
 const out = (line) => {
   console.log(line);
   if (LOG_FILE) { try { appendFileSync(LOG_FILE, line + "\n"); } catch { /* */ } }
@@ -81,7 +117,7 @@ async function call(action, payload, { expectStatus } = {}) {
   try {
     const res = await fetch(FN_URL, {
       method: "POST",
-      headers: { authorization: `Bearer ${anonKey}`, apikey: anonKey, "content-type": "application/json" },
+      headers: { authorization: `Bearer ${bearer}`, apikey: anonKey, "content-type": "application/json" },
       body: JSON.stringify({ action, ...payload }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -137,7 +173,7 @@ function fakeSubmission(teacher, n, big = false) {
   };
 }
 async function teacherSession(uid) {
-  const id = `${RUN}-u${uid}`;
+  const id = tid(`${RUN}-u${uid}`);
   await call("save_profile", { teacherId: id, name: `Load Teacher ${uid}`, school: "Scaling Test HS", region: "ca-on" });
   await jitter();
   await call("save_collection", { teacherId: id, kind: "classes", items: [{ id: `${id}-c1`, name: "SNC2D P1" }, { id: `${id}-c2`, name: "SNC2D P4" }] });
@@ -153,7 +189,7 @@ async function teacherSession(uid) {
 }
 async function markingProbe(uid) {
   await call("mark_responses", {
-    teacherId: `${RUN}-u${uid}`, harshness: 5, subject: "Science", gradeLevel: 10,
+    teacherId: tid(`${RUN}-u${uid}`), harshness: 5, subject: "Science", gradeLevel: 10,
     questions: [
       { prompt: "State Newton's second law.", maxMarks: 2, keyAnswer: "F = ma", answers: [{ i: 0, text: "F = ma" }, { i: 1, text: "Force equals mass times acceleration" }] },
       { prompt: "What is the SI unit of force?", maxMarks: 1, keyAnswer: "The newton (N)", answers: [{ i: 0, text: "The newton" }, { i: 1, text: "kg" }] },
@@ -229,7 +265,9 @@ async function modeSoak() {
 }
 
 async function modeVolume() {
-  const hot = `${RUN}-volume-hot`, cold = `${RUN}-volume-cold`;
+  // With --jwt both identities collapse onto the token's account (the guard
+  // permits no other), so the hot/cold comparison loses meaning there.
+  const hot = tid(`${RUN}-volume-hot`), cold = tid(`${RUN}-volume-cold`);
   out(`VOLUME ${RUN}: seeding ${VOLUME_ROWS} submissions (~${Math.round(VOLUME_ROWS * 8 / 1024)}MB) onto one account, plus a roster at the 5000-item cap`);
   out(`(5M rows is not honest against a 500MB free-tier database — this is the worst realistic single account instead)`);
   PHASE = "volume-baseline";
