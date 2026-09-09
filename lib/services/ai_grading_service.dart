@@ -516,6 +516,7 @@ class MarkingTimeoutException implements Exception {
 /// timeout, so an action added later can only ever be too patient — never
 /// cut a real class set short.
 const _quickActions = {
+  'bootstrap_sync',
   'get_usage',
   'get_profile',
   'save_profile',
@@ -549,6 +550,7 @@ const _quickTimeout = Duration(seconds: 30);
 /// DO NOT add a billed action here, however transient its failure looks.
 /// A 503 on `grade` is a paper in the tray, not a bug.
 const retryableEdgeActions = <String>{
+  'bootstrap_sync',
   'get_usage',
   'get_profile',
   'list_keys',
@@ -579,6 +581,42 @@ const _backoffFactor = 3;
 /// for the network. The default is what the app always did: Supabase's
 /// functions client, resolved at call time.
 typedef EdgeTransport = Future<FunctionResponse> Function(String function, {Map<String, dynamic>? body});
+
+// ---------- Bootstrap snapshot (one round trip on app open, R19.3) ----------
+
+/// Everything the app used to fetch in ~5 separate edge calls at startup:
+/// the saved profile row, the usage meter, the answer-key list, and the
+/// three cloud collections (classes, students, student↔class links).
+class BootstrapSnapshot {
+  /// The raw `profiles` row — the same shape get_profile returns — or null
+  /// when the account has never saved one.
+  final Map<String, dynamic>? profile;
+
+  /// Usage meter. Already primed into the getUsage cache by [
+  /// AiGradingService.bootstrapSync], so the startup meter read is free.
+  /// Null only on a [localOnly] snapshot.
+  final UsageSummary? usage;
+
+  final List<AnswerKeySummary> keys;
+
+  /// Cloud collection items by kind ('classes', 'students',
+  /// 'student_class_links').
+  final Map<String, List<Map<String, dynamic>>> collections;
+
+  /// True when the server's identity guard refused the call because this
+  /// device holds no Supabase session (dev-mode / local-only accounts).
+  /// The app then stays local — quietly, instead of retrying five
+  /// per-action calls that would all be refused the same way.
+  final bool localOnly;
+
+  const BootstrapSnapshot({
+    this.profile,
+    this.usage,
+    this.keys = const [],
+    this.collections = const {},
+    this.localOnly = false,
+  });
+}
 
 // ---------- Service ----------
 
@@ -788,7 +826,16 @@ class AiGradingService {
     );
     final data = res.data;
     if (data is Map) {
-      final summary = UsageSummary(
+      final summary = _parseUsage(data);
+      _usageCache[teacherId] = (summary: summary, at: DateTime.now());
+      return summary;
+    }
+    throw Exception('Usage lookup failed: $data');
+  }
+
+  /// One shape, two sources: get_usage and bootstrap_sync answer with the
+  /// same usage payload, so they parse through the same code.
+  static UsageSummary _parseUsage(Map data) => UsageSummary(
         planLabel: (data['planLabel'] ?? 'Preview').toString(),
         dayPct: (data['dayPct'] as num?)?.toInt() ?? 0,
         weekPct: (data['weekPct'] as num?)?.toInt() ?? 0,
@@ -798,25 +845,113 @@ class AiGradingService {
         liveUsdPerPaper: (data['liveUsdPerPaper'] as num?)?.toDouble() ?? 0.039,
         overnightUsdPerPaper: (data['overnightUsdPerPaper'] as num?)?.toDouble() ?? 0.0078,
       );
-      _usageCache[teacherId] = (summary: summary, at: DateTime.now());
-      return summary;
+
+  /// Likewise for the answer-key list (list_keys and bootstrap_sync).
+  static List<AnswerKeySummary> _parseKeys(List list) => list
+      .whereType<Map>()
+      .map((k) => AnswerKeySummary(
+            id: (k['id'] ?? '').toString(),
+            name: (k['name'] ?? 'Answer key').toString(),
+            subject: k['subject']?.toString(),
+            totalMarks: (k['total_marks'] as num?)?.toDouble(),
+          ))
+      .where((k) => k.id.isNotEmpty)
+      .toList(growable: false);
+
+  /// R14: the backend refuses any teacherId it can't match to the caller's
+  /// signed-in JWT with a 403. Dev-mode / local-only accounts have no
+  /// Supabase session at all, so for them EVERY guarded call is refused —
+  /// expected, not an error. This recognises exactly that case so sync
+  /// paths can quietly stay local instead of spamming failures at a teacher
+  /// who never signed into the cloud. A 403 while a live session exists is
+  /// a real problem and is never treated as grace.
+  static bool isCloudAuthRefusal(Object e) {
+    if (e is! FunctionException || e.status != 403) return false;
+    try {
+      return Supabase.instance.client.auth.currentSession == null;
+    } catch (_) {
+      return true; // Supabase never initialized — certainly no session
     }
-    throw Exception('Usage lookup failed: $data');
   }
 
-  /// Cloud copy of a marked result — results follow the account.
-  Future<void> saveSubmissionCloud({required String teacherId, required Map<String, dynamic> submission}) async {
-    await _invokeFn(
-      'MARKING-PROCESS',
-      body: {'action': 'save_submission', 'teacherId': teacherId, 'submission': submission},
+  /// One round trip on app open (R19.3): the saved profile, the usage
+  /// meter, the answer-key list, and the three setup collections, fetched
+  /// concurrently server-side. The usage answer is primed straight into the
+  /// [getUsage] cache, so the startup meter read that follows is free.
+  ///
+  /// Returns null when the deployed function predates bootstrap_sync — the
+  /// unknown action falls through to the grade path there, which answers
+  /// 400 (a router would answer 404) — so the caller can fall back to the
+  /// older per-action calls. An old server must never brick app startup;
+  /// this tolerance can be removed once the deploy is confirmed everywhere.
+  Future<BootstrapSnapshot?> bootstrapSync({required String teacherId}) async {
+    FunctionResponse res;
+    try {
+      res = await _invokeFn(
+        'MARKING-PROCESS',
+        body: {'action': 'bootstrap_sync', 'teacherId': teacherId},
+      );
+    } on FunctionException catch (e) {
+      if (e.status == 400 || e.status == 404) return null; // older server
+      if (isCloudAuthRefusal(e)) {
+        debugPrint('AiGradingService.bootstrapSync: no Supabase session — staying local-only.');
+        return const BootstrapSnapshot(localOnly: true);
+      }
+      rethrow;
+    }
+    final data = res.data;
+    if (data is! Map || data['error'] != null) return null;
+    final map = data.cast<String, dynamic>();
+
+    UsageSummary? usage;
+    if (map['usage'] is Map) {
+      usage = _parseUsage(map['usage'] as Map);
+      _usageCache[teacherId] = (summary: usage, at: DateTime.now());
+    }
+    final collections = <String, List<Map<String, dynamic>>>{};
+    if (map['collections'] is Map) {
+      for (final e in (map['collections'] as Map).entries) {
+        collections[e.key.toString()] = e.value is List
+            ? (e.value as List).whereType<Map>().map((m) => m.cast<String, dynamic>()).toList(growable: false)
+            : const [];
+      }
+    }
+    return BootstrapSnapshot(
+      profile: map['profile'] is Map ? (map['profile'] as Map).cast<String, dynamic>() : null,
+      usage: usage,
+      keys: map['keys'] is List ? _parseKeys(map['keys'] as List) : const [],
+      collections: collections,
     );
+  }
+
+  /// Cloud copy of a marked result — results follow the account. For a
+  /// local-only account the guard refuses this (there is no cloud to
+  /// follow), and that is a quiet no-op: the result already lives on the
+  /// device, which is all a local account has.
+  Future<void> saveSubmissionCloud({required String teacherId, required Map<String, dynamic> submission}) async {
+    try {
+      await _invokeFn(
+        'MARKING-PROCESS',
+        body: {'action': 'save_submission', 'teacherId': teacherId, 'submission': submission},
+      );
+    } catch (e) {
+      if (!isCloudAuthRefusal(e)) rethrow;
+      debugPrint('save_submission: no Supabase session — result kept on this device only.');
+    }
   }
 
   Future<void> deleteSubmissionCloud({required String teacherId, required String id}) async {
-    await _invokeFn(
-      'MARKING-PROCESS',
-      body: {'action': 'delete_submission', 'teacherId': teacherId, 'id': id},
-    );
+    try {
+      await _invokeFn(
+        'MARKING-PROCESS',
+        body: {'action': 'delete_submission', 'teacherId': teacherId, 'id': id},
+      );
+    } catch (e) {
+      // Local-only account: there was never a cloud copy to delete, so the
+      // caller's tombstone can clear as if the delete succeeded.
+      if (!isCloudAuthRefusal(e)) rethrow;
+      debugPrint('delete_submission: no Supabase session — nothing in the cloud to delete.');
+    }
   }
 
   /// Queues a class set for overnight marking on the Batch API — half the
@@ -1054,10 +1189,19 @@ class AiGradingService {
   }
 
   Future<List<Map<String, dynamic>>> listSubmissionsCloud({required String teacherId}) async {
-    final res = await _invokeFn(
-      'MARKING-PROCESS',
-      body: {'action': 'list_submissions', 'teacherId': teacherId},
-    );
+    final FunctionResponse res;
+    try {
+      res = await _invokeFn(
+        'MARKING-PROCESS',
+        body: {'action': 'list_submissions', 'teacherId': teacherId},
+      );
+    } catch (e) {
+      // Local-only account: nothing was ever synced, so there is honestly
+      // nothing to restore.
+      if (!isCloudAuthRefusal(e)) rethrow;
+      debugPrint('list_submissions: no Supabase session — staying local-only.');
+      return const [];
+    }
     final data = res.data;
     if (data is Map && data['submissions'] is List) {
       return (data['submissions'] as List).whereType<Map>().map((m) => m.cast<String, dynamic>()).toList(growable: false);
@@ -1179,16 +1323,23 @@ class AiGradingService {
     String? plan,
     List<String>? markingFeedback,
   }) async {
-    await _invokeFn('MARKING-PROCESS', body: {
-      'action': 'save_profile',
-      'teacherId': teacherId,
-      if (email != null) 'email': email,
-      if (name != null) 'name': name,
-      if (school != null) 'school': school,
-      if (region != null) 'region': region,
-      if (plan != null) 'plan': plan,
-      if (markingFeedback != null) 'markingFeedback': markingFeedback,
-    });
+    try {
+      await _invokeFn('MARKING-PROCESS', body: {
+        'action': 'save_profile',
+        'teacherId': teacherId,
+        if (email != null) 'email': email,
+        if (name != null) 'name': name,
+        if (school != null) 'school': school,
+        if (region != null) 'region': region,
+        if (plan != null) 'plan': plan,
+        if (markingFeedback != null) 'markingFeedback': markingFeedback,
+      });
+    } catch (e) {
+      // Local-only account: profile lives on the device, which is where it
+      // was just saved before this call.
+      if (!isCloudAuthRefusal(e)) rethrow;
+      debugPrint('save_profile: no Supabase session — profile kept on this device only.');
+    }
   }
 
   /// Extra-credit pass: detailed explanations of every error in an
@@ -1248,11 +1399,13 @@ class AiGradingService {
 
   /// Reads student names (and IDs when shown) off photos of an attendance
   /// sheet or class roster — used by onboarding to auto-populate a class.
-  Future<List<RosterEntry>> extractRoster({required List<Uint8List> pages}) async {
+  /// Billed, so the server demands the teacherId match the signed-in JWT.
+  Future<List<RosterEntry>> extractRoster({required String teacherId, required List<Uint8List> pages}) async {
     final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {
         'action': 'extract_roster',
+        'teacherId': teacherId,
         'imagesBase64': pages.map(base64Encode).toList(growable: false),
         'mediaType': 'image/jpeg',
       },
@@ -1307,16 +1460,7 @@ class AiGradingService {
     );
     final data = res.data;
     if (data is Map && data['keys'] is List) {
-      return (data['keys'] as List)
-          .whereType<Map>()
-          .map((k) => AnswerKeySummary(
-                id: (k['id'] ?? '').toString(),
-                name: (k['name'] ?? 'Answer key').toString(),
-                subject: k['subject']?.toString(),
-                totalMarks: (k['total_marks'] as num?)?.toDouble(),
-              ))
-          .where((k) => k.id.isNotEmpty)
-          .toList(growable: false);
+      return _parseKeys(data['keys'] as List);
     }
     return const [];
   }
