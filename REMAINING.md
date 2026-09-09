@@ -342,7 +342,9 @@ if (claims?.role !== "authenticated" || String(claims?.sub ?? "") !== teacherId)
 }
 ```
 
-- [ ] **R14.1** Apply that guard to the remaining read actions. In rough order of
+- [x] **R14.1** DONE 2026-09-08, wider than planned: ALL 24 teacherId actions
+      guarded (reads, writes, billed), deployed, spoof-probed 403 in prod.
+      Originally: apply to the remaining read actions. In rough order of
       what they expose: `list_submissions` (marked student work), `get_profile`
       (name, school, email), `list_keys`, `get_collection`, `get_usage`,
       `get_referral`.
@@ -541,10 +543,24 @@ ceiling is the free tier's pool + compute, not any query.
       failures for FREE actions only — billed actions never auto-retry, a
       timed-out grade may have billed and a retry would buy it twice — plus a
       45s client cache for get_usage.
-- [ ] **R19.3** Next code multiplier once on Pro: a batched `bootstrap_sync`
+- [x] **R19.3** DONE 2026-09-08 (bootstrap_sync, deployed; client falls back on old servers). Next code multiplier once on Pro: a batched `bootstrap_sync`
       action returning profile+usage+keys+collections in ONE invocation.
       App-open cost drops ~5 invocations → 1; at any tier that multiplies the
       user ceiling by the same factor.
 - [ ] **R19.4** Keep-warm ping until Pro (Pages/cron hitting get_usage every
       few days) so the first teacher after a quiet week doesn't wake a paused
       project — or just do R19.1, which makes it moot.
+
+### R14/R19.3 deployment notes (2026-09-08)
+- Live spoof probes after deploy: get_usage / list_submissions / save_collection /
+  mark_responses with a foreign teacherId → all 403.
+- POSITIVE path not live-verified from here (signup needs email confirmation, so
+  no mintable JWT): **owner smoke test — open the app, mark something, confirm
+  cloud sync works — BEFORE making the repo public.** 455 client tests + the
+  call-site audit cover it, but the phone is the proof.
+- A pending unconfirmed auth user `markless.loadtest.r14@gmail.com` was created
+  by the probe attempt; delete in Dashboard → Auth when convenient.
+- SOAK remains the one battery item not completed: killed twice by same-day
+  deploys (its fleet mode is also now walled off by R14, correctly). Re-run
+  post-launch as one signed-in user: `node tool/load_test.mjs --mode soak
+  --minutes 240 --vus 3 --jwt <access token>`.
