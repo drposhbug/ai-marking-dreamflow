@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/ai-marking-dreamflow/app/">
+
+  <meta charset="UTF-8">
+  <!-- The engine does not add a viewport tag of its own, and without one a
+       phone lays the splash out in a 980px viewport and then scales it down. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+
+  <title>Markless — Mark less. Teach more.</title>
+  <meta name="description" content="Google Form or paper — mark a whole class set in minutes, with feedback a student can act on.">
+  <meta name="theme-color" content="#2563EB">
+
+  <!-- Link previews. og:image is relative to <base>; crawlers resolve it
+       against the page URL, so it follows wherever the app is deployed. -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Markless">
+  <meta property="og:title" content="Markless — Mark less. Teach more.">
+  <meta property="og:description" content="Google Form or paper — mark a whole class set in minutes, with feedback a student can act on.">
+  <meta property="og:image" content="icons/Icon-512.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta property="og:image:alt" content="The Markless app icon">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Markless — Mark less. Teach more.">
+  <meta name="twitter:description" content="Google Form or paper — mark a whole class set in minutes, with feedback a student can act on.">
+  <meta name="twitter:image" content="icons/Icon-512.png">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Markless">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* Everything below is the pre-boot splash. It is inline on purpose: a
+       stylesheet or a webfont would be one more round trip before the teacher
+       sees anything, which is the problem the splash exists to solve. */
+    :root {
+      --splash-bg: #F4F7FB;
+      --splash-fg: #0F172A;
+      --splash-muted: #64748B;
+      --splash-accent: #2563EB;
+      --splash-track: rgba(37, 99, 235, 0.16);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --splash-bg: #0F172A;
+        --splash-fg: #F8FAFC;
+        --splash-muted: #94A3B8;
+        --splash-accent: #60A5FA;
+        --splash-track: rgba(96, 165, 250, 0.20);
+      }
+    }
+
+    html { background-color: var(--splash-bg); }
+    body { margin: 0; background-color: var(--splash-bg); }
+
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 24px;
+      box-sizing: border-box;
+      background-color: var(--splash-bg);
+      color: var(--splash-fg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      text-align: center;
+      opacity: 1;
+      transition: opacity 260ms ease-out;
+    }
+    /* The class the teardown script adds. Fading rather than cutting means a
+       fast boot does not read as a flicker. */
+    #splash.splash--gone {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #splash-mark {
+      display: block;
+      width: 84px;
+      height: 84px;
+      animation: splash-rise 380ms ease-out both;
+    }
+
+    #splash-wordmark {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      line-height: 1.2;
+    }
+    #splash-tagline {
+      margin: 6px 0 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--splash-muted);
+    }
+
+    #splash-progress {
+      width: 168px;
+      height: 3px;
+      border-radius: 999px;
+      background-color: var(--splash-track);
+      overflow: hidden;
+    }
+    #splash-progress::after {
+      content: "";
+      display: block;
+      width: 42%;
+      height: 100%;
+      border-radius: inherit;
+      background-color: var(--splash-accent);
+      animation: splash-slide 1.4s ease-in-out infinite;
+    }
+
+    #splash-note {
+      margin: 0;
+      min-height: 1em;
+      max-width: 30ch;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--splash-muted);
+    }
+
+    @keyframes splash-rise {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: none; }
+    }
+    @keyframes splash-slide {
+      from { transform: translateX(-110%); }
+      to   { transform: translateX(250%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #splash-mark { animation: none; }
+      #splash-progress::after { animation-duration: 3.2s; }
+    }
+
+    #noscript-message {
+      max-width: 34rem;
+      margin: 15vh auto 0;
+      padding: 0 24px;
+      color: var(--splash-fg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.5;
+      text-align: center;
+    }
+    #noscript-message h1 { font-size: 20px; margin: 0 0 8px; }
+    #noscript-message p { margin: 0; color: var(--splash-muted); }
+  </style>
+
+  <!-- With scripting off nothing will ever take the splash down, so hide it
+       up front and let the <noscript> block in the body explain instead. -->
+  <noscript><style>#splash { display: none; }</style></noscript>
+</head>
+<body>
+  <!-- pdfx renders PDFs on web through pdf.js, and without this the stack
+       splitter, PDF answer keys and dropped PDFs all fail on an assertion.
+       Served from our own origin rather than a CDN, deliberately: schools
+       block CDNs often enough to matter, and a third-party script that parses
+       a page of a child's work is a dependency worth not having. Vendored
+       from pdfjs-dist 4.6.82 — bump both files together. -->
+  <script src="pdfjs/pdf.min.mjs" type="module"></script>
+  <script type="module">
+    const { pdfjsLib } = globalThis;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/pdf.worker.min.mjs';
+  </script>
+  <noscript>
+    <div id="noscript-message">
+      <h1>Markless needs JavaScript</h1>
+      <p>Turn on JavaScript for this site and reload the page to start marking.</p>
+    </div>
+  </noscript>
+
+  <div id="splash" role="status" aria-label="Loading Markless">
+    <svg id="splash-mark" viewBox="0 0 96 96" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="splash-mark-fill" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#3B82F6"/>
+          <stop offset="1" stop-color="#1D4ED8"/>
+        </linearGradient>
+      </defs>
+      <rect width="96" height="96" rx="21.5" fill="url(#splash-mark-fill)"/>
+      <path d="M25 50 L42 67 L71 33" fill="none" stroke="#FFFFFF" stroke-width="10.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <p id="splash-wordmark">Markless</p>
+      <p id="splash-tagline">Mark less. Teach more.</p>
+    </div>
+    <div id="splash-progress" role="progressbar" aria-label="Loading"></div>
+    <p id="splash-note" aria-live="polite"></p>
+  </div>
+
+  <script>
+    // Splash teardown.
+    //
+    // The Flutter engine dispatches `flutter-first-frame` on window from a
+    // post-frame callback that the renderer binding registers on every web
+    // build, so it fires once the app has genuinely painted -- not merely once
+    // main.dart.js has been fetched. That is the signal we hide on.
+    //
+    // We deliberately do not watch for the <flutter-view> element instead: the
+    // engine inserts that during initialisation, before anything is drawn, so
+    // hiding on it would put the white gap back.
+    //
+    // A splash that outlives the app is worse than no splash, so a hard timeout
+    // sits behind the event and removes the overlay regardless. If the boot
+    // failed the teacher gets the app's own error state, not a permanent
+    // spinner over a page they cannot reach.
+    (function () {
+      var splash = document.getElementById('splash');
+      if (!splash) return;
+
+      var torndown = false;
+      var slowTimer = window.setTimeout(showSlowNote, 8000);
+      var hardTimer = window.setTimeout(teardown, 20000);
+
+      function showSlowNote() {
+        var note = document.getElementById('splash-note');
+        if (note) note.textContent = 'Still loading. This takes a moment on a slow connection.';
+      }
+
+      function teardown() {
+        if (torndown) return;
+        torndown = true;
+        window.clearTimeout(slowTimer);
+        window.clearTimeout(hardTimer);
+        window.removeEventListener('flutter-first-frame', teardown);
+        splash.classList.add('splash--gone');
+        // Drop the node on a timer rather than on `transitionend`, because that
+        // event never arrives if the tab is backgrounded mid-fade, which would
+        // leave an invisible overlay sitting on top of the app.
+        window.setTimeout(function () {
+          if (splash.parentNode) splash.parentNode.removeChild(splash);
+        }, 400);
+      }
+
+      // Registered here, above the bootstrap script, so the listener is always
+      // in place before the engine can dispatch.
+      window.addEventListener('flutter-first-frame', teardown);
+    })();
+  </script>
+
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
