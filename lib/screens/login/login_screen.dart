@@ -254,13 +254,17 @@ class _LoginScreenState extends State<LoginScreen> {
         if (app.school.isEmpty) await app.setSchool(teacherId: user.id, school: 'Dev Test School');
         await auth.updateProfile(name: 'Dev Teacher', school: 'Dev Test School');
       }
-      if (!mounted) return;
-      context.go(AppRoutes.grading);
     } catch (e) {
-      debugPrint('Dev mode sign-in failed: $e');
+      // The profile writes above are cloud calls, and dev mode exists to get
+      // into the app WITHOUT a working backend. Failing them must not strand
+      // you on the login screen: the local sign-in has already happened.
+      debugPrint('Dev mode profile setup failed (continuing anyway): $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+    // Outside the try on purpose, so a dead backend cannot strand you here.
+    if (!mounted) return;
+    if (context.read<AuthService>().currentUser != null) context.go(AppRoutes.grading);
   }
 
   /// One button per provider the server has enabled (Google, Microsoft,
