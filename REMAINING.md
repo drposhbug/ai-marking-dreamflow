@@ -603,3 +603,27 @@ dependency, proven not assumed.
       move the build to a GitHub Action publishing to a `gh-pages` branch.
 - [ ] **R20.5** Turn Pages on (Settings → Pages → `main` / `/docs`) and make
       the repo public. Then the three URLs and the app are live together.
+
+---
+
+## R21 — Desktop sidebar (2026-09-21)
+
+Bottom bar replaced on desktop (>=840dp) with a blue inset panel holding the
+five stateful destinations PLUS every tool that used to be reachable only as
+a card on the grading screen: Import a Google Form, Split a scanned stack,
+Prepare a test to print, Plan with Mark, Report card comments, Export marks,
+Four ways to mark, and Plans & credits pinned at the foot. Verified in a
+browser at 1600px: branch switching and pushed tools both work, selected tab
+is a white pill. Phone layout byte-unchanged (bottom bar, five tabs).
+
+- [ ] **R21.1** A pushed tool (Plan with Mark, Split a stack…) takes the FULL
+      window on desktop, so the sidebar disappears until you press back. Not a
+      regression — those routes have always been root-level
+      (`parentNavigatorKey: _rootKey`) and the old rail did the same — but on a
+      desktop app a teacher expects the nav to stay put. Fix means re-parenting
+      them into the shell, which changes back behaviour and branch state, so it
+      is deliberately NOT done days from a deadline.
+- [ ] **R21.2** The grading screen still lists the same tools as cards, so on
+      desktop they now appear twice (sidebar + cards). The cards carry
+      descriptions and are good for discovery, so this is arguably fine — but
+      if it reads as clutter, the cards are the half to drop at >=840dp.
