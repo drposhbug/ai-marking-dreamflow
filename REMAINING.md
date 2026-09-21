@@ -627,3 +627,42 @@ is a white pill. Phone layout byte-unchanged (bottom bar, five tabs).
       desktop they now appear twice (sidebar + cards). The cards carry
       descriptions and are good for discovery, so this is arguably fine — but
       if it reads as clutter, the cards are the half to drop at >=840dp.
+
+---
+
+## R22 — Web vs phone: what is actually different (2026-09-21)
+
+Determined from code, not guessed. **The marking itself is identical** — same
+edge function, same models, same quarter marks, same KTCA, same per-question
+justification. What differs is everything that needs hardware or a store.
+
+| Feature | Phone | Web | Why |
+|---|---|---|---|
+| Mark a photographed paper | yes | yes | — |
+| Google Form / CSV import | yes | yes | badged BEST HERE on web |
+| Split a scanned PDF stack | yes | yes | pdf.js bundled, render verified |
+| Answer keys, learned keys | yes | yes | — |
+| Classes, students, rosters | yes | yes | — |
+| Class item analysis | yes | yes | — |
+| Report comments, planning | yes | yes | — |
+| Gradebook CSV / Drive export | yes | yes | — |
+| Drag-drop + paste intake | n/a | **web only** | — |
+| **Hide student names** | **yes** | **NO** | ML Kit is native-only. Acknowledgement gate + honest copy already ship. |
+| **Overnight marking** | **yes** | **NO** | no filesystem to stash scans. Button hidden on web (R22 fix). |
+| **Buy a plan** | yes | **NO** | RevenueCat has no web SDK here — "Plans are bought in the phone app". |
+| **Push notifications** | yes (once OneSignal set) | **NO** | — |
+| Camera auto-capture | yes | manual only | `camera_web` has no image stream |
+| Saved page images | on device | cloud only | no local FS |
+
+- [ ] **R22.1 THE COMMERCIAL GAP: a web teacher cannot pay you.** Trial on web
+      → cannot mark a set on the spot (Pro), cannot mark overnight (no FS),
+      cannot upgrade (no web billing). The pilot screen now points them at the
+      Form route, which works and is cheap — but the funnel ends there.
+      **RevenueCat Web Billing (R10.5) is the fix**, and since 2026-06-30 a web
+      checkout costs 10% vs Play's 15%. Decide before pushing web hard.
+- [ ] **R22.2** Decide what the web app is FOR and say it on the site: it is a
+      complete "mark from a Form or a scan, right now" tool, and the phone is
+      for photographing a stack, overnight marking and buying a plan.
+- [ ] **R22.3** Not yet walked end-to-end signed-in on web (photo → mark →
+      result). Needs a real login; email confirmation is on, so it is a
+      two-minute owner smoke test.
