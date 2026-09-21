@@ -564,3 +564,42 @@ ceiling is the free tier's pool + compute, not any query.
   deploys (its fleet mode is also now walled off by R14, correctly). Re-run
   post-launch as one signed-in user: `node tool/load_test.mjs --mode soak
   --minutes 240 --vus 3 --jwt <access token>`.
+
+---
+
+## R20 — Web app is BUILT and committed (2026-09-21)
+
+`docs/app/` now exists: release build, keys baked in, base href
+`/ai-marking-dreamflow/app/`. Built with `tool/build_web.ps1` after setting
+`$env:SUPABASE_ANON_KEY` (note: the script calls `pwsh`, which is not
+installed here — run it via `powershell -ExecutionPolicy Bypass -File`).
+
+Verified in a browser at the exact Pages path: boots to login, splash tears
+down, zero console errors, dev backdoor absent from the shipped bundle
+(grep = 0), and **pdf.js renders a real 2-page PDF** (918x1188, ink on
+canvas, text extracted) from the local worker — document upload's hardest
+dependency, proven not assumed.
+
+- [ ] **R20.1 THE BLOCKER: the Supabase project is PAUSED.** `status:
+      INACTIVE`; its subdomain does not resolve from any DNS (local or
+      8.8.8.8); `api-keys` returns an empty list. This is R17.3 arriving
+      exactly as predicted — ~13 days idle since the 2026-09-08 session.
+      **Only the dashboard's Restore button fixes it** (no CLI subcommand).
+      Until then NOTHING that touches the backend works: sign-in, marking,
+      sync. **Restore it, then do R19.1 (Pro, $25/mo) so it cannot recur —
+      a paused project during judging reads as a broken app.**
+- [ ] **R20.2** Not verifiable while paused — the signed-in half of the web
+      flow: photo upload → mark → result, and a PDF stack through
+      split_stack. The client-side halves are covered by tests
+      (bulk_page_processor, dropped_intake, web_upload_gate) and pdf.js is
+      proven above. After restoring, walk it once in a browser.
+- [ ] **R20.3** Dev-mode sign-in does not complete when the backend is
+      unreachable: `_devMode()` awaits profile saves inside its try, so a
+      network throw skips the `context.go`. Debug-only, but it is why this
+      session could not test the signed-in flows offline. One-line fix:
+      move the navigation out of the failure path.
+- [ ] **R20.4** Each rebuild commits ~45MB (37MB of it canvaskit's five
+      runtime variants). Fine for the hackathon; if the repo gets heavy,
+      move the build to a GitHub Action publishing to a `gh-pages` branch.
+- [ ] **R20.5** Turn Pages on (Settings → Pages → `main` / `/docs`) and make
+      the repo public. Then the three URLs and the app are live together.
