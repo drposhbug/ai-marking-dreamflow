@@ -39,6 +39,13 @@ class Breakpoints {
   /// a big monitor.
   static const double railExtended = 1240;
 
+  /// The desktop sidebar's width.
+  ///
+  /// Wide enough that the longest tool name — "Report card comments" — sits
+  /// on one line beside its icon, because a nav item that wraps or ellipses
+  /// stops being scannable, which is the only thing a sidebar is for.
+  static const double sidebarWidth = 248;
+
   /// The desk a teacher marks at, not the laptop she carries to school.
   ///
   /// 1600 is where a 27" monitor with a maximised browser lands. Below it a
