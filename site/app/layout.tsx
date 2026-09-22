@@ -30,7 +30,18 @@ const mono = Courier_Prime({
   variable: '--font-mono',
 });
 
-const SITE = 'https://drposhbug.github.io/ai-marking-dreamflow/';
+// Where this build will actually be served from. Absolute, because canonical
+// URLs and link-preview images cannot be relative — a share card that points
+// at a host the site is not on is a 404 in someone else's timeline.
+//
+// Set MARKLESS_SITE_URL when deploying anywhere other than GitHub Pages; the
+// Vercel build passes its own deployment URL. Trailing slash enforced here so
+// callers do not have to remember it.
+const SITE = (() => {
+  const raw = (process.env.MARKLESS_SITE_URL ?? '').trim();
+  const url = raw === '' ? 'https://drposhbug.github.io/ai-marking-dreamflow/' : raw;
+  return url.endsWith('/') ? url : `${url}/`;
+})();
 const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 const TITLE = 'Markless — mark a class set in minutes, with real feedback';

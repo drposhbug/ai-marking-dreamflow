@@ -28,6 +28,11 @@
 param(
   # Where the app will be served from, as a URL path. Must start and end with /.
   [string]$BasePath = "/ai-marking-dreamflow/app/",
+  # Where to write the built app. Defaults to docs/app, which is what GitHub
+  # Pages serves. Point it somewhere else to build for a different host —
+  # Vercel wants the app at /app/ off the domain root, not under a repo name,
+  # and that is a different -BasePath and so a different build.
+  [string]$OutDir = "",
   [string]$SupabaseAnonKey = $env:SUPABASE_ANON_KEY,
   [string]$RevenueCatAndroidKey = $env:REVENUECAT_ANDROID_KEY,
   [string]$OneSignalAppId = $env:ONESIGNAL_APP_ID
@@ -57,11 +62,22 @@ Write-Host "Building web app with base href $BasePath" -ForegroundColor Cyan
 & flutter build web --release --base-href $BasePath @defines
 if ($LASTEXITCODE -ne 0) { throw "flutter build web failed" }
 
-$out = Join-Path $repo "docs/app"
-if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+$out = if ([string]::IsNullOrWhiteSpace($OutDir)) { Join-Path $repo "docs/app" } else { [System.IO.Path]::GetFullPath((Join-Path $repo $OutDir)) }
+# Deleting the destination is safe for docs/app, which this script owns
+# outright. Anywhere else, refuse to delete a directory that holds something
+# other than a previous build of this app — a mistyped -OutDir must not take
+# the repository with it.
+if (Test-Path $out) {
+  $looksLikeABuild = (Test-Path (Join-Path $out "main.dart.js")) -or -not (Get-ChildItem $out -Force | Select-Object -First 1)
+  if ($out -ne (Join-Path $repo "docs/app") -and -not $looksLikeABuild) {
+    throw "$out is not empty and does not look like a previous build of the app. Refusing to delete it."
+  }
+  Remove-Item $out -Recurse -Force
+}
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 Copy-Item -Path (Join-Path $repo "build/web/*") -Destination $out -Recurse -Force
 
 # Pages serves what is committed, so the build output belongs in the commit.
 $size = "{0:N1} MB" -f ((Get-ChildItem $out -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
-Write-Host "Wrote docs/app ($size). Commit it - GitHub Pages serves the committed files." -ForegroundColor Green
+$shown = $out.Replace($repo, "").TrimStart("\", "/")
+Write-Host "Wrote $shown ($size) with base href $BasePath." -ForegroundColor Green
