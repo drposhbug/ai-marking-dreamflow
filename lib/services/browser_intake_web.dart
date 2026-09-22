@@ -158,12 +158,21 @@ Future<DroppedFile?> _readOne(html.File file, {required bool pasted}) {
     finish(null);
   });
   reader.onLoadEnd.listen((_) {
+    // readAsArrayBuffer hands back a ByteBuffer on some Dart web SDKs and an
+    // already-wrapped Uint8List on others. Insisting on one of them made
+    // every dropped or pasted scan vanish without a word.
     final result = reader.result;
-    if (result is! ByteBuffer) {
+    final bytes = switch (result) {
+      final ByteBuffer b => Uint8List.view(b),
+      final Uint8List b => b,
+      final List<int> b => Uint8List.fromList(b),
+      _ => null,
+    };
+    if (bytes == null) {
+      debugPrint('Unexpected FileReader result type: ${result.runtimeType}');
       finish(null);
       return;
     }
-    final bytes = Uint8List.view(result);
     // Every browser calls a pasted screenshot "image.png"; named for the
     // moment it arrived, it can be told apart in a list of marks.
     final name = pasted ? pastedFileName(mime, DateTime.now()) : file.name;

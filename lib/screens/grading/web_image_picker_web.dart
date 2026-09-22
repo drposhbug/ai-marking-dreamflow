@@ -41,9 +41,19 @@ Future<WebPickedImage?> pickWebImage({required bool captureEnvironmentCamera}) {
 
       reader.onLoadEnd.listen((_) {
         if (completer.isCompleted) return;
+        // readAsArrayBuffer hands back a ByteBuffer on some Dart web SDKs and
+        // an already-wrapped Uint8List on others. Insisting on one of them
+        // meant every gallery pick in a browser failed with "Unexpected
+        // FileReader result type" — take whichever arrives.
         final result = reader.result;
-        if (result is ByteBuffer) {
-          completer.complete(WebPickedImage(bytes: Uint8List.view(result), name: file.name));
+        final bytes = switch (result) {
+          final ByteBuffer b => Uint8List.view(b),
+          final Uint8List b => b,
+          final List<int> b => Uint8List.fromList(b),
+          _ => null,
+        };
+        if (bytes != null) {
+          completer.complete(WebPickedImage(bytes: bytes, name: file.name));
         } else {
           completer.completeError(StateError('Unexpected FileReader result type: ${result.runtimeType}'));
         }

@@ -1,6 +1,6 @@
 # Markless — Security & Compliance
 
-**Last updated: 30 August 2026**
+**Last updated: 21 September 2026**
 
 This is the document a school administrator, district privacy officer or
 procurement reviewer should be handed. It states what Markless does with
@@ -41,8 +41,8 @@ whose work it is.
 
 | What | Where it goes |
 |---|---|
-| The student's name | **Stays on the device — on iOS and Android.** Read locally, blacked out of the page before upload. **In a browser this does not happen at all**; see §3.1 |
-| Page images | Sent for marking, with identity fields redacted on mobile, then discarded |
+| The student's name | **Stays on the device.** The name line is read and blacked out of the page before upload, on every platform. A browser reads the printed label only and covers the whole line; it reads no name at all. See §3.1 |
+| Page images | Sent for marking, with identity fields redacted first — or reported as not redacted — then discarded |
 | Typed answers (Form/CSV import) | Sent keyed by **row number**, never by name; known names scrubbed from the text |
 | Marks, feedback, scores | Stored on the teacher's account; never sent to a model afterwards |
 | Teacher account id | Sent, to meter usage against the right account |
@@ -82,14 +82,14 @@ information directly from children and shows no ads.
 
 ## 3. What leaves the device, exactly
 
-### Marking a photographed or scanned paper (iOS and Android)
+### Marking a photographed or scanned paper
 
 1. The page is processed on the device (deskew, contrast, sharpen).
 2. **On-device text recognition finds identity fields** — `Name:`, `Student:`,
    `Student ID:` — and reads the value.
 3. **Those regions are painted solid black** in the copy that will be
-   uploaded. The original, unaltered page stays on the phone so the teacher
-   still sees the real paper.
+   uploaded. The original, unaltered page stays on the teacher's device so they
+   still see the real paper.
 4. The redacted page is sent for marking, along with: grading mode,
    strictness, criteria, grade level, curriculum region, and the teacher's
    account id. **The student's name is not sent** — it was previously included
@@ -99,9 +99,9 @@ information directly from children and shows no ads.
    right student.
 
 This is controlled by **Settings → Privacy → "Hide student names before
-marking"**, on by default. It is available on iOS and Android only; in a
-browser the setting is disabled and says so, because there is nothing behind
-it there (§3.1).
+marking"**, on by default. It is live on every platform Markless ships on,
+but a browser reads a page less well than a phone does and behaves
+differently as a result — §3.1 sets out exactly how.
 
 **Its limits, stated plainly.** Redaction covers name *fields*. It cannot
 cover a name written somewhere unexpected, a name inside the body of an essay,
@@ -117,26 +117,67 @@ vendor should claim otherwise.
 
 ### 3.1 What is different in a browser
 
-Name redaction needs on-device text recognition. That is a native library
-(Google ML Kit) and browsers do not have it. So on the web version of
-Markless:
+Redaction runs in a browser too, and it runs **on the teacher's own machine**:
+a Tesseract build compiled to WebAssembly, served from Markless's own origin
+(no CDN, no third-party script), reading the page in a worker. The page is not
+sent anywhere to be read. The network is not involved in this step on any
+platform.
 
-- **Nothing is read off the page and nothing is blacked out.** A photo or PDF
-  uploaded in a browser is sent for marking exactly as the teacher picked it,
-  with whatever name is written on it.
-- **The Settings toggle "Hide student names before marking" is disabled** in a
-  browser and says why, rather than sitting on and doing nothing.
-- **The first time a teacher uploads student work in a browser, the app says
-  this and requires an explicit acknowledgement** before the page goes
-  anywhere. The acknowledgement is remembered per teacher.
-- **The Google Form / CSV route is unaffected and is the recommended route on
-  the web.** It is pure Dart, needs no on-device recognition, sends answers
-  keyed by row number, and never transmits the name column. The grading screen
-  says so.
+What differs is **how well it reads**, and that changes what the app is
+allowed to conclude:
 
-A district that requires page images to be redacted before transmission should
-treat the browser version as not meeting that requirement, and use the iOS or
-Android app, or the Form/CSV route, for photographed work.
+- **A browser reads printed text, not handwriting.** The `Name:` /
+  `Student:` / `Student ID:` label on a school test template is printed, so
+  it is found; the child's handwriting beside it is not read.
+- **Because of that, the whole line is blacked out, edge to edge.** On iOS
+  and Android the recogniser can see where the handwritten name ends and the
+  black box is drawn to fit it. In a browser it cannot, so the box runs the
+  full width of the page across that line. This redacts more of the page, not
+  less — it may also cover a `Date:` or `Class:` field sharing the line. That
+  is deliberate: covering the label and leaving the name visible beside it,
+  while reporting success, is the one failure mode this design refuses.
+- **No name is read off the page in a browser.** On mobile the name is read
+  locally and used to file the result under the right student. In a browser
+  the app does not report a name at all, because anything it made of the
+  handwriting would be a guess, and a guessed name misfiles a result
+  silently. The teacher assigns the paper themselves, as they already did on
+  the web.
+- **When no label is found, nothing is covered — and the app says so.**
+  Browser OCR fails more often than the phone's: a poor photo, a skewed
+  scan, a faint photocopy, an unusual template, or a `Name` field with no
+  printed label at all. In every one of those cases the page is sent exactly
+  as the teacher picked it, and `redacted` is reported false: the grading
+  screen shows "Name not hidden on this paper" before sending and the
+  check-the-first-one screen shows it for a class set. **There is no state in
+  which the app reports a name as hidden without a black box having been
+  painted over that line in the uploaded bytes.**
+- **The engine downloads once.** 7.1 MB, measured: a 3.9 MB WebAssembly core,
+  a 3.0 MB English model, and 0.2 MB of loader. It is fetched the first time
+  a teacher uploads student work in a browser — not on app open, so a teacher
+  who only imports Google Forms never downloads it — and is then held in the
+  browser's cache and IndexedDB. Reading one page takes roughly a second on
+  a desktop after that.
+- **The first time a teacher uploads student work in a browser, the app
+  states these limits and requires an explicit acknowledgement** before the
+  page goes anywhere, remembered per teacher. Teachers who acknowledged the
+  earlier version of this notice — which said names could not be hidden in a
+  browser at all — are asked again, because what they agreed to is no longer
+  what happens.
+- **The Settings toggle "Hide student names before marking" is live in a
+  browser** and describes the weaker behaviour rather than the phone's.
+- **The Google Form / CSV route is unaffected and remains the strongest route
+  on the web.** It is pure Dart, needs no recognition at all, sends answers
+  keyed by row number, and never transmits the name column.
+
+**For a district that requires redaction before transmission.** The browser
+version now performs that redaction, on the teacher's machine, before any
+upload. It is less reliable at finding the field than the mobile apps, and
+when it does not find one it says so rather than proceeding quietly. A
+district that requires redaction to be *guaranteed* rather than *attempted
+and reported* is not served by any of the three platforms — the mobile
+limits in §3 apply there too — and should use the Form/CSV route for
+identified work. A district choosing between the browser and the apps for
+photographed work should prefer the apps.
 
 ### Marking an imported Google Form / CSV
 
@@ -158,7 +199,7 @@ analytics SDK in the app.
 
 | Provider | Purpose | Data it receives | Trains on it? |
 |---|---|---|---|
-| **Anthropic** (Claude) | Primary marking | Page images — redacted on iOS/Android, unredacted from a browser (§3.1) — and marking instructions | No — API data is not used for training |
+| **Anthropic** (Claude) | Primary marking | Page images — identity fields redacted first on every platform, or reported as not redacted (§3.1) — and marking instructions | No — API data is not used for training |
 | **Google** (Gemini) | Fallback marking, page transcription | Page images, on the same terms as the row above | No, under paid API terms |
 | **DeepSeek** | Cheap route for objective/short answers | Answer **text** only, no images, no names | **Yes — see below** |
 | **Supabase** | Database, marking service hosting | Marks, feedback, classes, students, account | No |
@@ -218,10 +259,13 @@ Listed because a reviewer will find them anyway, and a vendor who hides them
 should not be trusted with student work.
 
 1. **Redaction is best-effort**, per §3.
-2. **Redaction does not run in a browser at all**, per §3.1. The web version
-   uploads photographed work with names on it. The app says so and asks the
-   teacher to acknowledge it before the first upload, but saying so is not the
-   same as fixing it, and this is a real difference between platforms.
+2. **Redaction in a browser is weaker than on a phone**, per §3.1. It finds
+   the printed label and covers the whole line, it does not read handwriting,
+   it fails to find a field more often, and it reads no student name at all.
+   When it finds nothing it says so and uploads the page unredacted. The app
+   states this and asks the teacher to acknowledge it before their first
+   browser upload, but saying so is not the same as the field being found,
+   and this remains a real difference between platforms.
 3. **DeepSeek's terms do not meet the no-training standard**, per §4.
 4. **No SOC 2 report.** Markless is a small product; there has been no
    third-party security audit.

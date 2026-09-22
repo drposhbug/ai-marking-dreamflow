@@ -72,7 +72,16 @@ const ok = (name, pass, detail = '') => {
   const hits = banned.filter((r) => r.test(body)).map(String);
   ok('no invented statistics or social proof', hits.length === 0, hits.join(' '));
   ok('says it is not on an app store', /not on any app store yet/i.test(body));
-  ok('carries the browser redaction caveat', /in a browser/i.test(body) && /blackout does not run|nothing is blacked out/i.test(body));
+  // A browser now does black the name line out, so the old caveat ("nothing
+  // is blacked out") would be a lie. What has to survive rewording is the
+  // limit that is still real: it reads the printed label, not the child's
+  // handwriting, and it covers nothing when it finds no label. A page that
+  // quietly drops the caveat and claims parity with the phone is what this
+  // catches.
+  ok(
+    'carries the browser redaction caveat',
+    /in a browser/i.test(body) && /not the handwriting|nothing is covered/i.test(body),
+  );
   ok('Limits panel says redaction is best-effort on name fields', /Redaction covers name\s*fields/i.test(body));
 
   // --- tabs answer the keyboard

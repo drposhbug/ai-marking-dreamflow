@@ -94,8 +94,9 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
 
   Future<void> _pickPdf() async {
     // A copier stack is the largest upload in the app — a whole class's work,
-    // every name still on it. In a browser none of it can be blacked out, so
-    // this asks before the picker opens, not after the file is chosen.
+    // every name still on it. A browser blacks those out less reliably than a
+    // phone does, so this asks before the picker opens, not after the file is
+    // chosen.
     final proceed = await ensureWebUploadAcknowledged(
       context,
       teacherId: context.read<AuthService>().currentUser?.id,

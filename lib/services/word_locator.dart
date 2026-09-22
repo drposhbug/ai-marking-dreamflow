@@ -1,58 +1,47 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:marking_prokect_v2/services/page_text_reader.dart';
+import 'package:marking_prokect_v2/services/recognized_text.dart';
 
-/// One word read off the page, with the rectangle it actually occupies (in
-/// image pixels).
-class RecognizedWord {
-  final String text;
-  final Rect rect;
-  final int lineId;
-  const RecognizedWord({required this.text, required this.rect, required this.lineId});
-}
+export 'package:marking_prokect_v2/services/recognized_text.dart' show RecognizedWord, OcrTrust;
 
-/// Anchors AI error marks to the real words on the page.
+/// Anchors AI error marks to the real words on the page, and finds the line
+/// a student's name is written on.
 ///
 /// A vision model can say roughly where an error is, but never precisely —
 /// its coordinates drift by a line or two, which reads as sloppy marking.
-/// On-device text recognition gives exact word rectangles, so the AI's
-/// estimate is downgraded to a hint that only picks WHICH occurrence of a
-/// repeated word ("familys" four times) the mark belongs to.
+/// Text recognition gives exact word rectangles, so the AI's estimate is
+/// downgraded to a hint that only picks WHICH occurrence of a repeated word
+/// ("familys" four times) the mark belongs to.
+///
+/// Which recogniser runs is a platform question answered by
+/// `page_text_reader.dart`. How much it can be trusted is a different
+/// question, answered by [trust], and callers have to ask it: a browser
+/// reads the printed `Name:` on a test template but not the handwriting
+/// beside it.
 class WordLocator {
+  /// Whether this platform can read a page at all.
+  static bool get available => PageTextReader.available;
+
+  /// How much of a page the reader here can actually read.
+  static OcrTrust get trust => PageTextReader.trust;
+
+  /// True while the reader is fetching what it needs. Only a browser ever
+  /// has to, and only once.
+  static ValueListenable<bool> get preparing => PageTextReader.preparing;
+
+  /// Gets the reader ready before it is needed, so the teacher does not wait
+  /// on a download at the moment they tap Mark. Cheap and idempotent
+  /// everywhere; fire and forget.
+  static Future<void> warmUp() => PageTextReader.warmUp();
+
   /// Reads every word on the page. Returns an empty list when recognition
-  /// isn't possible (web, unreadable handwriting, missing model) — callers
-  /// fall back to the AI's estimated positions.
-  static Future<List<RecognizedWord>> recognize(Uint8List bytes) async {
-    if (kIsWeb) return const [];
-    TextRecognizer? recognizer;
-    try {
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/ocr_${identityHashCode(bytes)}.jpg');
-      await file.writeAsBytes(bytes, flush: true);
-      recognizer = TextRecognizer(script: TextRecognitionScript.latin);
-      final result = await recognizer.processImage(InputImage.fromFilePath(file.path));
-      final words = <RecognizedWord>[];
-      var lineId = 0;
-      for (final block in result.blocks) {
-        for (final line in block.lines) {
-          for (final el in line.elements) {
-            words.add(RecognizedWord(text: el.text, rect: el.boundingBox, lineId: lineId));
-          }
-          lineId++;
-        }
-      }
-      return words;
-    } catch (e) {
-      debugPrint('WordLocator.recognize failed: $e');
-      return const [];
-    } finally {
-      await recognizer?.close();
-    }
-  }
+  /// isn't possible (unreadable handwriting, a missing model, an engine that
+  /// would not load) — callers fall back to the AI's estimated positions,
+  /// and anything that was going to redact a name reports that it did not.
+  static Future<List<RecognizedWord>> recognize(Uint8List bytes) => PageTextReader.read(bytes);
 
   /// The text an error label points at: "dont → don't" yields "dont".
   /// Labels without an arrow ("run-on sentence") have no anchor word.

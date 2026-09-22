@@ -695,15 +695,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // In a browser this switch cannot do anything: hiding
-                  // names needs on-device text recognition and there is
-                  // none. It is greyed out and labelled rather than left
-                  // sitting on, which would tell a teacher a lie they act
-                  // on with a child's work.
+                  // A browser can do this now, with a weaker reader that
+                  // works off the printed label. Where a platform has no
+                  // reader at all the switch is greyed out and labelled
+                  // rather than left sitting on, which would tell a teacher
+                  // a lie they act on with a child's work.
                   _ToggleRow(
                     title: Anonymizer.available
                         ? 'Hide student names before marking'
-                        : 'Hide student names before marking — not available in a browser',
+                        : 'Hide student names before marking — not available here',
                     value: Anonymizer.available && appState.anonymizeUploads,
                     onChanged: !Anonymizer.available
                         ? null
@@ -717,8 +717,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
                     child: Text(
                       Anonymizer.available
-                          ? 'Your phone reads the name off each paper and blacks it out before the page is sent to be marked — so the work is marked, not the student. The name never leaves this device; it is what files the result under the right student here. You still see the original paper, name and all. If it cannot read a name field on a page, that page is sent as it is, and the app tells you so.'
-                          : 'Blacking names out needs on-device text recognition, and a browser does not have it. Pages you upload here go for marking exactly as you picked them, name and all. Cover names before uploading, or mark from a Google Form or CSV — that route sends answers keyed by row number and never sends the name column.',
+                          ? Anonymizer.hidingExplainer
+                          : 'Blacking names out needs text recognition running on this device, and this one has none. Pages you upload here go for marking exactly as you picked them, name and all. Cover names before uploading, or mark from a Google Form or CSV — that route sends answers keyed by row number and never sends the name column.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                     ),
                   ),

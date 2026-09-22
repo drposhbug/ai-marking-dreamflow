@@ -49,7 +49,20 @@ void main() {
     testWidgets('the first browser upload has to be acknowledged', (tester) async {
       await _runGate(tester, teacherId: 'teacher-1', onWeb: true);
       expect(find.byType(AlertDialog), findsOneWidget);
-      expect(find.textContaining('can\'t be hidden in a browser'), findsOneWidget);
+      // The browser hides names now, so the old "it cannot happen here" is
+      // gone. What replaces it is the limit that is still true.
+      expect(find.textContaining('weaker'), findsWidgets);
+      expect(find.textContaining('can\'t be hidden in a browser'), findsNothing);
+    });
+
+    testWidgets('a teacher told the old, now-untrue thing is told the new one', (tester) async {
+      // They were told names go up uncovered in a browser and agreed to
+      // that. That is no longer what happens, and the thing they agreed to
+      // is not the thing they should be agreeing to.
+      SharedPreferences.setMockInitialValues({'ai_marker.web_upload_ack.v1.teacher-1': '1'});
+      expect(await const WebUploadNotice().acknowledged('teacher-1'), isFalse);
+      await _runGate(tester, teacherId: 'teacher-1', onWeb: true);
+      expect(find.byType(AlertDialog), findsOneWidget);
     });
 
     testWidgets('backing out does not upload and does not count as acknowledged', (tester) async {
@@ -120,7 +133,7 @@ void main() {
       ));
       await tester.tap(find.text('pick'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('I\'ll cover names myself'));
+      await tester.tap(find.text('Got it — upload'));
       await tester.pumpAndSettle();
 
       expect(decision, isTrue);

@@ -259,8 +259,9 @@ export function SignIn() {
               </p>
             </form>
             <p className="note-small">
-              In a browser the name blackout does not run: painting out the name is an iOS and
-              Android feature, so a page photographed here is sent exactly as picked, name included.{' '}
+              In a browser the name blackout runs here on your own machine, but it reads the printed
+              “Name:” line rather than the handwriting, so it covers that whole line. On a page where
+              it finds no printed label, nothing is covered and the app tells you.{' '}
               <a href="#privacy">Read the limits</a>.
             </p>
           </div>
