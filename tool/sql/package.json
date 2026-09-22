@@ -1,0 +1,12 @@
+{
+  "name": "markless-sql-tests",
+  "private": true,
+  "type": "module",
+  "description": "Runs the entitlement SQL from SETUP-DB against Postgres-compiled-to-WASM. No Docker, no database.",
+  "scripts": {
+    "test": "node entitlement.test.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.0"
+  }
+}

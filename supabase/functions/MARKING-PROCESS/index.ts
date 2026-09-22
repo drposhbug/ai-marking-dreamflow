@@ -1117,6 +1117,29 @@ function planFor(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
   return cached(`plan:${teacherId}`, 60_000, () => planForFresh(teacherId));
 }
 
+/// Which billing rail the teacher's current plan came from: "revenuecat"
+/// (an app store) or "stripe" (the web), or null when nobody is charging
+/// them. Derived and written by `apply_entitlement`; see
+/// ../_shared/entitlement.ts.
+///
+/// Cached on the same 60s clock as the plan itself — it changes when a
+/// billing event lands, not when a request arrives.
+function planSourceFor(teacherId: string): Promise<string | null> {
+  return cached(`planSource:${teacherId}`, 60_000, async () => {
+    try {
+      const { data } = await serviceDb()
+        .from("profiles").select("plan_source").eq("teacher_id", teacherId).maybeSingle();
+      const s = String(data?.plan_source ?? "").trim().toLowerCase();
+      return s === "revenuecat" || s === "stripe" ? s : null;
+    } catch {
+      // Not knowing where a plan was bought must never cost a teacher the
+      // plan. The app treats null as "we can't say" and hides the
+      // manage-it-there line rather than showing the wrong shop.
+      return null;
+    }
+  });
+}
+
 async function planForFresh(teacherId: string): Promise<keyof typeof PLAN_CAPS> {
   try {
     const { data } = await serviceDb().from("profiles").select("plan, email").eq("teacher_id", teacherId).maybeSingle();
@@ -1293,16 +1316,21 @@ async function usagePayload(teacherId: string) {
   // The spend here paints a progress bar, so thirty seconds of staleness
   // is invisible — unlike budgetGate, which always sums fresh because it
   // is the thing that stops a subscription losing money.
-  const [plan, { day, week, month }, paidRefs] = await Promise.all([
+  const [plan, { day, week, month }, paidRefs, source] = await Promise.all([
     planFor(teacherId),
     cached(`spend:${teacherId}`, 30_000, () => spendBuckets(teacherId)),
     paidReferralCount(teacherId),
+    planSourceFor(teacherId),
   ]);
   const caps = PLAN_CAPS[plan];
   const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
   return {
     plan,
     planLabel: caps.label,
+    // Which shop this plan was bought in, so the app sends a teacher to the
+    // right place to change or cancel it — and does not offer to sell them
+    // the same thing a second time in the other one. Null on a free plan.
+    planSource: source,
     paidReferrals: paidRefs,
     dayPct: Math.min(100, Math.round((day / (monthlyCap * 0.25)) * 100)),
     weekPct: Math.min(100, Math.round((week / (monthlyCap * 0.5)) * 100)),
@@ -1320,7 +1348,10 @@ async function usagePayload(teacherId: string) {
 async function fetchProfileRow(teacherId: string): Promise<any> {
   const { data, error } = await serviceDb()
     .from("profiles")
-    .select("teacher_id, email, name, school, region, marking_feedback, default_mode, default_harshness, plan, updated_at")
+    // plan_source tells the app which shop the plan was bought in, so it can
+    // send a teacher there to cancel and refuse to sell them a second
+    // subscription in the other one. See ../_shared/entitlement.ts.
+    .select("teacher_id, email, name, school, region, marking_feedback, default_mode, default_harshness, plan, plan_source, updated_at")
     .eq("teacher_id", teacherId)
     .maybeSingle();
   if (error) throw new Error(error.message);

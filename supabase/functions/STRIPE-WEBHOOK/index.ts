@@ -1,8 +1,12 @@
 // supabase/functions/STRIPE-WEBHOOK/index.ts
 //
 // The ONLY thing that grants a plan from a web purchase — the Stripe half of
-// what REVENUECAT-WEBHOOK does for the stores. Nothing else in the system
-// writes profiles.plan, and that is load-bearing: the Supabase anon key
+// what REVENUECAT-WEBHOOK does for the stores. It writes profiles.plan_stripe
+// and never profiles.plan, which is derived from both rails so that neither
+// shop can cancel the other's subscription (../_shared/entitlement.ts).
+//
+// Nothing a teacher controls writes any of these columns, and that is
+// load-bearing: the Supabase anon key
 // ships inside the APK and the web bundle, so anything the client can send,
 // a teacher can send with curl. MARKING-PROCESS strips `plan` out of
 // save_profile for exactly this reason.
@@ -41,6 +45,7 @@
 // Supabase JWT, exactly as REVENUECAT-WEBHOOK does:
 //   npx supabase functions deploy STRIPE-WEBHOOK --no-verify-jwt
 import { createClient } from "npm:@supabase/supabase-js@2";
+import type { EntitlementRow } from "../_shared/entitlement.ts";
 
 function serviceDb() {
   return createClient(
@@ -287,15 +292,28 @@ Deno.serve(async (req) => {
     return json({ ok: true, ignored: `${type} (no teacher_id)` });
   }
 
-  const { error } = await serviceDb()
-    .from("profiles")
-    .upsert({ teacher_id: teacherId, plan, updated_at: new Date().toISOString() }, { onConflict: "teacher_id" });
+  // Writes the WEB's column and nothing else, so a cancellation here cannot
+  // take away a store subscription the teacher is still paying for. See
+  // ../_shared/entitlement.ts.
+  const { data, error } = await serviceDb()
+    .rpc("apply_entitlement", { p_teacher: teacherId, p_rail: "stripe", p_plan: plan })
+    .maybeSingle();
   if (error) {
     // A 500 makes Stripe retry, which is what we want when the database
     // blinked: the grant is not lost.
-    console.error("profiles upsert failed:", error.message);
+    console.error("apply_entitlement failed:", error.message);
     return json({ error: error.message }, 500);
   }
+  const row = data as EntitlementRow | null;
 
-  return json({ ok: true, teacherId, plan, type });
+  // `plan` is what the web rail now says; `effective` is what the teacher
+  // actually gets, which differs whenever the stores hold something better.
+  return json({
+    ok: true,
+    teacherId,
+    plan,
+    effective: row?.plan ?? plan,
+    source: row?.plan_source ?? "stripe",
+    type,
+  });
 });
