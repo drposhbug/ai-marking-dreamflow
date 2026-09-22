@@ -362,23 +362,20 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
                 // credits and costs us about a fifth of the money, so the
                 // cheap route is the one the button points at.
                 //
-                // Except in a browser, which has no filesystem to keep the
-                // scans in while the app is shut. Offering it there means a
-                // teacher waits, then reads "couldn't queue those", every
-                // time — so it says what is true instead.
-                if (!kIsWeb) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: (_remarking || _sending || job?.status != GradingJobStatus.done) ? null : _overnight,
-                      icon: _sending
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.bedtime_rounded, size: 18),
-                      label: Text('Mark $remaining overnight${_costHint(overnight: true, papers: remaining)}'),
-                    ),
+                // A browser included. The scans wait in IndexedDB there
+                // instead of the documents folder, which survives the tab
+                // being closed and the laptop being shut just as well.
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: (_remarking || _sending || job?.status != GradingJobStatus.done) ? null : _overnight,
+                    icon: _sending
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.bedtime_rounded, size: 18),
+                    label: Text('Mark $remaining overnight${_costHint(overnight: true, papers: remaining)}'),
                   ),
-                  const SizedBox(height: 8),
-                ],
+                ),
+                const SizedBox(height: 8),
                 if (_canMarkNow)
                   SizedBox(
                     width: double.infinity,
@@ -389,12 +386,11 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
                     ),
                   )
                 else if (kIsWeb)
-                  // In a browser this teacher has now run out of routes:
-                  // overnight needs a filesystem, marking on the spot is
-                  // Pro, and plans are bought in the phone app. Sending her
-                  // to a plans screen that cannot sell her anything would be
-                  // a dead end, so point at the route that DOES work here —
-                  // the Form import, which is cheap and needs no scanning.
+                  // Marking on the spot is Pro, and plans are bought in the
+                  // phone app, so sending her to a plans screen that cannot
+                  // sell her anything would be a dead end. The overnight
+                  // button above is the route that works here; the Form
+                  // import is the other one, cheap and with no scanning.
                   InkWell(
                     onTap: () => context.push(AppRoutes.importResponses),
                     borderRadius: BorderRadius.circular(10),
@@ -406,8 +402,8 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Overnight marking is in the phone app, and marking a whole set on the spot is part of Pro. '
-                              'In a browser, importing a Google Form marks the class in one go.',
+                              'Marking a whole set on the spot is part of Pro — overnight above works on any plan. '
+                              'Importing a Google Form marks the class in one go too.',
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
                             ),
                           ),

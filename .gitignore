@@ -50,3 +50,7 @@ node_modules/
 functions/lib/supabase/.temp/
 
 supabase/.temp/
+
+# Playwright MCP scratch: screenshots and console logs from browser
+# verification runs. Useful while debugging, never part of the app.
+.playwright-mcp/

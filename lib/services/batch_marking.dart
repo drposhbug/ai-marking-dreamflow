@@ -11,6 +11,7 @@ import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
+import 'package:marking_prokect_v2/services/overnight_page_store.dart';
 import 'package:marking_prokect_v2/services/overnight_service.dart';
 import 'package:marking_prokect_v2/services/page_fingerprint.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
@@ -147,7 +148,19 @@ Future<int> sendHeldOvernight({
       pages = clean;
       localName ??= found;
     }
-    final paths = await overnight.stashPages(customId, job.pages);
+    List<String> paths;
+    try {
+      paths = await overnight.stashPages(customId, job.pages);
+    } on PageStoreFull {
+      // Out of room is not this paper's problem, it is the device's, so the
+      // next twenty-nine would fail the same way. Give the whole set back to
+      // the tray, take back the room the ones already stashed are using, and
+      // let the teacher hear why.
+      for (final id in stashed) {
+        await overnight.discardStash(id);
+      }
+      rethrow;
+    }
     if (paths.isEmpty) {
       // Nowhere to put the scans means this paper cannot be marked while
       // the app is closed. It stays held in the tray rather than being sent
