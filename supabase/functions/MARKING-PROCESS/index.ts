@@ -1086,8 +1086,50 @@ const PLAN_CAPS: Record<string, { monthlyUsd: number; plans: number; label: stri
   preview: { monthlyUsd: 10.0, plans: 30, label: "Preview" },
 };
 
-// Founder accounts (testing, demos) keep Pro-level room without paying.
-const FOUNDER_EMAILS = ["oscar.cs.lee@gmail.com"];
+/// Accounts that get preview-level room without paying: the developer's own,
+/// for testing the product end to end and for demos.
+///
+/// Configurable by secret so an account can be added or removed without a
+/// deploy. `FOUNDER_TEACHER_IDS` is the better of the two — an account id is
+/// the JWT's subject and cannot be claimed by anyone else — but it is only
+/// knowable after the account exists, so the email list stays.
+///
+///   npx supabase secrets set FOUNDER_EMAILS=a@b.com,c@d.com
+///   npx supabase secrets set FOUNDER_TEACHER_IDS=<uuid>
+const FOUNDER_EMAILS = (Deno.env.get("FOUNDER_EMAILS") ?? "oscar.cs.lee@gmail.com")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+const FOUNDER_TEACHER_IDS = (Deno.env.get("FOUNDER_TEACHER_IDS") ?? "")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+
+/// Whether this account is one of ours.
+///
+/// **`profiles.email` is not evidence.** It is a display field, and
+/// `save_profile` used to let a teacher put anything in it — so matching it
+/// alone meant any teacher could type the founder's address and help
+/// themselves to the preview allowance, which is more marking room than Pro.
+/// The referral action was worse: it matched the address straight out of the
+/// request body, so unlocking Planning needed no database write at all.
+///
+/// A claim is therefore checked against Supabase Auth, the only thing that
+/// can write an account's real address. The cheap string compare runs first
+/// and rejects everyone not claiming to be a founder, so the admin lookup
+/// only ever runs for someone who is.
+async function isFounder(teacherId: string, profileEmail: unknown): Promise<boolean> {
+  if (!teacherId) return false;
+  if (FOUNDER_TEACHER_IDS.includes(teacherId)) return true;
+  const claimed = String(profileEmail ?? "").trim().toLowerCase();
+  if (!claimed || !FOUNDER_EMAILS.includes(claimed)) return false;
+  try {
+    const { data, error } = await serviceDb().auth.admin.getUserById(teacherId);
+    if (error) return false;
+    const real = String(data?.user?.email ?? "").trim().toLowerCase();
+    return real !== "" && FOUNDER_EMAILS.includes(real);
+  } catch (e) {
+    // Fail closed: an account that cannot be confirmed is not a founder.
+    console.error("isFounder lookup failed:", e instanceof Error ? e.message : e);
+    return false;
+  }
+}
 
 /// In-isolate TTL cache. A warm isolate serves many requests in a busy
 /// minute, and plans and referral counts change on the timescale of billing
@@ -1144,11 +1186,15 @@ async function planForFresh(teacherId: string): Promise<keyof typeof PLAN_CAPS> 
   try {
     const { data } = await serviceDb().from("profiles").select("plan, email").eq("teacher_id", teacherId).maybeSingle();
     const p = String(data?.plan ?? "").trim().toLowerCase();
+    // A founder keeps the preview allowance whatever the plan column says,
+    // unless they have actually bought something — then the real subscription
+    // wins, because testing must not be able to hide a billing bug.
+    if (!PAID_PLANS.includes(p) && await isFounder(teacherId, data?.email)) return "preview";
     if (p in PLAN_CAPS) return p as keyof typeof PLAN_CAPS;
     // No entitlement yet. Everyone starts on the trial's allowance — the old
     // "preview = Pro credits for anyone" default was free Pro the moment the
     // app went public.
-    return FOUNDER_EMAILS.includes(String(data?.email ?? "").trim().toLowerCase()) ? "preview" : "trial";
+    return "trial";
   } catch {
     return "trial";
   }
@@ -1652,7 +1698,15 @@ Deno.serve(async (req) => {
       teacher_id: teacherId,
       updated_at: new Date().toISOString(),
     };
-    if (payload?.email != null) row.email = String(payload.email).slice(0, 200);
+    // The account's address comes from the verified token, never the request
+    // body. It is not merely a display field: isFounder matches against it,
+    // and a teacher who could write it could grant themselves the preview
+    // allowance and Planning. The gateway has already checked this token's
+    // signature, and requireTeacher above has pinned its subject to this
+    // teacherId, so the claim is the account's real address.
+    const verifiedEmail = String(jwtClaims(req.headers.get("authorization"))?.email ?? "")
+      .trim().toLowerCase();
+    if (verifiedEmail) row.email = verifiedEmail.slice(0, 200);
     if (payload?.name != null) row.name = String(payload.name).slice(0, 120);
     if (payload?.school != null) row.school = String(payload.school).slice(0, 200);
     if (payload?.region != null) row.region = String(payload.region).slice(0, 40);
@@ -2588,10 +2642,10 @@ Return one comment for EVERY student above, echoing back the same "i" you were g
     }
     const count = Number(prof?.referral_count ?? 0);
     // Founder accounts get Planning without referrals (testing + demos).
-    const FOUNDER_EMAILS = ["oscar.cs.lee@gmail.com"];
-    const founder =
-      FOUNDER_EMAILS.includes(String(prof?.email ?? "").trim().toLowerCase()) ||
-      FOUNDER_EMAILS.includes(String(payload?.email ?? "").trim().toLowerCase());
+    // `payload.email` is deliberately NOT consulted: it used to be, which
+    // meant anyone who sent the founder's address in the request body
+    // unlocked Planning for themselves. See isFounder.
+    const founder = await isFounder(teacherId, prof?.email);
     return json({ code, count, planningUnlocked: count >= 1 || founder });
   }
 
