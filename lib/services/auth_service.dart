@@ -9,6 +9,32 @@ import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Where an OAuth provider sends the teacher back to.
+///
+/// On a phone this is the app's own deep link, which supabase_flutter catches
+/// and turns into a session.
+///
+/// In a browser that same link is a dead end: nothing can open
+/// `com.markless.app://`, so the provider hands the tab an address it cannot
+/// follow and the session never arrives. Sending it anyway is what left web
+/// sign-in spinning until its three-minute timeout — the app was waiting for
+/// a callback that could not physically happen.
+///
+/// So on the web the round trip comes back to the page it started from. The
+/// fragment and query are dropped: the app's router lives in the fragment,
+/// and the provider appends its own parameters on the way back.
+///
+/// Whatever this returns must also be listed in Supabase under
+/// Authentication → URL Configuration → Redirect URLs, or Supabase refuses it
+/// and falls back to the project's Site URL.
+String oauthRedirectUrl() =>
+    kIsWeb ? webOAuthRedirectFrom(Uri.base) : 'com.markless.app://login-callback';
+
+/// The browser half of [oauthRedirectUrl], taking the page's address rather
+/// than reading `Uri.base`, so the rule can be tested off the web.
+@visibleForTesting
+String webOAuthRedirectFrom(Uri here) => '${here.origin}${here.path}';
+
 class AuthService extends ChangeNotifier {
   static const _kCurrentUserKey = 'ai_marker.current_user';
   // Must match main.dart's Supabase.initialize values.
@@ -166,10 +192,17 @@ class AuthService extends ChangeNotifier {
     return '${n[0].toUpperCase()}${n.substring(1)}';
   }
 
-  /// OAuth sign-in (Google / Apple) via the system browser. The redirect
-  /// deep link (com.markless.app://login-callback) is caught by
-  /// supabase_flutter, which completes the session; we wait for it here.
-  /// Requires the provider to be enabled in the Supabase dashboard.
+  /// OAuth sign-in (Google / Apple) via the system browser.
+  ///
+  /// On a phone the redirect deep link is caught by supabase_flutter, which
+  /// completes the session, and we wait for it here.
+  ///
+  /// In a browser there is nothing to wait for: the tab navigates away to the
+  /// provider and the session lands on the page that comes back, where the
+  /// login screen adopts it. See [oauthRedirectUrl].
+  ///
+  /// Requires the provider to be enabled in the Supabase dashboard, and the
+  /// return address to be listed under Authentication → URL Configuration.
   Future<void> signInWithProvider(OAuthProvider provider) async {
     final client = _supabase;
     if (client == null) throw Exception('Cloud sign-in isn\'t available in this build.');
@@ -187,11 +220,17 @@ class AuthService extends ChangeNotifier {
     try {
       await client.auth.signInWithOAuth(
         provider,
-        redirectTo: 'com.markless.app://login-callback',
+        redirectTo: oauthRedirectUrl(),
         // Google sign-ins also connect Drive (drive.file = only files this
         // app creates), so marked tests can be exported to a Drive folder.
         scopes: provider == OAuthProvider.google ? 'https://www.googleapis.com/auth/drive.file' : null,
       );
+      // In a browser that call navigates this tab away to the provider, so
+      // there is nothing left here to wait for — this page is ending. The
+      // session arrives on the page that comes back, where the login screen
+      // adopts it from the URL. Awaiting here would block a page that is
+      // already on its way out.
+      if (kIsWeb) return;
       await completer.future.timeout(
         const Duration(minutes: 3),
         onTimeout: () => throw Exception('Sign-in wasn\'t completed — try again.'),
@@ -277,9 +316,12 @@ class AuthService extends ChangeNotifier {
     try {
       await client.auth.linkIdentity(
         OAuthProvider.google,
-        redirectTo: 'com.markless.app://login-callback',
+        redirectTo: oauthRedirectUrl(),
         scopes: 'https://www.googleapis.com/auth/drive.file',
       );
+      // Same as sign-in above: in a browser this tab is on its way to Google
+      // and will not be here to receive anything.
+      if (kIsWeb) return;
       await completer.future.timeout(
         const Duration(minutes: 3),
         onTimeout: () => throw Exception('Google linking wasn\'t completed — try again.'),
