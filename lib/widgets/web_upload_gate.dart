@@ -51,11 +51,16 @@ Future<bool> ensureWebUploadAcknowledged(
     barrierDismissible: false,
     builder: (ctx) => AlertDialog(
       title: const Text('Hiding names in a browser is weaker'),
+      // Short on purpose. This is read once, by someone holding a stack of
+      // papers who wants to get on with it, and a teacher who skims three
+      // paragraphs has been told nothing. What survives is the only part
+      // that changes what she would do: a page with no printed label goes up
+      // with the name on it. The rest — that redaction is local, that a Form
+      // avoids the question — is in Settings and on the button beside this.
       content: SingleChildScrollView(
         child: Text(
-          'Markless reads each page here on your own machine and blacks out the "Name:" line before the page is sent for marking. Nothing about that step goes over the network, in a browser or on a phone.\n\n'
-          'The browser reader is weaker than the one on a phone. It works off the printed label on the sheet, not the handwriting, so it covers the whole line rather than the name exactly — and the first page takes a few extra seconds while it loads.\n\n'
-          'On a page where it finds no label, nothing is covered and that page goes up as you picked it. Markless tells you when that happens, on the page itself, so you can cover it yourself. A Google Form or CSV avoids the question entirely: that route sends answers keyed by row number and never sends the name column.',
+          'Markless blacks out the "Name:" line on your own machine before a page is sent, here and on a phone.\n\n'
+          'A browser reads the printed label rather than the handwriting, so it covers the whole line. If a page has no printed "Name:" on it, nothing is covered — Markless says so on the page, so you can cover it yourself.',
           style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(height: 1.45),
         ),
       ),
