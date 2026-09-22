@@ -7,9 +7,9 @@ import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/id_factory.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
+import 'package:marking_prokect_v2/services/overnight_page_store.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
-import 'package:path_provider/path_provider.dart';
 
 /// The two things an overnight batch asks the server for, behind one small
 /// interface.
@@ -39,11 +39,12 @@ class OvernightPaper {
   final String customId;
   final String label;
 
-  /// Where the scanned pages live on this phone, relative to the app's
-  /// documents folder. The pages are NOT held in memory — the app will be
-  /// closed for hours before the marks come back — and the folder itself is
-  /// not written down, because iOS moves it out from under the app on every
-  /// update. Resolve with [absolutePagePaths].
+  /// Where the scanned pages are being kept, relative to whatever this
+  /// device keeps them in — the app's documents folder on a phone, the
+  /// browser's IndexedDB in a tab. The pages are NOT held in memory: the app
+  /// will be closed for hours before the marks come back. The folder itself
+  /// is not written down either, because iOS moves it out from under the app
+  /// on every update.
   final List<String> pagePaths;
   final String classId;
   final String presetId;
@@ -84,7 +85,8 @@ class OvernightPaper {
         studentName: j['student_name']?.toString(),
       );
 
-  /// Where the pages actually are, right now, on this phone.
+  /// Where the pages actually are, right now, on a phone. Browsers resolve
+  /// keys through the page store instead — there is no path to build.
   List<String> absolutePagePaths(Directory documents) =>
       [for (final p in pagePaths) '${documents.path}/$p'];
 
@@ -173,18 +175,26 @@ class OvernightBatch {
 /// each tracked separately.
 ///
 /// The app will be closed while this runs, so nothing lives in memory: the
-/// scanned pages are written to disk and the batch list is persisted. On the
-/// next launch the batches are polled and any that finished are filed away.
+/// scanned pages are handed to durable storage and the batch list is
+/// persisted. On the next launch the batches are polled and any that
+/// finished are filed away.
 class OvernightService extends ChangeNotifier {
   static const storageKey = 'ai_marker.overnight_batches';
   final LocalStore _store;
   final OvernightApi _api;
-  final Future<Directory> Function() _documentsDir;
 
-  OvernightService({LocalStore? store, OvernightApi? api, Future<Directory> Function()? documentsDir})
-      : _store = store ?? const LocalStore(),
+  /// Where the scans wait. A folder on a phone, IndexedDB in a browser —
+  /// this service never needs to know which.
+  final OvernightPageStore _pages;
+
+  OvernightService({
+    LocalStore? store,
+    OvernightApi? api,
+    Future<Directory> Function()? documentsDir,
+    OvernightPageStore? pages,
+  })  : _store = store ?? const LocalStore(),
         _api = api ?? const _LiveOvernightApi(),
-        _documentsDir = documentsDir ?? getApplicationDocumentsDirectory;
+        _pages = pages ?? createOvernightPageStore(documentsDir: documentsDir);
 
   /// Anthropic gives a batch 24 hours to finish. A set still unfinished well
   /// past that is never going to arrive, and a card promising marks in the
@@ -225,32 +235,61 @@ class OvernightService extends ChangeNotifier {
       debugPrint('OvernightService.init failed: $e');
       _all = const [];
     }
+    await _sweepOrphanedPages();
     notifyListeners();
+  }
+
+  /// Throws away scans no batch is waiting on any more.
+  ///
+  /// Only where a filed paper's pages are of no further use — a browser.
+  /// On a phone they are what the result screen reopens a marked paper
+  /// from, so sweeping there would delete the scans of every paper the
+  /// teacher has ever had marked overnight.
+  Future<void> _sweepOrphanedPages() async {
+    if (_pages.keepsFiledPages) return;
+    try {
+      final wanted = <String>{
+        for (final b in _all)
+          for (final p in b.papers) p.customId,
+      };
+      // Keys are "overnight/<paper>/p0.jpg", so the paper a page belongs to
+      // is the folder it sits in.
+      final held = <String>{};
+      for (final key in await _pages.keys()) {
+        final parts = key.split('/');
+        if (parts.length >= 2) held.add(parts[parts.length - 2]);
+      }
+      for (final paper in held.difference(wanted)) {
+        await _pages.discard(paper);
+      }
+    } catch (e) {
+      debugPrint('OvernightService: could not tidy up old scans — $e');
+    }
   }
 
   Future<void> _persist() async => _store.setString(storageKey, jsonEncode(_all.map((b) => b.toJson()).toList()));
 
-  /// Writes a paper's pages somewhere they'll survive the app closing, and
-  /// returns where they went.
+  /// Puts a paper's pages somewhere they'll survive the app closing, and
+  /// returns the keys they went under.
   ///
-  /// The documents folder, not the temporary one: the OS is free to empty
-  /// the temporary folder whenever it wants space back, and it would be
-  /// doing exactly that overnight while the app sits closed.
+  /// Durable storage, not scratch space: the OS is free to empty a
+  /// temporary folder — or a browser its cache — whenever it wants room
+  /// back, and it would be doing exactly that overnight while the app sits
+  /// closed.
   ///
-  /// The paths returned are relative to that folder. iOS hands the app a
-  /// new container after every update and moves the documents into it, so
-  /// an absolute path written down at bedtime can point nowhere by morning.
+  /// The keys returned are relative. iOS hands the app a new container
+  /// after every update and moves the documents into it, so an absolute
+  /// path written down at bedtime can point nowhere by morning.
+  ///
+  /// An empty list means this paper cannot be marked overnight and should
+  /// stay in the tray. [PageStoreFull] comes back out instead when the
+  /// reason is simply that there is no room, because that is the one thing
+  /// a teacher can act on.
   Future<List<String>> stashPages(String customId, List<Uint8List> pages) async {
     try {
-      final root = await _documentsDir();
-      final dir = Directory('${root.path}/overnight/$customId');
-      await dir.create(recursive: true);
-      final paths = <String>[];
-      for (var i = 0; i < pages.length; i++) {
-        await File('${dir.path}/p$i.jpg').writeAsBytes(pages[i], flush: true);
-        paths.add('overnight/$customId/p$i.jpg');
-      }
-      return paths;
+      return await _pages.write(customId, pages);
+    } on PageStoreFull {
+      rethrow;
     } catch (e) {
       debugPrint('OvernightService.stashPages failed: $e');
       return const [];
@@ -258,15 +297,8 @@ class OvernightService extends ChangeNotifier {
   }
 
   /// Removes pages stashed for a paper that never made it into a batch, so
-  /// a failed send doesn't leave a class set's scans on the phone forever.
-  Future<void> discardStash(String customId) async {
-    try {
-      final dir = Directory('${(await _documentsDir()).path}/overnight/$customId');
-      if (await dir.exists()) await dir.delete(recursive: true);
-    } catch (e) {
-      debugPrint('OvernightService.discardStash failed: $e');
-    }
-  }
+  /// a failed send doesn't leave a class set's scans on the device forever.
+  Future<void> discardStash(String customId) => _pages.discard(customId);
 
   /// Sends a class set off for the night. [items] carries everything the
   /// server needs to mark each paper; [papers] is what this device needs to
@@ -314,11 +346,6 @@ class OvernightService extends ChangeNotifier {
     final unfinished = <String>[];
     var stillMarking = false;
     try {
-      final root = await _documentsDir().catchError((Object e) {
-        debugPrint('OvernightService: no documents folder — $e');
-        return Directory('');
-      });
-
       for (final batch in waiting) {
         BatchOutcome outcome;
         try {
@@ -362,7 +389,6 @@ class OvernightService extends ChangeNotifier {
             await _fileResult(
               paper: paper,
               res: res,
-              root: root,
               teacherId: teacherId,
               students: students,
               submissions: submissions,
@@ -388,10 +414,12 @@ class OvernightService extends ChangeNotifier {
 
       // A set with every paper filed has nothing left to say. One that left
       // papers behind stays, with its scans, until the teacher deals with it.
-      final spent = _all.where((b) => b.settledAt != null && b.failures.isEmpty).map((b) => b.batchId).toSet();
-      if (spent.isNotEmpty) {
+      final done = _all.where((b) => b.settledAt != null && b.failures.isEmpty).toList();
+      if (done.isNotEmpty) {
+        final spent = done.map((b) => b.batchId).toSet();
         _all = _all.where((b) => !spent.contains(b.batchId)).toList();
         await _persist();
+        await _releasePages(done);
       }
     } finally {
       _lastReport = OvernightReport(filed: filed, unfinished: unfinished, stillMarking: stillMarking);
@@ -401,12 +429,25 @@ class OvernightService extends ChangeNotifier {
     return filed;
   }
 
+  /// Lets go of the scans of batches that are over.
+  ///
+  /// Only where keeping them buys nothing — see [OvernightPageStore]. On a
+  /// phone a marked paper's scan is what the result screen reopens, so it
+  /// stays exactly as it always has.
+  Future<void> _releasePages(List<OvernightBatch> batches) async {
+    if (_pages.keepsFiledPages) return;
+    for (final batch in batches) {
+      for (final paper in batch.papers) {
+        await _pages.discard(paper.customId);
+      }
+    }
+  }
+
   /// Saves one marked paper as a submission, linking it to a student by the
   /// name read off the page when the app has one.
   Future<void> _fileResult({
     required OvernightPaper paper,
     required AiGradeResult res,
-    required Directory root,
     required String teacherId,
     required StudentsService students,
     required SubmissionsService submissions,
@@ -445,15 +486,19 @@ class OvernightService extends ChangeNotifier {
       createdAt: now,
       updatedAt: now,
       resultJson: res.toJson(),
-      pageImagePaths: paper.absolutePagePaths(root),
+      pageImagePaths: await _pages.resolve(paper.pagePaths),
     ));
   }
 
-  /// Forgets a batch the teacher no longer wants waiting on them. The pages
-  /// stay on disk — dropping the tracking must not delete their scans.
+  /// Forgets a batch the teacher no longer wants waiting on them. On a phone
+  /// the pages stay on disk — dropping the tracking must not delete their
+  /// scans. In a browser nothing can read them back, so they go with it
+  /// rather than sitting in her site data forever.
   Future<void> forget(String batchId) async {
+    final dropped = _all.where((b) => b.batchId == batchId).toList();
     _all = _all.where((b) => b.batchId != batchId).toList();
     await _persist();
+    await _releasePages(dropped);
     notifyListeners();
   }
 }
