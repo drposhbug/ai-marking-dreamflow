@@ -187,6 +187,15 @@
     const { pdfjsLib } = globalThis;
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/pdf.worker.min.mjs';
   </script>
+  <!-- The page-reading engine that blacks a student's name out before a
+       photo is uploaded lives in tesseract/, vendored from our own origin
+       for exactly the same reasons as pdf.js above. It is deliberately NOT
+       loaded here: engine, worker and the English model come to about 7 MB,
+       and a teacher who only ever imports a Google Form should not pay for
+       that on app open. lib/services/page_text_reader_web.dart injects
+       tesseract/markless_ocr.js the first time a page of student work is on
+       its way in, which is minutes before anything is sent. -->
+  <link rel="prefetch" href="tesseract/markless_ocr.js" as="script">
   <noscript>
     <div id="noscript-message">
       <h1>Markless needs JavaScript</h1>
