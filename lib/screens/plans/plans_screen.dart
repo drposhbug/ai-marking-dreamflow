@@ -96,11 +96,17 @@ class _PlansScreenState extends State<PlansScreen> {
     Future.microtask(() async {
       if (!mounted) return;
       // Offerings can arrive after startup (or not at all before sign-in) —
-      // ask again so prices are live by the time the cards paint.
-      await context.read<BillingService>().loadOfferings();
+      // ask again so prices are live by the time the cards paint. On the web
+      // this asks the server which Stripe prices exist instead.
+      final billing = context.read<BillingService>();
+      await billing.loadOfferings();
       if (!mounted) return;
       final auth = context.read<AuthService>().currentUser;
       if (auth == null) return;
+      // A browser coming back from Stripe lands here. The URL proves
+      // nothing, so this asks the server what the webhook wrote.
+      await _settleCheckoutReturn(billing, auth.id);
+      if (!mounted) return;
       try {
         // force: this screen IS the usage meter — a teacher opens it to see
         // their real allowance (often straight after buying a plan), so a
@@ -128,8 +134,73 @@ class _PlansScreenState extends State<PlansScreen> {
     return null;
   }
 
+  /// The teacher is back from Stripe's checkout page. Every outcome here is
+  /// the server's answer, never the URL's — a teacher who types
+  /// `?checkout=success` gets "still processing", because the plan is read
+  /// back off profiles.plan and only the signature-verified webhook writes it.
+  Future<void> _settleCheckoutReturn(BillingService billing, String teacherId) async {
+    if (!billing.onWeb) return;
+    final result = await billing.handleCheckoutReturn(teacherId: teacherId);
+    if (!mounted) return;
+    switch (result) {
+      case CheckoutReturn.none:
+        break;
+      case CheckoutReturn.cancelled:
+        _snack('Checkout cancelled — nothing was charged.');
+      case CheckoutReturn.granted:
+        _snack('You\'re all set — welcome aboard! Your credits have been upgraded.');
+      case CheckoutReturn.pending:
+        _snack('Payment received — your new plan is still being switched on. Refresh in a moment.');
+    }
+  }
+
+  /// Stripe's own billing portal, where a teacher changes the card or
+  /// cancels. A subscription you cannot cancel from the place you bought it
+  /// is a trap, so this ships alongside the buy buttons rather than after.
+  Future<void> _manageWebSubscription() async {
+    final billing = context.read<BillingService>();
+    final teacherId = context.read<AuthService>().currentUser?.id ?? '';
+    if (teacherId.isEmpty) {
+      _snack('Sign in first.');
+      return;
+    }
+    final opened = await billing.openBillingPortal(teacherId: teacherId);
+    if (!mounted || opened) return;
+    _snack('Couldn\'t open the billing page. If you subscribed in the phone app, manage it in the store instead.');
+  }
+
   Future<void> _buy(_Tier tier, Package? package) async {
     final billing = context.read<BillingService>();
+
+    // ── Web: Stripe Checkout. The app sends a tier name; the server owns
+    // the price. See BillingService.startWebCheckout.
+    if (billing.onWeb) {
+      final teacherId = context.read<AuthService>().currentUser?.id ?? '';
+      if (teacherId.isEmpty) {
+        _snack('Sign in first so the plan lands on your account.');
+        return;
+      }
+      setState(() => _busyTierId = tier.id);
+      final outcome = await billing.startWebCheckout(tier.id, teacherId: teacherId);
+      if (!mounted) return;
+      setState(() => _busyTierId = null);
+      switch (outcome) {
+        case PurchaseOutcome.redirected:
+          // The tab is on its way to Stripe; saying anything here would
+          // flash past.
+          break;
+        case PurchaseOutcome.unavailable:
+          _snack(billing.unavailableReason.isNotEmpty
+              ? billing.unavailableReason
+              : '${tier.name} isn\'t on sale on the web yet.');
+        case PurchaseOutcome.failed:
+        case PurchaseOutcome.success:
+        case PurchaseOutcome.cancelled:
+          _snack('Couldn\'t open the checkout. Nothing was charged — please try again.');
+      }
+      return;
+    }
+
     if (package == null) {
       _snack('${tier.name} isn\'t available in the store yet.');
       return;
@@ -145,6 +216,7 @@ class _PlansScreenState extends State<PlansScreen> {
         break;
       case PurchaseOutcome.unavailable:
         _snack('Purchases aren\'t switched on in this build yet.');
+      case PurchaseOutcome.redirected:
       case PurchaseOutcome.failed:
         _snack('That purchase didn\'t go through. Nothing was charged.');
     }
@@ -178,7 +250,12 @@ class _PlansScreenState extends State<PlansScreen> {
               tier: tier,
               package: _packageFor(tier, packages),
               busy: _busyTierId == tier.id,
-              purchasable: billing.available,
+              // In a browser there is no store package to check: what makes
+              // a tier buyable is the server holding a Stripe price for it.
+              purchasable: billing.onWeb
+                  ? billing.webCheckoutReady && billing.webCheckoutTiers.contains(tier.id)
+                  : billing.available,
+              needsPackage: !billing.onWeb,
               onBuy: () => _buy(tier, _packageFor(tier, packages)),
             ),
             const SizedBox(height: 12),
@@ -223,9 +300,22 @@ class _PlansScreenState extends State<PlansScreen> {
                   ),
               ],
             ),
+          if (billing.onWeb && billing.webCheckoutReady) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: _busyTierId == null ? _manageWebSubscription : null,
+                  child: const Text('Manage or cancel subscription'),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
-            'Marking overnight costs about a fifth of marking on the spot, which is why every plan goes so much further that way. Credits are cost-weighted, not a flat test count: a short multiple-choice quiz uses far less than a six-page problem set, and re-marking the same paper is free. Subscriptions renew until cancelled and can be cancelled any time in the store.',
+            billing.onWeb
+                ? 'Marking overnight costs about a fifth of marking on the spot, which is why every plan goes so much further that way. Credits are cost-weighted, not a flat test count: a short multiple-choice quiz uses far less than a six-page problem set, and re-marking the same paper is free. Payment is handled by Stripe — your card details never touch Markless. Subscriptions renew until cancelled and can be cancelled any time from Manage subscription.'
+                : 'Marking overnight costs about a fifth of marking on the spot, which is why every plan goes so much further that way. Credits are cost-weighted, not a flat test count: a short multiple-choice quiz uses far less than a six-page problem set, and re-marking the same paper is free. Subscriptions renew until cancelled and can be cancelled any time in the store.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
           ),
         ],
@@ -286,15 +376,26 @@ class _TierCard extends StatelessWidget {
   final Package? package;
   final bool busy;
   final bool purchasable;
+
+  /// A store purchase needs a published product behind it; a Stripe checkout
+  /// doesn't — the price lives on the server.
+  final bool needsPackage;
   final VoidCallback onBuy;
 
-  const _TierCard({required this.tier, required this.package, required this.busy, required this.purchasable, required this.onBuy});
+  const _TierCard({
+    required this.tier,
+    required this.package,
+    required this.busy,
+    required this.purchasable,
+    required this.needsPackage,
+    required this.onBuy,
+  });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final price = package?.storeProduct.priceString ?? tier.fallbackPrice;
-    final canBuy = purchasable && package != null && !busy;
+    final canBuy = purchasable && (package != null || !needsPackage) && !busy;
 
     return Card(
       shape: RoundedRectangleBorder(
