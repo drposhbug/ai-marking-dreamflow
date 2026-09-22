@@ -57,3 +57,8 @@ supabase/.temp/
 
 # The SQL tests pull Postgres-compiled-to-WASM down as a dev dependency.
 tool/sql/node_modules/
+
+# Vercel build output. Same source as docs/, different base path; rebuilt
+# by tool/build_vercel.ps1 whenever it is deployed.
+.vercel-out/
+.vercel/
