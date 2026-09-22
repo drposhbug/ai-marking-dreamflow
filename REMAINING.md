@@ -647,19 +647,30 @@ justification. What differs is everything that needs hardware or a store.
 | Report comments, planning | yes | yes | — |
 | Gradebook CSV / Drive export | yes | yes | — |
 | Drag-drop + paste intake | n/a | **web only** | — |
-| **Hide student names** | **yes** | **NO** | ML Kit is native-only. Acknowledgement gate + honest copy already ship. |
-| **Overnight marking** | **yes** | **NO** | no filesystem to stash scans. Button hidden on web (R22 fix). |
-| **Buy a plan** | yes | **NO** | RevenueCat has no web SDK here — "Plans are bought in the phone app". |
+| **Hide student names** | yes | **yes, weaker** | Tesseract vendored under `web/tesseract/`, runs on the teacher's machine. Reads the printed label, not the handwriting, so it covers the line edge to edge and reports no name. Acknowledgement re-asked at v2. |
+| **Overnight marking** | yes | **yes** | IndexedDB page store replaces the documents folder. Durability proved across a page reload in Chrome. |
+| **Buy a plan** | yes | **yes** | Stripe Checkout (not RevenueCat) + billing portal. Webhook is the only writer of `profiles.plan` on web. **Dead until the keys are set.** |
 | **Push notifications** | yes (once OneSignal set) | **NO** | — |
 | Camera auto-capture | yes | manual only | `camera_web` has no image stream |
 | Saved page images | on device | cloud only | no local FS |
 
-- [ ] **R22.1 THE COMMERCIAL GAP: a web teacher cannot pay you.** Trial on web
-      → cannot mark a set on the spot (Pro), cannot mark overnight (no FS),
-      cannot upgrade (no web billing). The pilot screen now points them at the
-      Form route, which works and is cheap — but the funnel ends there.
-      **RevenueCat Web Billing (R10.5) is the fix**, and since 2026-06-30 a web
-      checkout costs 10% vs Play's 15%. Decide before pushing web hard.
+- [x] **R22.1 THE COMMERCIAL GAP — closed in code, blocked on keys.** A web
+      teacher can now buy a plan, mark a set on the spot, and queue a set
+      overnight. Stripe rather than RevenueCat Web Billing: a web checkout
+      costs 10% vs Play's 15% either way, and RevenueCat would have been a
+      second integration for the same money. **Owner: set `STRIPE_SECRET_KEY`,
+      `STRIPE_WEBHOOK_SECRET`, `STRIPE_RETURN_ORIGIN` and the four price ids —
+      runbook in `docs/stripe-web-billing.md`.** Until then every path returns
+      an honest 503, never a dead button.
+- [ ] **R22.4 Double subscription.** A teacher who subscribes on the phone AND
+      on the web pays twice, and the two webhooks fight over `profiles.plan`.
+      Neither rail knows the other exists. Cheapest fix: refuse a web checkout
+      when `profiles.plan` was last written by RevenueCat, and say why.
+- [ ] **R22.5 A scanned stack is now ~1s/page slower in a browser.** Splitting
+      a stack and anchoring error marks call the page reader too, and on web
+      they used to skip it instantly. It reports progress, so it is visible
+      rather than a hang — but worth a look before a teacher meets a 30-page
+      stack.
 - [ ] **R22.2** Decide what the web app is FOR and say it on the site: it is a
       complete "mark from a Form or a scan, right now" tool, and the phone is
       for photographing a stack, overnight marking and buying a plan.
