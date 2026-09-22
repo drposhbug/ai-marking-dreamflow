@@ -122,6 +122,47 @@ void main() {
     });
   });
 
+  group('finding the identity line when only printed labels can be read', () {
+    // What a browser has. Tesseract reads the printed "Name:" off a test
+    // template; it does not read the child's handwriting beside it.
+
+    test('the printed label on its own is enough to cover the line', () {
+      final found = Anonymizer.identityIn(_line('Name:', lineId: 0), trust: OcrTrust.printedLabelsOnly);
+      expect(found.found, isTrue);
+      expect(found.regions, hasLength(1));
+    });
+
+    test('the cover runs edge to edge, because where the handwriting ends is unknown', () {
+      // The dangerous version of this feature covers the label and leaves
+      // the name beside it showing, while reporting success.
+      final found = Anonymizer.identityIn(_line('Name:', lineId: 0), trust: OcrTrust.printedLabelsOnly);
+      expect(found.regions.first.left, 0);
+      expect(found.regions.first.right, double.infinity);
+    });
+
+    test('nothing beside the label is reported as the student\'s name', () {
+      // Whatever this reader made of the scrawl is a guess, and a guessed
+      // name files a result under the wrong child without saying so.
+      final found = Anonymizer.identityIn(_line('Name: Ana Lopez', lineId: 0), trust: OcrTrust.printedLabelsOnly);
+      expect(found.name, isNull);
+      expect(found.found, isTrue);
+    });
+
+    test('a page with no label read off it is still not redacted', () {
+      final found =
+          Anonymizer.identityIn(_line('Photosynthesis needs light', lineId: 0), trust: OcrTrust.printedLabelsOnly);
+      expect(found.found, isFalse);
+      expect(found.name, isNull);
+    });
+
+    test('a reader that does read handwriting is unchanged', () {
+      final found = Anonymizer.identityIn(_line('Name: Ana Lopez', lineId: 0), trust: OcrTrust.readsHandwriting);
+      expect(found.name, 'Ana Lopez');
+      expect(found.regions.first.right.isFinite, isTrue);
+      expect(found.regions.first.left, greaterThan(0));
+    });
+  });
+
   group('blacking the name out of what is uploaded', () {
     test('the region is painted solid black and the rest is left alone', () {
       final masked = Anonymizer.maskRegions(_blankPage(), [const Rect.fromLTWH(40, 40, 120, 30)]);
@@ -140,6 +181,21 @@ void main() {
 
     test('an image that cannot be decoded reports failure instead of pretending', () {
       expect(Anonymizer.maskRegions(Uint8List.fromList([1, 2, 3, 4]), [const Rect.fromLTWH(0, 0, 5, 5)]), isNull);
+    });
+
+    test('a region with no known right edge is painted to the edge of the page', () {
+      // A reader that cannot see handwriting does not know where the name
+      // ends, so it asks for the rest of the line. Infinity means "to the
+      // paper's edge", and only the paper knows where that is.
+      final masked = Anonymizer.maskRegions(_blankPage(), [const Rect.fromLTRB(0, 40, double.infinity, 70)]);
+      expect(masked, isNotNull);
+      final out = img.decodeImage(masked!)!;
+      expect(out.getPixel(200, 55).r, lessThan(30));
+      // The far right of that line, where a name written past the label
+      // would sit, is black too.
+      expect(out.getPixel(398, 55).r, lessThan(30));
+      // And the work below it is untouched — the model still has a page.
+      expect(out.getPixel(200, 200).r, greaterThan(200));
     });
   });
 
@@ -180,11 +236,16 @@ void main() {
       expect(Anonymizer.outcome(settingOn: false, anyRedacted: false, available: true), NameHiding.off);
     });
 
-    test('a browser is reported as unable to hide anything, whatever the setting says', () {
+    test('a platform with no reader is reported as unable to hide anything, whatever the setting says', () {
       // The setting being on must never be allowed to read as "it happened".
       expect(Anonymizer.outcome(settingOn: true, anyRedacted: false, available: false), NameHiding.unavailable);
       expect(Anonymizer.outcome(settingOn: false, anyRedacted: false, available: false), NameHiding.unavailable);
-      expect(NameHiding.unavailable.detail.toLowerCase(), contains('browser'));
+      expect(NameHiding.unavailable.detail, isNotEmpty);
+      // And it must no longer blame the browser for it. A browser hides
+      // names now; saying otherwise would send a teacher to cover pages by
+      // hand that the app already covered.
+      expect(NameHiding.unavailable.detail.toLowerCase(), isNot(contains('browser')));
+      expect(NameHiding.unavailable.headline.toLowerCase(), isNot(contains('browser')));
     });
 
     test('what will happen is said before the work is sent, not after', () {
@@ -198,6 +259,12 @@ void main() {
       // The test VM is not a browser; the browser case is covered above by
       // passing available: false, because kIsWeb cannot be faked here.
       expect(Anonymizer.available, isTrue);
+    });
+
+    test('availability is whatever the page reader on this platform says', () {
+      // Not "is this a phone" any more. A browser has a reader now, so the
+      // answer has to come from the reader that would actually run.
+      expect(Anonymizer.available, WordLocator.available);
     });
   });
 

@@ -35,7 +35,7 @@ const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 const TITLE = 'Markless — mark a class set in minutes, with real feedback';
 const DESCRIPTION =
-  'Markless takes the first pass at marking. Import a Google Form or scan a stack of paper and get question-by-question marks, a justification for every deduction, and feedback students will read. Student names are blacked out on the phone before anything is uploaded.';
+  'Markless takes the first pass at marking. Import a Google Form or scan a stack of paper and get question-by-question marks, a justification for every deduction, and feedback students will read. Student names are blacked out on your own device before anything is uploaded.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),

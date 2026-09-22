@@ -247,7 +247,7 @@ function ScanVisual({ local, staticMode }: VisProps) {
           <p className="pg-note">30 papers · one document feeder · one PDF.</p>
         </div>
       </div>
-      <figcaption>An illustration of redaction on iOS and Android — not a screenshot, and read the limits below.</figcaption>
+      <figcaption>An illustration of redaction — not a screenshot, and read the limits below.</figcaption>
     </figure>
   );
 }

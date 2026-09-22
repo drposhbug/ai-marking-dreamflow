@@ -620,10 +620,11 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     ));
   }
 
-  /// The Google Form / CSV route. In a browser it is also the only route
-  /// that keeps student names off the wire — answers go up keyed by row
-  /// number and the name column is never sent — so it is recommended there
-  /// and placed first.
+  /// The Google Form / CSV route. In a browser it is also the surest route
+  /// for keeping student names off the wire — answers go up keyed by row
+  /// number and the name column is never sent, with no recognition step that
+  /// could fail to find a name field — so it is recommended there and placed
+  /// first.
   Widget _importFormCard(BuildContext context) {
     return Card(
       child: InkWell(
@@ -665,7 +666,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                     if (kIsWeb) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'In a browser, use this one: answers go up keyed by row number and the name column is never sent. Photos here cannot have names hidden.',
+                        'In a browser, use this one: answers go up keyed by row number and the name column is never sent. Photos here have the "Name:" line blacked out first, but a browser reads a page less well than a phone — this route has nothing to read.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.secondary, height: 1.35),
                       ),
                     ],

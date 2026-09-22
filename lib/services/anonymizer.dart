@@ -70,7 +70,7 @@ extension NameHidingReport on NameHiding {
   String get headline => switch (this) {
         NameHiding.hidden => 'Name hidden before upload',
         NameHiding.notFound => 'Name not hidden on this paper',
-        NameHiding.unavailable => 'Names can\'t be hidden in a browser',
+        NameHiding.unavailable => 'Names can\'t be hidden here',
         NameHiding.off => 'Name hiding is off',
       };
 
@@ -81,8 +81,11 @@ extension NameHidingReport on NameHiding {
           'The name was read on this device and painted out of the copy that was sent. It never left here.',
         NameHiding.notFound =>
           'No name field could be read on this paper, so it was sent exactly as scanned — including anything written on it. Cover the name yourself if that matters here.',
+        // Every platform the app ships on has a reader now, so this is the
+        // state nothing should reach. It stays because a reader that is
+        // gone has to report that it is gone, not quietly do nothing.
         NameHiding.unavailable =>
-          'Hiding names needs on-device text recognition, and a browser does not have it. Pages you upload here are sent exactly as you picked them, name and all. Cover names before uploading, or mark from a Google Form or CSV instead — that route never sends the name column.',
+          'Hiding names needs text recognition running on this device, and this one has none. Pages you upload are sent exactly as you picked them, name and all. Cover names before uploading, or mark from a Google Form or CSV instead — that route never sends the name column.',
         NameHiding.off =>
           'You turned off "Hide student names before marking" in Settings, so pages are sent with the name on them.',
       };
@@ -113,16 +116,38 @@ class Anonymizer {
 
   /// Whether name hiding can run on this device at all.
   ///
-  /// It needs on-device text recognition, which is a native library. A
-  /// browser has none, so nothing is read and nothing is covered. The app
-  /// says so rather than leaving a switch looking like it is working.
-  static bool get available => !kIsWeb;
+  /// It needs text recognition that runs here, on this machine, with the
+  /// page never leaving it. Every platform the app ships on now has one —
+  /// ML Kit on a phone, a vendored Tesseract build in a browser — but this
+  /// asks the reader rather than assuming, so a platform that loses its
+  /// reader reports honestly instead of leaving a switch looking like it is
+  /// working.
+  static bool get available => WordLocator.available;
+
+  /// The paragraph under the Settings switch. Platform-dependent, because
+  /// what actually happens is platform-dependent and a teacher acts on this
+  /// sentence with a child's work.
+  static String get hidingExplainer => switch (WordLocator.trust) {
+        OcrTrust.readsHandwriting =>
+          'Your phone reads the name off each paper and blacks it out before the page is sent to be marked — so the work is marked, not the student. The name never leaves this device; it is what files the result under the right student here. You still see the original paper, name and all. If it cannot read a name field on a page, that page is sent as it is, and the app tells you so.',
+        OcrTrust.printedLabelsOnly =>
+          'This browser reads each page here, on your machine, finds the printed "Name:" line and blacks out that whole line before the page is sent to be marked. Nothing is read anywhere else and the page never leaves your machine unredacted. Browser reading is weaker than a phone\'s: it reads the printed label, not the handwriting, so it covers the line edge to edge rather than the name exactly — and on a page where it cannot find a label, nothing is covered and the app tells you so.',
+      };
+
+  /// The line shown just above the Mark button, saying what is about to
+  /// happen to the name.
+  static String get beforeMarkNote => switch (WordLocator.trust) {
+        OcrTrust.readsHandwriting =>
+          'Your device reads the name off the page and blacks it out before this is sent. If it can\'t read one, the page goes up as it is.',
+        OcrTrust.printedLabelsOnly =>
+          'This browser finds the printed "Name:" line and blacks out that whole line before this is sent. If it can\'t find one, the page goes up as it is, and you\'ll be told.',
+      };
 
   /// What to tell the teacher, given the setting and what actually
   /// happened. Pure, because the wording is the part that has to be right.
   ///
-  /// The platform answer comes first: a teacher whose switch is on in a
-  /// browser must be told that it cannot run here, not that it is off.
+  /// The platform answer comes first: a teacher whose switch is on where
+  /// nothing can read a page must be told that, not that it is off.
   static NameHiding outcome({
     required bool settingOn,
     required bool anyRedacted,
@@ -146,13 +171,23 @@ class Anonymizer {
 
   /// The identity on one page, from its recognised words: the name to keep
   /// here, and every line that has to be painted over before upload.
+  ///
+  /// [trust] says what the reader that produced [words] could actually read,
+  /// and that changes both answers. A reader that sees the handwriting knows
+  /// where the name is and what it says. A reader that only sees the printed
+  /// label knows neither — so it covers the line right across the page and
+  /// reports no name at all, rather than a guess dressed up as a fact.
   @visibleForTesting
-  static IdentityOnPage identityIn(List<RecognizedWord> words) {
+  static IdentityOnPage identityIn(
+    List<RecognizedWord> words, {
+    OcrTrust trust = OcrTrust.readsHandwriting,
+  }) {
     final byLine = <int, List<RecognizedWord>>{};
     for (final w in words) {
       (byLine[w.lineId] ??= <RecognizedWord>[]).add(w);
     }
 
+    final readsHandwriting = trust == OcrTrust.readsHandwriting;
     String? name;
     final toCover = <Rect>[];
     for (final entry in byLine.entries) {
@@ -160,11 +195,23 @@ class Anonymizer {
       final text = lineWords.map((w) => w.text).join(' ').trim();
       if (text.isEmpty || !_identityLabel.hasMatch(text)) continue;
 
-      final value = _valueAfterLabel(text);
-      // Cover the whole line: the label alone identifies nobody, but the
-      // handwriting beside it does, and its exact extent is guesswork.
-      toCover.add(_lineBounds(lineWords));
-      name ??= value;
+      final bounds = _lineBounds(lineWords);
+      if (readsHandwriting) {
+        // Cover the whole line: the label alone identifies nobody, but the
+        // handwriting beside it does, and its exact extent is guesswork.
+        toCover.add(bounds);
+        name ??= _valueAfterLabel(text);
+      } else {
+        // The reader did not see the handwriting, so the line it measured
+        // may stop at the colon with the child's name sitting just past it.
+        // Covering from edge to edge is the only version of this that is
+        // not a lie. Infinity here means "to the paper's edge"; the masker
+        // is the only thing that knows where that is.
+        toCover.add(Rect.fromLTRB(0, bounds.top, double.infinity, bounds.bottom));
+        // No name is reported. Whatever this reader made of the scrawl is a
+        // guess, and a guessed name files a result under the wrong child
+        // without ever saying it guessed.
+      }
     }
     return IdentityOnPage(name: name, regions: toCover);
   }
@@ -183,14 +230,17 @@ class Anonymizer {
   /// fails — a marking run must never be blocked by this, but the caller is
   /// told via [AnonymizedPage.redacted] so the UI can be honest about it.
   static Future<AnonymizedPage> page(Uint8List bytes) async {
-    if (kIsWeb) return AnonymizedPage(bytes: bytes, nameOnPaper: null, redacted: false);
+    if (!available) return AnonymizedPage(bytes: bytes, nameOnPaper: null, redacted: false);
     try {
       final words = await WordLocator.recognize(bytes);
       if (words.isEmpty) return AnonymizedPage(bytes: bytes, nameOnPaper: null, redacted: false);
 
-      final found = identityIn(words);
+      final found = identityIn(words, trust: WordLocator.trust);
       if (!found.found) return AnonymizedPage(bytes: bytes, nameOnPaper: null, redacted: false);
 
+      // A browser has no isolates: `compute` runs this inline there, which
+      // is correct — the masking is one decode and one encode, and the page
+      // has already waited on OCR.
       final redacted = await compute(_maskRegions, _MaskJob(bytes, found.regions));
       return AnonymizedPage(
         bytes: redacted ?? bytes,
@@ -293,8 +343,8 @@ class IdentityOnPage {
   bool get found => regions.isNotEmpty;
 }
 
-/// Remembers that a teacher has been told, in this browser, that names
-/// cannot be hidden here.
+/// Remembers that a teacher has been told what hiding names in a browser
+/// does and does not do.
 ///
 /// Asked once per teacher, before their first upload of student work in a
 /// browser. It is a fact they have to have before they decide, not a dialog
@@ -304,7 +354,11 @@ class WebUploadNotice {
 
   const WebUploadNotice({LocalStore store = const LocalStore()}) : _store = store;
 
-  static String _key(String teacherId) => 'ai_marker.web_upload_ack.v1.$teacherId';
+  /// v2 deliberately does not read v1. Teachers on v1 agreed to "names go
+  /// up uncovered in a browser", which is no longer what happens; the thing
+  /// they agreed to is not the thing they should be agreeing to, so they
+  /// are told once more and asked again.
+  static String _key(String teacherId) => 'ai_marker.web_upload_ack.v2.$teacherId';
 
   /// Whether the teacher still has to be asked before this upload.
   static bool needed({required bool onWeb, required bool alreadyAcknowledged}) => onWeb && !alreadyAcknowledged;
@@ -330,10 +384,17 @@ Uint8List? _maskRegions(_MaskJob job) {
       // A little padding: recognition boxes hug the glyphs, and a descender
       // or a long tail on handwriting can sit outside them.
       final pad = (image.height * 0.006).round().clamp(2, 14);
-      final x = (r.left - pad).round().clamp(0, image.width - 1);
-      final y = (r.top - pad).round().clamp(0, image.height - 1);
-      final w = (r.width + pad * 2).round().clamp(1, image.width - x);
-      final h = (r.height + pad * 2).round().clamp(1, image.height - y);
+      // An infinite edge means "as far as the paper goes" — what a reader
+      // that cannot see the handwriting asks for, because it does not know
+      // where the name ends. This is the only place that knows the answer.
+      final left = r.left.isFinite ? r.left : 0.0;
+      final top = r.top.isFinite ? r.top : 0.0;
+      final right = r.right.isFinite ? r.right : image.width.toDouble();
+      final bottom = r.bottom.isFinite ? r.bottom : image.height.toDouble();
+      final x = (left - pad).round().clamp(0, image.width - 1);
+      final y = (top - pad).round().clamp(0, image.height - 1);
+      final w = (right - left + pad * 2).round().clamp(1, image.width - x);
+      final h = (bottom - top + pad * 2).round().clamp(1, image.height - y);
       img.fillRect(image, x1: x, y1: y, x2: x + w, y2: y + h, color: img.ColorRgb8(0, 0, 0));
     }
     return Uint8List.fromList(img.encodeJpg(image, quality: 88));

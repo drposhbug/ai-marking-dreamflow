@@ -105,8 +105,8 @@ export const STAGES: Stage[] = [
     n: '01',
     title: 'A stack goes through the copier once.',
     body:
-      'Thirty papers, one document feeder, one PDF. Nothing is sorted, nothing is renamed, no page is photographed twice. On iOS and Android the name field is read on the device and painted solid black in the copy that gets uploaded — the unaltered page never leaves the phone.',
-    note: 'In a browser nothing is blacked out.',
+      'Thirty papers, one document feeder, one PDF. Nothing is sorted, nothing is renamed, no page is photographed twice. The name field is read on your own device and painted solid black in the copy that gets uploaded — the unaltered page never leaves it.',
+    note: 'In a browser it covers the printed “Name:” line, not the handwriting.',
   },
   {
     id: 'split',
@@ -225,7 +225,7 @@ export const BELIEFS: Belief[] = [
     n: '02',
     title: 'Student identity does not go to the AI.',
     body:
-      'The model grades the work. It is not told, and does not need to know, whose work it is. On iOS and Android the name is read on the device, blacked out of the uploaded copy, and kept on the phone. Imported answers go up keyed by row number.',
+      'The model grades the work. It is not told, and does not need to know, whose work it is. The name is read on your own device, blacked out of the uploaded copy, and kept there — on a phone it reads the handwriting itself, in a browser it covers the printed “Name:” line. Imported answers go up keyed by row number.',
   },
   {
     n: '03',
@@ -255,7 +255,7 @@ export const BELIEFS: Belief[] = [
     n: '07',
     title: 'The limits are written down.',
     body:
-      'Redaction is best-effort on name fields, and does not run in a browser at all. There is no SOC 2 report and no signed DPA template yet. One cheap route uses a provider whose terms permit training. All of it is listed, because a reviewer will find it anyway.',
+      'Redaction is best-effort on name fields, and weaker in a browser than on a phone. There is no SOC 2 report and no signed DPA template yet. One cheap route uses a provider whose terms permit training. All of it is listed, because a reviewer will find it anyway.',
   },
 ];
 
@@ -346,7 +346,7 @@ export const LIMITS: Limit[] = [
   },
   {
     before:
-      'It does not run in a browser at all: the web version has no on-device recognition, so photographed work is sent exactly as picked, name included. Use the app, or the Form and CSV route, which is unaffected.',
+      'It is weaker in a browser: the reader there works off the printed “Name:” label rather than the handwriting, so it blacks out that whole line instead of the name exactly — and on a page with no printed label nothing is covered, which the app tells you. The phone apps read the handwriting itself. The Form and CSV route is unaffected either way.',
   },
   {
     before:

@@ -864,7 +864,7 @@ class _NameHidingNotice extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Your device reads the name off the page and blacks it out before this is sent. If it can\'t read one, the page goes up as it is.',
+              Anonymizer.beforeMarkNote,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
             ),
           ),
