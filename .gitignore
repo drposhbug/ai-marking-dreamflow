@@ -54,3 +54,6 @@ supabase/.temp/
 # Playwright MCP scratch: screenshots and console logs from browser
 # verification runs. Useful while debugging, never part of the app.
 .playwright-mcp/
+
+# The SQL tests pull Postgres-compiled-to-WASM down as a dev dependency.
+tool/sql/node_modules/

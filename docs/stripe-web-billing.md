@@ -287,13 +287,89 @@ heading is web-only and gated on `onWeb`; the phone path is untouched.
 
 Tests: `test/stripe_web_billing_test.dart`.
 
+## One subscription, two shops
+
+Two billing rails take money for the same product and neither can see the
+other: the app stores (via RevenueCat) and Stripe. Both used to write
+`profiles.plan` directly, which is a fight with two losers:
+
+| | teacher does | old `profiles.plan` |
+|---|---|---|
+| Monday | subscribes on the phone | `pro` (RevenueCat) |
+| Tuesday | subscribes on the web too | `pro` (Stripe) |
+| March | the phone subscription lapses | **`trial`** (RevenueCat) |
+
+On that last row the teacher loses a plan they are still being charged for by
+Stripe, because an `EXPIRATION` from one rail overwrote a live subscription on
+the other. Whoever wrote last won, and last had nothing to do with who was
+actually entitled.
+
+**Each rail now owns one column and writes only that column.**
+
+```
+profiles.plan_revenuecat   what the stores say, and nothing else
+profiles.plan_stripe       what Stripe says, and nothing else
+profiles.plan              DERIVED: the better of the two  <- what meters
+profiles.plan_source       DERIVED: which rail that came from
+```
+
+There is no shared cell left to clobber. A revoke drops one rail to `trial`
+and the other rail's live subscription simply keeps winning. `plan` is still
+the single column `MARKING-PROCESS` meters against, so nothing downstream
+changed.
+
+The derivation runs in SQL — `public.apply_entitlement`, defined in `SETUP-DB`
+— inside **one** `UPDATE`, so two webhooks landing in the same millisecond
+cannot interleave a read with a write. The tier ranking lives in
+`public.plan_rank` and only there; `pro_annual` sits *below* `pro` because it
+bills $10.00/mo against Pro's $14.99 and cannot carry Pro's allowance.
+
+**Stopping the second charge before it happens:**
+
+* `STRIPE-CHECKOUT` refuses with **409 `already_subscribed`** when
+  `plan_revenuecat` is a paid tier. The app reads that as "you already have
+  it", not as a broken checkout.
+* On a phone, `BillingService.buy` refuses when `plan_source` is `stripe`.
+* The Plans screen replaces every buy button with a card naming the shop the
+  plan actually lives in, and offers to open that shop's billing page where
+  the current platform can.
+* A failure to *read* the entitlement never blocks a sale — refusing a
+  paying teacher on a database hiccup is worse than a rare double purchase.
+
+### Deployment order — this one matters
+
+`apply_entitlement` must exist before the webhooks that call it:
+
+```
+1. POST .../functions/v1/SETUP-DB          # adds the columns + functions, and
+                                           # backfills plan -> plan_revenuecat
+2. npx supabase functions deploy REVENUECAT-WEBHOOK --no-verify-jwt
+3. npx supabase functions deploy STRIPE-WEBHOOK     --no-verify-jwt
+4. npx supabase functions deploy STRIPE-CHECKOUT
+5. npx supabase functions deploy MARKING-PROCESS
+```
+
+Deploying a webhook first is recoverable but not free: the RPC is missing, the
+webhook returns 500, and the store retries for days until `SETUP-DB` has run.
+Grants are not lost, but a teacher who buys in that window waits for a retry.
+
+The backfill credits every existing paid plan to **the stores**, which is
+correct because Stripe has never been switched on. If that is ever untrue when
+you run it, fix the rows by hand first.
+
+Tests: `tool/sql/entitlement.test.mjs` runs the real SQL out of `SETUP-DB`
+against Postgres-compiled-to-WASM — no Docker, no database:
+
+```
+cd tool/sql && npm install && npm test
+```
+
+The app's half is `test/one_plan_two_shops_test.dart`.
+
 ## Still to do
 
-* **Mobile ↔ web double billing.** A teacher who subscribes in the phone app
-  *and* on the web pays twice, and the two webhooks will fight over
-  `profiles.plan`. Neither rail knows about the other. Worth a check in
-  `STRIPE-CHECKOUT` (refuse when RevenueCat already has them) before this
-  is advertised.
+* ~~**Mobile ↔ web double billing.**~~ Fixed — see *One subscription, two
+  shops* below.
 * **Tax.** Stripe Tax is not enabled on the session. Add
   `automatic_tax[enabled]=true` once tax registrations exist.
 * **Refunds.** `charge.refunded` is not handled — a refund cancels the

@@ -1,9 +1,15 @@
 // supabase/functions/REVENUECAT-WEBHOOK/index.ts
 //
-// The ONLY thing allowed to write profiles.plan. RevenueCat calls this after
-// it has validated the receipt with Google/Apple, so a teacher can't grant
-// themselves a paid tier by replaying an app request (the anon key ships in
-// the APK — anything the app can send, a teacher can send).
+// The ONLY thing allowed to grant a plan from a STORE purchase. RevenueCat
+// calls this after it has validated the receipt with Google/Apple, so a
+// teacher can't grant themselves a paid tier by replaying an app request
+// (the anon key ships in the APK — anything the app can send, a teacher can
+// send).
+//
+// It writes profiles.plan_revenuecat and never profiles.plan: the web has its
+// own rail (STRIPE-WEBHOOK), and `plan` is derived from both so that a
+// cancellation here cannot cancel a subscription bought there. See
+// ../_shared/entitlement.ts for why that matters and what it costs.
 //
 // Setup (RevenueCat dashboard → Project → Integrations → Webhooks):
 //   URL:            https://<project-ref>.supabase.co/functions/v1/REVENUECAT-WEBHOOK
@@ -16,6 +22,7 @@
 // Deploy with --no-verify-jwt: RevenueCat sends its own Authorization header,
 // not a Supabase JWT.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import type { EntitlementRow } from "../_shared/entitlement.ts";
 
 function serviceDb() {
   return createClient(
@@ -89,10 +96,26 @@ Deno.serve(async (req) => {
     return json({ ok: true, ignored: type });
   }
 
-  const { error } = await serviceDb()
-    .from("profiles")
-    .upsert({ teacher_id: teacherId, plan, updated_at: new Date().toISOString() }, { onConflict: "teacher_id" });
+  // Writes the STORES' column and nothing else. A teacher who also pays on
+  // the web keeps that subscription when this one lapses — before this, an
+  // EXPIRATION here set profiles.plan to trial and cancelled a live Stripe
+  // subscription the teacher was still being charged for.
+  const { data, error } = await serviceDb()
+    .rpc("apply_entitlement", { p_teacher: teacherId, p_rail: "revenuecat", p_plan: plan })
+    .maybeSingle();
+  // A 500 makes RevenueCat retry, which is what we want when the database
+  // blinked: the grant is not lost.
   if (error) return json({ error: error.message }, 500);
+  const row = data as EntitlementRow | null;
 
-  return json({ ok: true, teacherId, plan });
+  // `plan` is what this rail now says; `effective` is what the teacher
+  // actually gets, which differs whenever the other rail holds something
+  // better. Both are logged so a support question has an answer.
+  return json({
+    ok: true,
+    teacherId,
+    plan,
+    effective: row?.plan ?? plan,
+    source: row?.plan_source ?? "revenuecat",
+  });
 });

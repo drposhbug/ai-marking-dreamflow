@@ -107,6 +107,11 @@ class _PlansScreenState extends State<PlansScreen> {
       // nothing, so this asks the server what the webhook wrote.
       await _settleCheckoutReturn(billing, auth.id);
       if (!mounted) return;
+      // Which shop is charging for this account. Asked before the cards
+      // paint, so a teacher who subscribed on their phone never sees a buy
+      // button here that the server would refuse.
+      await billing.refreshEntitlement(auth.id);
+      if (!mounted) return;
       try {
         // force: this screen IS the usage meter — a teacher opens it to see
         // their real allowance (often straight after buying a plan), so a
@@ -189,6 +194,11 @@ class _PlansScreenState extends State<PlansScreen> {
           // The tab is on its way to Stripe; saying anything here would
           // flash past.
           break;
+        case PurchaseOutcome.alreadySubscribedElsewhere:
+          // Nothing was charged, and nothing is broken: they already have it.
+          _snack(billing.otherShopNote.isNotEmpty
+              ? billing.otherShopNote
+              : 'This account already has a plan from another shop. Nothing was charged.');
         case PurchaseOutcome.unavailable:
           _snack(billing.unavailableReason.isNotEmpty
               ? billing.unavailableReason
@@ -214,6 +224,10 @@ class _PlansScreenState extends State<PlansScreen> {
         _snack('${tier.name} is active — welcome aboard! Your credits have been upgraded.');
       case PurchaseOutcome.cancelled:
         break;
+      case PurchaseOutcome.alreadySubscribedElsewhere:
+        _snack(billing.otherShopNote.isNotEmpty
+            ? billing.otherShopNote
+            : 'This account already has a plan from another shop. Nothing was charged.');
       case PurchaseOutcome.unavailable:
         _snack('Purchases aren\'t switched on in this build yet.');
       case PurchaseOutcome.redirected:
@@ -245,6 +259,19 @@ class _PlansScreenState extends State<PlansScreen> {
             style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 14),
+          // One subscription, two shops. A teacher already paying in the
+          // other one has the plan already; offering to sell it again would
+          // start a second subscription on a rail they cannot cancel from
+          // here. Say where it lives and stop selling, rather than letting
+          // them press a button the server is going to refuse.
+          if (billing.subscribedInTheOtherShop) ...[
+            _OtherShopCard(
+              note: billing.otherShopNote,
+              source: billing.planSource,
+              onManage: billing.planSource == PlanSource.web && billing.onWeb ? _manageWebSubscription : null,
+            ),
+            const SizedBox(height: 14),
+          ],
           for (final tier in _tiers) ...[
             _TierCard(
               tier: tier,
@@ -252,9 +279,12 @@ class _PlansScreenState extends State<PlansScreen> {
               busy: _busyTierId == tier.id,
               // In a browser there is no store package to check: what makes
               // a tier buyable is the server holding a Stripe price for it.
-              purchasable: billing.onWeb
-                  ? billing.webCheckoutReady && billing.webCheckoutTiers.contains(tier.id)
-                  : billing.available,
+              // Either way, a plan bought in the other shop is not on sale
+              // here at any price.
+              purchasable: !billing.subscribedInTheOtherShop &&
+                  (billing.onWeb
+                      ? billing.webCheckoutReady && billing.webCheckoutTiers.contains(tier.id)
+                      : billing.available),
               needsPackage: !billing.onWeb,
               onBuy: () => _buy(tier, _packageFor(tier, packages)),
             ),
@@ -319,6 +349,75 @@ class _PlansScreenState extends State<PlansScreen> {
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown when this account is already paying through the OTHER shop.
+///
+/// Not an error and not a warning: the teacher has the plan. What they do not
+/// have is the ability to change it from here, because only the shop that
+/// took the money can. Saying that plainly is cheaper than letting them buy a
+/// second subscription and then asking for a refund from a store that takes
+/// weeks to give one.
+class _OtherShopCard extends StatelessWidget {
+  final String note;
+  final PlanSource source;
+
+  /// Only offered when this build can actually open that shop's billing page.
+  /// A phone cannot open Stripe's portal, and a browser cannot open Google
+  /// Play, so the button appears only where it would work.
+  final VoidCallback? onManage;
+
+  const _OtherShopCard({required this.note, required this.source, this.onManage});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      color: cs.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  source == PlanSource.appStore ? Icons.phone_iphone_rounded : Icons.language_rounded,
+                  size: 20,
+                  color: cs.onPrimaryContainer,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'You already have a plan, bought in ${source.shopName}',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: cs.onPrimaryContainer,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              note,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.onPrimaryContainer,
+                    height: 1.45,
+                  ),
+            ),
+            if (onManage != null) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(onPressed: onManage, child: const Text('Manage or cancel it')),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

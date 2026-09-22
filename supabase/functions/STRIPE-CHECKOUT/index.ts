@@ -52,6 +52,7 @@
 // No SDK: like every other function here, Stripe is called with plain fetch.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { isPaidPlan } from "../_shared/entitlement.ts";
 
 function serviceDb() {
   return createClient(
@@ -207,6 +208,40 @@ async function customerFor(teacherId: string): Promise<string | null> {
   }
 }
 
+/// What each billing rail currently says about this teacher.
+///
+/// Read with the service role, because a teacher must not be able to edit
+/// the answer to "are you already paying us somewhere else?".
+///
+/// A failure here returns nothing rather than throwing: the caller treats
+/// "we could not tell" as "not subscribed", which risks letting a rare
+/// double purchase through but never blocks a teacher who is entitled to
+/// buy. Refusing a sale on a database hiccup is the worse of the two.
+async function entitlementFor(
+  teacherId: string,
+): Promise<{ plan: string | null; plan_revenuecat: string | null; plan_stripe: string | null }> {
+  const none = { plan: null, plan_revenuecat: null, plan_stripe: null };
+  try {
+    const { data, error } = await serviceDb()
+      .from("profiles")
+      .select("plan, plan_revenuecat, plan_stripe")
+      .eq("teacher_id", teacherId)
+      .maybeSingle();
+    if (error) {
+      console.error("entitlementFor failed:", error.message);
+      return none;
+    }
+    return {
+      plan: data?.plan ?? null,
+      plan_revenuecat: data?.plan_revenuecat ?? null,
+      plan_stripe: data?.plan_stripe ?? null,
+    };
+  } catch (e) {
+    console.error("entitlementFor threw:", e instanceof Error ? e.message : e);
+    return none;
+  }
+}
+
 /// The teacher's email, only so Stripe can prefill the checkout and send a
 /// receipt. Read with the service role from the row we already own.
 async function emailFor(teacherId: string): Promise<string> {
@@ -273,6 +308,27 @@ Deno.serve(async (req) => {
   }
 
   // ── create: the checkout session ──────────────────────────────────────
+  //
+  // Refuse to sell a second subscription to someone already paying through
+  // the stores. Two rails, two charges, two renewal dates and only one of
+  // them cancellable from here: the teacher would be out the money and we
+  // would have taken it. Stripe cannot see the store subscription, so this
+  // is the only place the question gets asked.
+  //
+  // Deliberately NOT symmetrical with a plan bought here: `plan_stripe` is
+  // ours to cancel, so the app offers the billing portal instead of a second
+  // checkout, and the store paywall on a phone does the same.
+  const entitlement = await entitlementFor(teacherId);
+  if (isPaidPlan(entitlement.plan_revenuecat)) {
+    return json({
+      error: "already_subscribed",
+      rail: "revenuecat",
+      plan: String(entitlement.plan_revenuecat),
+      message:
+        "This account already has a plan through the app store. Buying here would charge you a second time — manage the one you have in the Markless app instead.",
+    }, 409);
+  }
+
   const tier = String(payload?.tier ?? "").trim().toLowerCase();
   const price = priceFor(tier);
   if (!price) {

@@ -10,7 +10,56 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 ///
 /// [redirected] is web-only: the teacher has been handed to Stripe's hosted
 /// checkout and this tab is on its way out. Nothing has been bought yet.
-enum PurchaseOutcome { success, cancelled, unavailable, failed, redirected }
+///
+/// [alreadySubscribedElsewhere] is the server refusing to charge twice: this
+/// account is already paying through the other shop. Nothing was charged and
+/// nothing is wrong — the teacher has the plan, just not from here.
+enum PurchaseOutcome { success, cancelled, unavailable, failed, redirected, alreadySubscribedElsewhere }
+
+/// Which shop a teacher's plan was actually bought in.
+///
+/// Markless takes money through two rails that cannot see each other: the app
+/// stores (RevenueCat validates the receipt) and Stripe on the web. Only the
+/// shop that took the money can change or cancel the subscription, so the app
+/// has to know which one that was before it offers to do either — and before
+/// it offers to sell the same plan again.
+enum PlanSource {
+  /// Google Play or the App Store, through the phone app.
+  appStore,
+
+  /// Stripe, in a browser.
+  web,
+
+  /// Nobody is charging this account, or the server could not say. The app
+  /// treats these the same way on purpose: it stays quiet about where the
+  /// plan lives rather than naming the wrong shop.
+  unknown,
+}
+
+extension PlanSourceWords on PlanSource {
+  /// Where the money goes, in the words a teacher would use.
+  String get shopName => switch (this) {
+        PlanSource.appStore => 'the app store',
+        PlanSource.web => 'the web',
+        PlanSource.unknown => 'somewhere else',
+      };
+
+  /// What to tell a teacher who is looking at a plan they cannot buy here
+  /// because they already have it, bought somewhere else.
+  String get manageItThere => switch (this) {
+        PlanSource.appStore =>
+          'Your plan was bought in the phone app, so Google Play or the App Store handles the billing. Change or cancel it there — buying again here would charge you twice.',
+        PlanSource.web =>
+          'Your plan was bought on the web, so it is billed by card rather than through the store. Open the billing page on the Markless website to change or cancel it — buying again here would charge you twice.',
+        PlanSource.unknown => '',
+      };
+
+  static PlanSource parse(Object? raw) => switch (raw?.toString().trim().toLowerCase()) {
+        'revenuecat' => PlanSource.appStore,
+        'stripe' => PlanSource.web,
+        _ => PlanSource.unknown,
+      };
+}
 
 /// What a return from Stripe's checkout turned out to be.
 ///
@@ -231,6 +280,11 @@ class BillingService extends ChangeNotifier {
   /// RevenueCat-hosted paywall needed.
   Future<PurchaseOutcome> buy(Package package) async {
     if (!_available) return PurchaseOutcome.unavailable;
+    // Already paying by card on the web? The store cannot see that
+    // subscription and would happily start a second one beside it, on its
+    // own renewal date, which the teacher would then have to cancel in two
+    // different places. STRIPE-CHECKOUT refuses the mirror image of this.
+    if (subscribedInTheOtherShop) return PurchaseOutcome.alreadySubscribedElsewhere;
     try {
       final res = await Purchases.purchase(PurchaseParams.package(package));
       _onCustomerInfo(res.customerInfo);
@@ -430,6 +484,57 @@ class BillingService extends ChangeNotifier {
 
   static bool isPaidPlan(String? plan) => paidPlans.contains((plan ?? '').trim().toLowerCase());
 
+  /// The plan the server last reported, and which shop it came from. Both are
+  /// only ever written from a server answer — the client cannot decide it is
+  /// entitled, and cannot decide who charged it.
+  String _serverPlan = '';
+  PlanSource _planSource = PlanSource.unknown;
+
+  /// Which shop is charging for this account's plan. [PlanSource.unknown]
+  /// while nobody is, or while the server hasn't been asked yet.
+  PlanSource get planSource => _planSource;
+
+  /// True when this account is on a paid plan that was bought in the OTHER
+  /// shop — a store subscription seen from a browser, or a web subscription
+  /// seen from the phone app.
+  ///
+  /// This is the whole point of knowing the source. A teacher in this state
+  /// already has what the Plans screen is selling, and buying again would
+  /// start a second subscription on a second rail with a second renewal date,
+  /// only one of which they can cancel from where they are standing.
+  bool get subscribedInTheOtherShop {
+    if (!isPaidPlan(_serverPlan)) return false;
+    return _onWeb ? _planSource == PlanSource.appStore : _planSource == PlanSource.web;
+  }
+
+  /// What to tell that teacher. Empty when there is nothing to say.
+  String get otherShopNote => subscribedInTheOtherShop ? _planSource.manageItThere : '';
+
+  /// Asks the server what this account is entitled to and who is charging
+  /// for it. Cheap, and safe to call whenever the Plans screen opens.
+  ///
+  /// Never throws and never clears what it already knew on a failure: a
+  /// flaky network must not turn "you already subscribed on your phone" into
+  /// an invitation to subscribe again.
+  Future<void> refreshEntitlement(String teacherId) async {
+    if (teacherId.trim().isEmpty) return;
+    try {
+      final res = await _transport('MARKING-PROCESS', body: {
+        'action': 'get_profile',
+        'teacherId': teacherId,
+      });
+      final data = res.data;
+      if (data is! Map || data['profile'] is! Map) return;
+      final profile = data['profile'] as Map;
+      _serverPlan = (profile['plan'] ?? '').toString();
+      _planSource = PlanSourceWords.parse(profile['plan_source']);
+      if (_onWeb) _webPlan = _serverPlan;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('BillingService.refreshEntitlement failed: $e');
+    }
+  }
+
   /// Asks STRIPE-CHECKOUT what it can sell. No identity needed and nothing
   /// is charged — it is the honest-message call, so that a build with no
   /// Stripe account behind it says so instead of offering a dead button.
@@ -493,6 +598,16 @@ class BillingService extends ChangeNotifier {
         'tier': tier,
       });
       final data = res.data;
+      // The server refuses to charge an account that is already paying
+      // through the store. That is a correct answer, not a failure — say so,
+      // and record where the plan actually lives so the screen can point
+      // there instead of showing a buy button that will be refused again.
+      if (data is Map && data['error'] == 'already_subscribed') {
+        _planSource = PlanSourceWords.parse(data['rail']);
+        _serverPlan = (data['plan'] ?? '').toString();
+        notifyListeners();
+        return PurchaseOutcome.alreadySubscribedElsewhere;
+      }
       final url = data is Map ? (data['url'] ?? '').toString() : '';
       if (url.isEmpty) {
         debugPrint('BillingService.startWebCheckout got no url: $data');
@@ -501,6 +616,13 @@ class BillingService extends ChangeNotifier {
       _redirect(url);
       return PurchaseOutcome.redirected;
     } catch (e) {
+      // A 409 may surface as a thrown FunctionException depending on the
+      // transport, so the same answer is recognised here too. Missing it
+      // would tell a teacher the checkout broke when in fact they are
+      // already subscribed.
+      if (e.toString().contains('already_subscribed')) {
+        return PurchaseOutcome.alreadySubscribedElsewhere;
+      }
       debugPrint('BillingService.startWebCheckout failed: $e');
       return PurchaseOutcome.failed;
     }

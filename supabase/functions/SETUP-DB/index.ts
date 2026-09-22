@@ -132,6 +132,104 @@ Deno.serve(async (req) => {
     await sql`alter table public.marking_batches enable row level security`;
     await sql`create index if not exists marking_batches_teacher_idx on public.marking_batches (teacher_id, created_at desc)`;
     await sql`alter table public.profiles add column if not exists plan text`;
+    // ── One subscription, two shops ──────────────────────────────────────
+    // A teacher can pay through the stores (RevenueCat) or on the web
+    // (Stripe). Each rail owns one column and writes only that column;
+    // `plan` is derived from both. Before this, both webhooks wrote `plan`
+    // directly, so a cancellation on one rail wiped out a live subscription
+    // on the other. See supabase/functions/_shared/entitlement.ts.
+    await sql`alter table public.profiles add column if not exists plan_revenuecat text`;
+    await sql`alter table public.profiles add column if not exists plan_stripe text`;
+    await sql`alter table public.profiles add column if not exists plan_source text`;
+    // Every profile that has a plan today got it from the stores: Stripe has
+    // never been switched on. Backfilling anything else would invent a
+    // subscription nobody has.
+    await sql`update public.profiles set plan_revenuecat = plan
+               where plan_revenuecat is null and plan is not null and plan <> 'trial'`;
+
+    // How generous a tier is. THE one place this order is written down: the
+    // webhooks and the app read the result, never re-rank it themselves.
+    // pro_annual sits BELOW pro on purpose — it bills $10.00/mo against
+    // Pro's $14.99, so it cannot carry Pro's allowance.
+    await sql`
+      create or replace function public.plan_rank(p text)
+      returns int language sql immutable as $fn$
+        select case lower(coalesce(p, ''))
+          when 'school' then 4
+          when 'pro' then 3
+          when 'pro_annual' then 2
+          when 'starter' then 1
+          else 0
+        end
+      $fn$`;
+
+    // The plan a teacher actually gets. `a` is always what the stores say,
+    // `b` always what Stripe says. A teacher paying on both rails keeps the
+    // better of the two rather than whichever webhook landed last; a tie
+    // goes to the stores, which came first and whose refunds are slower.
+    await sql`
+      create or replace function public.best_plan(a text, b text)
+      returns text language sql immutable as $fn$
+        select case
+          when greatest(public.plan_rank(a), public.plan_rank(b)) = 0 then 'trial'
+          when public.plan_rank(a) >= public.plan_rank(b) then lower(a)
+          else lower(b)
+        end
+      $fn$`;
+
+    // Which rail the winning plan came from, so the app can send a teacher
+    // to the right place to cancel — and can refuse to sell them a second
+    // subscription in the other shop.
+    await sql`
+      create or replace function public.best_plan_rail(a text, b text)
+      returns text language sql immutable as $fn$
+        select case
+          when greatest(public.plan_rank(a), public.plan_rank(b)) = 0 then null
+          when public.plan_rank(a) >= public.plan_rank(b) then 'revenuecat'
+          else 'stripe'
+        end
+      $fn$`;
+
+    // The ONLY way a webhook changes what a teacher is entitled to.
+    //
+    // One statement, so two webhooks arriving together cannot interleave a
+    // read with a write: each sets its own rail's column and the derived
+    // columns are recomputed from both in the same breath. A rail passing
+    // 'trial' is revoking its own subscription, which leaves the other
+    // rail's untouched and still winning.
+    await sql`
+      create or replace function public.apply_entitlement(p_teacher text, p_rail text, p_plan text)
+      returns table (plan text, plan_source text, plan_revenuecat text, plan_stripe text)
+      language plpgsql security definer set search_path = public as $fn$
+      begin
+        if p_rail not in ('revenuecat', 'stripe') then
+          raise exception 'unknown billing rail: %', p_rail;
+        end if;
+        insert into public.profiles (teacher_id) values (p_teacher)
+          on conflict (teacher_id) do nothing;
+        return query
+        update public.profiles p
+           set plan_revenuecat = r.rc,
+               plan_stripe     = r.st,
+               plan            = public.best_plan(r.rc, r.st),
+               plan_source     = public.best_plan_rail(r.rc, r.st),
+               updated_at      = now()
+          from (
+            select
+              case when p_rail = 'revenuecat' then nullif(p_plan, '') else q.plan_revenuecat end as rc,
+              case when p_rail = 'stripe'     then nullif(p_plan, '') else q.plan_stripe     end as st
+            from public.profiles q where q.teacher_id = p_teacher
+          ) r
+         where p.teacher_id = p_teacher
+        returning p.plan, p.plan_source, p.plan_revenuecat, p.plan_stripe;
+      end
+      $fn$`;
+    // Recompute the derived columns for everyone the backfill just touched,
+    // so plan_source is populated before the app starts reading it.
+    await sql`update public.profiles
+                 set plan        = public.best_plan(plan_revenuecat, plan_stripe),
+                     plan_source = public.best_plan_rail(plan_revenuecat, plan_stripe)
+               where plan_revenuecat is not null or plan_stripe is not null`;
     // Marking defaults picked in Settings follow the account.
     await sql`alter table public.profiles add column if not exists default_mode text`;
     await sql`alter table public.profiles add column if not exists default_harshness int`;

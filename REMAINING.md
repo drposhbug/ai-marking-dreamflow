@@ -662,10 +662,16 @@ justification. What differs is everything that needs hardware or a store.
       `STRIPE_WEBHOOK_SECRET`, `STRIPE_RETURN_ORIGIN` and the four price ids —
       runbook in `docs/stripe-web-billing.md`.** Until then every path returns
       an honest 503, never a dead button.
-- [ ] **R22.4 Double subscription.** A teacher who subscribes on the phone AND
-      on the web pays twice, and the two webhooks fight over `profiles.plan`.
-      Neither rail knows the other exists. Cheapest fix: refuse a web checkout
-      when `profiles.plan` was last written by RevenueCat, and say why.
+- [x] **R22.4 Double subscription — fixed.** Each rail now owns its own column
+      (`plan_revenuecat`, `plan_stripe`) and `plan` is derived from both in one
+      SQL statement, so a cancellation in one shop can no longer cancel a live
+      subscription in the other. A second purchase is refused before it is
+      charged — 409 from `STRIPE-CHECKOUT` on the web, a guard in
+      `BillingService.buy` on a phone — and the Plans screen names the shop the
+      plan actually lives in instead of showing a buy button. Rules proved
+      against real Postgres in `tool/sql/entitlement.test.mjs`.
+      **Owner: run `SETUP-DB` BEFORE deploying the webhooks** — order and
+      reasoning in `docs/stripe-web-billing.md`.
 - [ ] **R22.5 A scanned stack is now ~1s/page slower in a browser.** Splitting
       a stack and anchoring error marks call the page reader too, and on web
       they used to skip it instantly. It reports progress, so it is visible
