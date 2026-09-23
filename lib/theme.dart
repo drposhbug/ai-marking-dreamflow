@@ -416,9 +416,14 @@ class DeskBackground extends StatelessWidget {
           // visible blob in a corner.
           center: const Alignment(-0.8, -1.1),
           radius: 1.9,
+          // Three stops, not two. A two-stop wash across a 27" screen is so
+          // gradual that it reads as a flat fill; the middle stop puts the
+          // falloff where the eye actually is rather than spending it all in
+          // the far corner.
+          stops: const [0.0, 0.55, 1.0],
           colors: dark
-              ? const [Color(0xFF1C1914), Color(0xFF131109)]
-              : const [Color(0xFFFDFAEF), Color(0xFFF1EAD6)],
+              ? const [Color(0xFF221E17), Color(0xFF17140F), Color(0xFF100E09)]
+              : const [Color(0xFFFFFDF5), Color(0xFFF7F1DF), Color(0xFFEDE5CE)],
         ),
       ),
       child: child,
