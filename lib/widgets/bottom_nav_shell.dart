@@ -128,14 +128,19 @@ class _Sidebar extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadius.xl),
-            // Deepening downwards, so the long list keeps some shape instead
-            // of reading as one flat slab of blue.
+            // Lit from the top left and deepening away from it, like the desk
+            // beside it and the slate on it — one light source across the
+            // whole screen rather than three surfaces each lit their own way.
+            // Slate is the point: at a single flat fill this is a very large
+            // dark rectangle, and a very large dark rectangle is the thing
+            // that made the sidebar feel dead.
             gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [AiMarkerColors.primary, AiMarkerColors.boardDeep],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1E4A38), AiMarkerColors.primary, AiMarkerColors.boardDeep],
+              stops: [0.0, 0.42, 1.0],
             ),
-            boxShadow: [BoxShadow(color: AiMarkerColors.primary.withValues(alpha: 0.28), blurRadius: 22, offset: const Offset(0, 8))],
+            boxShadow: [BoxShadow(color: AiMarkerColors.boardDeep.withValues(alpha: 0.32), blurRadius: 26, offset: const Offset(0, 10))],
           ),
           child: SafeArea(
             right: false,

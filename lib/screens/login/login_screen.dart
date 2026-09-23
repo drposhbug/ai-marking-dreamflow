@@ -488,21 +488,14 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       );
 
-  /// The line she read on the way in, in the same words and with the same
-  /// red underline under the same three of them.
-  Widget _promise(BuildContext context, PaperTones tones, {required double fontSize}) => Text.rich(
-        TextSpan(
-          children: [
-            const TextSpan(text: 'Marking eats your evenings. Markless takes '),
-            TextSpan(
-              text: 'the first pass.',
-              // The rule under the words is drawn by hand on the site, so it
-              // thickens with the words rather than staying a hairline under
-              // a 46px headline.
-              style: TextStyle(decoration: TextDecoration.underline, decorationColor: tones.pen, decorationThickness: fontSize <= 27 ? 2.5 : 2.5 * (fontSize / 27)),
-            ),
-          ],
-        ),
+  /// The line she read on the way in, in the same words.
+  ///
+  /// The red rule that used to sit under the last three words is gone.
+  /// Accenting one phrase of a headline is the most templated move there is,
+  /// and a hand-drawn underline on a sign-in screen was working hard to be
+  /// liked rather than helping anyone sign in.
+  Widget _promise(BuildContext context, PaperTones tones, {required double fontSize}) => Text(
+        'Marking eats your evenings. Markless takes the first pass.',
         style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: fontSize, height: 1.14, letterSpacing: -0.7),
       );
 
@@ -525,15 +518,12 @@ class _LoginScreenState extends State<LoginScreen> {
           'Question-by-question marks, a written reason for every deduction, and feedback a student will read.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: _at(14, 19, grow), color: AiMarkerColors.neutral, height: 1.5),
         ),
-        SizedBox(height: _at(24, 38, grow)),
-        // The drawn page is the thing worth looking at on this half, so it
-        // grows with the sheet rather than sitting at its old size in the
-        // middle of it.
-        MarkedPaperPreview(scale: _at(1, 1.6, grow)),
-        SizedBox(height: _at(12, 19, grow)),
-        // Hung in the margin, right up against the rule, the way the site
-        // hangs the teacher's asides.
-        MarginNote('An illustration of what comes back, not a screenshot.', hangingInMargin: true, fontSize: _at(12.5, 19, grow)),
+        // A drawing of a marked paper used to sit here, captioned "an
+        // illustration of what comes back, not a screenshot". A picture that
+        // needs a label saying it is not real is doing publicity, and
+        // publicity has no job on a sign-in screen: whoever is reading it has
+        // already decided. What is left says what the product is, for someone
+        // arriving from a link, and then gets out of the way.
       ],
     );
   }
