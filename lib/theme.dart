@@ -123,7 +123,7 @@ class AiMarkerColors {
   static const bg = Color(0xFFF6F1E3);
 
   /// A sheet on the desk. Warm white, not clinical white.
-  static const card = Color(0xFFFDFAF1);
+  static const card = Color(0xFFFFFDF7);
   static const outline = Color(0x1A211E15); // 10%
 
   // Dark mode: the same desk at night. Warm blacks rather than the navy
@@ -268,14 +268,24 @@ ThemeData get lightTheme => ThemeData(
     outline: Color(0x33211E15),
   ),
   brightness: Brightness.light,
-  scaffoldBackgroundColor: AiMarkerColors.bg,
+  // Transparent so [DeskBackground] shows through on every route.
+  scaffoldBackgroundColor: Colors.transparent,
   appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, elevation: 0, scrolledUnderElevation: 0, centerTitle: true),
   // A sheet spanning a 1440px monitor is a phone habit. The cap is wider than
   // any phone, so phones see no change.
   bottomSheetTheme: const BottomSheetThemeData(constraints: BoxConstraints(maxWidth: 640)),
+  // A sheet lying on a desk, not a panel flush with it. At elevation 0 with a
+  // 10% hairline these were three per cent lighter than the background and
+  // read as one flat field — the whole screen at a single value, which is
+  // what makes a layout look bland however good the colours are. The lift is
+  // small and the shadow is warm: a cool shadow on cream looks like dirt.
   cardTheme: CardThemeData(
     color: AiMarkerColors.card,
-    elevation: 0,
+    elevation: 3,
+    shadowColor: const Color(0x14211E15),
+    // Material 3 tints a raised surface toward the primary colour. Here that
+    // would wash every card green with height.
+    surfaceTintColor: Colors.transparent,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg), side: const BorderSide(color: AiMarkerColors.outline, width: 1)),
   ),
   inputDecorationTheme: InputDecorationTheme(
@@ -324,7 +334,7 @@ ThemeData get darkTheme => ThemeData(
     outline: AiMarkerColors.darkOutline,
   ),
   brightness: Brightness.dark,
-  scaffoldBackgroundColor: AiMarkerColors.darkBg,
+  scaffoldBackgroundColor: Colors.transparent,
   appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, elevation: 0, scrolledUnderElevation: 0, centerTitle: true),
   // A sheet spanning a 1440px monitor is a phone habit. The cap is wider than
   // any phone, so phones see no change.
@@ -374,3 +384,44 @@ TextTheme _buildTextTheme() => TextTheme(
   labelMedium: GoogleFonts.inter(fontSize: FontSizes.labelMedium, fontWeight: FontWeight.w600, height: 1.2),
   labelSmall: GoogleFonts.inter(fontSize: FontSizes.labelSmall, fontWeight: FontWeight.w600, height: 1.2),
 );
+
+// =============================================================================
+// THE DESK
+// =============================================================================
+
+/// The surface every screen sits on.
+///
+/// A single flat fill behind everything is the other half of what makes a
+/// layout look bland: with the cards at one value and the ground at another,
+/// there are exactly two depths on screen and nothing suggests a room. This
+/// is light falling across a desk from the top left — a few per cent of
+/// warmth, closer to a photograph's falloff than to a gradient anyone would
+/// name as one.
+///
+/// Applied once in [MaterialApp.builder] so it is behind every route
+/// including dialogs, with the scaffolds left transparent on top of it.
+class DeskBackground extends StatelessWidget {
+  final Widget child;
+
+  const DeskBackground({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          // Off the top-left corner, so the brightest point sits outside the
+          // frame and the falloff across the page is even rather than a
+          // visible blob in a corner.
+          center: const Alignment(-0.8, -1.1),
+          radius: 1.9,
+          colors: dark
+              ? const [Color(0xFF1C1914), Color(0xFF131109)]
+              : const [Color(0xFFFDFAEF), Color(0xFFF1EAD6)],
+        ),
+      ),
+      child: child,
+    );
+  }
+}

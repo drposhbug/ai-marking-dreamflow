@@ -927,11 +927,29 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   Widget _routes(BuildContext context) {
     final Widget scan = GestureDetector(
       onTap: _pickFromCamera,
+      // The one loud thing on the screen, and the only place boldness is
+      // spent: a slate, not a dark rectangle. The light comes from the same
+      // top-left corner as the desk behind it, it throws a shadow so it sits
+      // *on* the desk rather than being a hole cut in it, and a hairline of
+      // chalk dust catches the top edge.
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          gradient: const LinearGradient(colors: [AiMarkerColors.primary, AiMarkerColors.boardDeep], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1E4A38), AiMarkerColors.primary, AiMarkerColors.boardDeep],
+            stops: [0.0, 0.45, 1.0],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+          boxShadow: [
+            BoxShadow(
+              color: AiMarkerColors.boardDeep.withValues(alpha: 0.30),
+              blurRadius: 26,
+              offset: const Offset(0, 12),
+            ),
+          ],
         ),
         child: Column(
           children: [
