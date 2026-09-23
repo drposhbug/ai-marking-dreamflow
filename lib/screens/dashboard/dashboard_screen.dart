@@ -119,7 +119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(AppRadius.lg), gradient: const LinearGradient(colors: [AiMarkerColors.primary, AiMarkerColors.tertiary], begin: Alignment.topLeft, end: Alignment.bottomRight)),
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(AppRadius.lg), gradient: const LinearGradient(colors: [AiMarkerColors.primary, AiMarkerColors.boardDeep], begin: Alignment.topLeft, end: Alignment.bottomRight)),
                 child: Row(
                   children: [
                     Expanded(
