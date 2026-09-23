@@ -80,23 +80,58 @@ extension TextStyleExtensions on TextStyle {
 
 /// AI Marker design system colors
 class AiMarkerColors {
-  static const primary = Color(0xFF2563EB);
-  static const secondary = Color(0xFF16A34A);
-  static const tertiary = Color(0xFF7C3AED);
+  // ---------------------------------------------------------------------
+  // Chrome
+  //
+  // In a marking tool colour is information: red is a deduction, green is a
+  // mark earned. So the furniture around the work is deliberately almost
+  // colourless — chalkboard, paper, warm ink — and the only saturated
+  // things on a screen are the marks themselves.
+  //
+  // This replaced a blue/violet scheme that was louder than the marking it
+  // framed: a gradient banner meaning nothing outranked the red pen beside
+  // it. These tones are the marketing site's, which was already built from
+  // the same idea.
+  // ---------------------------------------------------------------------
+
+  /// Chalkboard. Near-black with a green cast — a surface, never a "correct"
+  /// signal, so it cannot be mistaken for [tickInk] at a glance.
+  static const primary = Color(0xFF143528);
+
+  /// The deep end of the board, for the one or two places that carry a
+  /// gradient.
+  static const boardDeep = Color(0xFF0E271E);
+
+  /// A mark earned. Same green as the ticks on the page, so "good" means one
+  /// colour across the whole product.
+  static const secondary = Color(0xFF1D6A44);
+
+  /// Pencil. The quiet accent that separates one group of tools from
+  /// another without introducing a hue that competes with a mark. There is
+  /// no free colour left: red is the pen, green is the tick, amber is
+  /// [warning] — so this stays a warm ink rather than inventing one.
+  static const tertiary = Color(0xFF4C4636);
+
   static const error = Color(0xFFDC2626);
-  static const neutral = Color(0xFF6B7280);
+  static const neutral = Color(0xFF7C7460);
   /// Amber: something needs a look but nothing is broken — a stack whose
   /// page count does not add up, a result flagged for teacher review.
   static const warning = Color(0xFFD97706);
 
-  static const bg = Color(0xFFF4F7FB);
-  static const card = Color(0xFFFFFFFF);
-  static const outline = Color(0x1A6B7280); // 10%
+  /// The desk. Warm, so a sheet laid on it reads as paper rather than as a
+  /// panel in an application.
+  static const bg = Color(0xFFF6F1E3);
 
-  // Dark mode palette (per spec)
-  static const darkBg = Color(0xFF0F172A);
-  static const darkCard = Color(0xFF1E293B);
-  static const darkOutline = Color(0xFF334155);
+  /// A sheet on the desk. Warm white, not clinical white.
+  static const card = Color(0xFFFDFAF1);
+  static const outline = Color(0x1A211E15); // 10%
+
+  // Dark mode: the same desk at night. Warm blacks rather than the navy
+  // that came with the blue scheme — a cool dark under a red pen mark makes
+  // the mark look purple.
+  static const darkBg = Color(0xFF14120E);
+  static const darkCard = Color(0xFF211E15);
+  static const darkOutline = Color(0xFF3A3529);
 
   // ---------------------------------------------------------------------
   // Marked paper
@@ -109,31 +144,31 @@ class AiMarkerColors {
 
   /// The sheet itself: warm, a shade off white, so it reads as paper next
   /// to the plain white of a text field.
-  static const paper = Color(0xFFFCFCFA);
+  static const paper = Color(0xFFFDFAF1);
 
   /// A second, duller sheet — what sits *on* the page, like a scanned
   /// answer or a field the teacher types into.
-  static const paperShade = Color(0xFFF4F5F1);
+  static const paperShade = Color(0xFFF2ECDC);
 
   /// The faint printed rules between questions on a page.
-  static const paperRule = Color(0xFFE0E3E9);
+  static const paperRule = Color(0xFFDCD3BB);
 
   /// Biro red. This is annotation — a margin rule, a teacher's note, a mark
   /// she took off. It never means "something broke"; that is [error].
   static const pen = Color(0xFFC1272D);
 
   /// The pencil grey of a student's handwriting in an illustration.
-  static const graphite = Color(0xFFCBD0D8);
+  static const graphite = Color(0xFFC4BCA8);
 
   /// A full mark written in green — darker than [secondary] so a small
   /// number stays readable on paper.
   static const tickInk = Color(0xFF10703A);
 
-  static const darkPaper = Color(0xFF1A2434);
-  static const darkPaperShade = Color(0xFF141C2A);
-  static const darkPaperRule = Color(0xFF2E3B4E);
+  static const darkPaper = Color(0xFF211E15);
+  static const darkPaperShade = Color(0xFF191710);
+  static const darkPaperRule = Color(0xFF3A3529);
   static const darkPen = Color(0xFFFF8078);
-  static const darkGraphite = Color(0xFF3B4759);
+  static const darkGraphite = Color(0xFF4A4436);
   static const darkTickInk = Color(0xFF6EE79A);
 }
 
@@ -227,10 +262,10 @@ ThemeData get lightTheme => ThemeData(
     error: AiMarkerColors.error,
     onError: Colors.white,
     surface: AiMarkerColors.card,
-    onSurface: Color(0xFF0F172A),
+    onSurface: Color(0xFF211E15),
     surfaceContainerHighest: AiMarkerColors.bg,
     onSurfaceVariant: AiMarkerColors.neutral,
-    outline: Color(0x336B7280),
+    outline: Color(0x33211E15),
   ),
   brightness: Brightness.light,
   scaffoldBackgroundColor: AiMarkerColors.bg,

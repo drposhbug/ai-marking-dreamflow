@@ -133,7 +133,7 @@ class _Sidebar extends StatelessWidget {
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [AiMarkerColors.primary, Color(0xFF1B4FD8)],
+              colors: [AiMarkerColors.primary, AiMarkerColors.boardDeep],
             ),
             boxShadow: [BoxShadow(color: AiMarkerColors.primary.withValues(alpha: 0.28), blurRadius: 22, offset: const Offset(0, 8))],
           ),

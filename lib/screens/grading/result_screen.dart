@@ -1156,7 +1156,7 @@ class _HeroGrade extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.lg),
         gradient: const LinearGradient(
-          colors: [AiMarkerColors.primary, AiMarkerColors.tertiary],
+          colors: [AiMarkerColors.primary, AiMarkerColors.boardDeep],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

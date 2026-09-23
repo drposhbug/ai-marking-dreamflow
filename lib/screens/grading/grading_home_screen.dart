@@ -931,7 +931,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          gradient: const LinearGradient(colors: [AiMarkerColors.primary, AiMarkerColors.tertiary], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          gradient: const LinearGradient(colors: [AiMarkerColors.primary, AiMarkerColors.boardDeep], begin: Alignment.topLeft, end: Alignment.bottomRight),
         ),
         child: Column(
           children: [
