@@ -80,6 +80,10 @@ class MyApp extends StatelessWidget {
             theme: lightTheme,
             darkTheme: darkTheme,
             themeMode: appState.themeMode,
+            // The desk goes behind every route at once, and the scaffolds are
+            // transparent on top of it — so the light falling across it is
+            // continuous instead of restarting at each screen.
+            builder: (context, child) => DeskBackground(child: child ?? const SizedBox.shrink()),
             routerConfig: AppRouter.router,
           ),
         ),
