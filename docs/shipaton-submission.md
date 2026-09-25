@@ -1,4 +1,4 @@
-# Markless — RevenueCat Shipaton 2026 submission (working draft)
+# UMarkless — RevenueCat Shipaton 2026 submission (working draft)
 
 Deadline: **2026-09-30, 23:45 PDT**. This is a drafting document, not the final
 copy — every `TODO:` below is a gap that must be filled or the claim removed
@@ -12,7 +12,7 @@ Target categories: **HAMM**, **Next Gen Award**, **RevenueCat Peace Prize**,
 
 ## The one-paragraph pitch
 
-Marking eats teachers' evenings. Markless takes the first pass: a teacher points
+Marking eats teachers' evenings. UMarkless takes the first pass: a teacher points
 their phone at a class set — a Google Form export, a stack scanned on the
 staffroom photocopier, or photographs of individual papers — and gets back
 question-by-question marks with half and quarter marks, a written justification
@@ -30,7 +30,7 @@ Repo: https://github.com/drposhbug/ai-marking-dreamflow (MIT)
 
 ## HAMM — Help Apps Make Money
 
-The argument: Markless cannot sell a subscription that loses money, and that is
+The argument: UMarkless cannot sell a subscription that loses money, and that is
 enforced in code rather than hoped for in a spreadsheet.
 
 ### 1. The margin rule
@@ -242,7 +242,7 @@ re-reads the plan on every marking call.
 
 Teacher workload is the reason people leave teaching. Marking is the part that
 follows them home — it is not the lesson, it is the two hours after dinner with
-a stack of thirty papers. Markless is aimed squarely at that: a class set that
+a stack of thirty papers. UMarkless is aimed squarely at that: a class set that
 took an evening takes minutes, and what comes back is not just a number but
 per-question feedback the student can act on, which is the part teachers cut
 first when they are tired.

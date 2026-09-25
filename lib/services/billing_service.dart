@@ -18,7 +18,7 @@ enum PurchaseOutcome { success, cancelled, unavailable, failed, redirected, alre
 
 /// Which shop a teacher's plan was actually bought in.
 ///
-/// Markless takes money through two rails that cannot see each other: the app
+/// UMarkless takes money through two rails that cannot see each other: the app
 /// stores (RevenueCat validates the receipt) and Stripe on the web. Only the
 /// shop that took the money can change or cancel the subscription, so the app
 /// has to know which one that was before it offers to do either — and before
@@ -50,7 +50,7 @@ extension PlanSourceWords on PlanSource {
         PlanSource.appStore =>
           'Your plan was bought in the phone app, so Google Play or the App Store handles the billing. Change or cancel it there — buying again here would charge you twice.',
         PlanSource.web =>
-          'Your plan was bought on the web, so it is billed by card rather than through the store. Open the billing page on the Markless website to change or cancel it — buying again here would charge you twice.',
+          'Your plan was bought on the web, so it is billed by card rather than through the store. Open the billing page on the UMarkless website to change or cancel it — buying again here would charge you twice.',
         PlanSource.unknown => '',
       };
 
@@ -124,7 +124,7 @@ class GivingSummary {
   });
 }
 
-/// RevenueCat subscriptions for Markless.
+/// RevenueCat subscriptions for UMarkless.
 ///
 /// One entitlement gates the paid experience: "markless Pro". The products
 /// behind it (monthly / yearly / lifetime) live in the RevenueCat dashboard

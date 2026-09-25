@@ -2,7 +2,7 @@
  * Every fact on this site, in one file, next to the source it came from.
  *
  * RULE: no number appears on this page that is not in this file, and no number
- * enters this file without a source in the repository. Markless has no adoption
+ * enters this file without a source in the repository. UMarkless has no adoption
  * statistics, no satisfaction scores, no user counts and no testimonials, so
  * the site has none either.
  *
@@ -20,7 +20,7 @@ export const COMPLIANCE_URL = `${REPO_URL}/blob/main/docs/security-and-complianc
 export const README_URL = `${REPO_URL}#readme`;
 export const CONTACT = 'oscar.cs.lee@gmail.com';
 // TODO: replace with the Google Play listing URL once the app is live.
-export const LAUNCH_MAILTO = `mailto:${CONTACT}?subject=Markless%20launch`;
+export const LAUNCH_MAILTO = `mailto:${CONTACT}?subject=UMarkless%20launch`;
 
 /* ------------------------------------------------------------------ routes */
 /* README.md, "The four ways to mark". Times are for a class of thirty. */
@@ -141,7 +141,7 @@ export const STAGES: Stage[] = [
     n: '05',
     title: 'Marks leave as a CSV, or a document in Drive.',
     body:
-      'A gradebook CSV, or a Google Doc written into the folder Markless made. That is the whole handoff. Markless sends nothing to a gradebook, a student or a parent — you carry the mark forward yourself.',
+      'A gradebook CSV, or a Google Doc written into the folder UMarkless made. That is the whole handoff. UMarkless sends nothing to a gradebook, a student or a parent — you carry the mark forward yourself.',
     note: 'Nothing is sent on your behalf.',
   },
 ];
@@ -219,7 +219,7 @@ export const BELIEFS: Belief[] = [
     n: '01',
     title: 'AI suggests. The teacher confirms.',
     body:
-      'Markless produces a proposed mark. It is never final, and never recorded as final without a teacher looking at it. An overridden result is flagged as overridden. There is no setting that removes the middle step.',
+      'UMarkless produces a proposed mark. It is never final, and never recorded as final without a teacher looking at it. An overridden result is flagged as overridden. There is no setting that removes the middle step.',
   },
   {
     n: '02',

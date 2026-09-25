@@ -2,7 +2,7 @@
 //
 // One subscription, two shops.
 //
-// A teacher can pay for Markless through the stores (RevenueCat validates the
+// A teacher can pay for UMarkless through the stores (RevenueCat validates the
 // receipt) or through Stripe on the web. Those are two independent billing
 // rails that have never known about each other, and before this file existed
 // both wrote `profiles.plan` directly. That is a fight with two losers:

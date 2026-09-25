@@ -18,8 +18,8 @@ export function SiteHeader() {
       <div className="wrap">
         <a className="brand" href="./">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="icon.png" width={24} height={24} alt="The Markless app icon" />
-          Markless
+          <img src="icon.png" width={24} height={24} alt="The UMarkless app icon" />
+          UMarkless
         </a>
         <nav className="site-nav" aria-label="Primary">
           <a href="#how">How it works</a>
@@ -121,7 +121,7 @@ export function Privacy() {
             ))}
           </ul>
           <p className="after">
-            Markless reduces exposure substantially. It does not make a scanned page anonymous, and
+            UMarkless reduces exposure substantially. It does not make a scanned page anonymous, and
             no vendor should claim otherwise. Subprocessors, legal footing, retention and every
             known gap are in <a href={COMPLIANCE_URL}>Security and compliance</a>.
           </p>
@@ -209,7 +209,7 @@ export function SignIn() {
                 <h3>This page hands you over. It does not sign you in.</h3>
                 <p>
                   There is no server behind this page — it is a static file. Your email travels
-                  across to Markless in the address bar, and the app&rsquo;s own sign-in screen
+                  across to UMarkless in the address bar, and the app&rsquo;s own sign-in screen
                   takes the password. Nothing here asks for one, and nothing here could receive it.
                 </p>
               </li>
@@ -227,7 +227,7 @@ export function SignIn() {
 
           <div>
             {/* A handoff, not a login: it GETs the app with the typed address as
-                ?email=, and Markless does the actual sign-in. This page is static
+                ?email=, and UMarkless does the actual sign-in. This page is static
                 and has no server, so it must never ask for a password. */}
             <form className="page signin-form" method="get" action={APP_URL}>
               <div className="pg-top">
@@ -249,13 +249,13 @@ export function SignIn() {
                 required
               />
               <button className="btn btn-primary" type="submit">
-                Continue to Markless
+                Continue to UMarkless
               </button>
               <a className="btn btn-ghost" href={APP_URL}>
                 Create an account
               </a>
               <p className="pg-note">
-                Markless opens on its own sign-in screen and asks for your password there.
+                UMarkless opens on its own sign-in screen and asks for your password there.
               </p>
             </form>
             <p className="note-small">
@@ -316,7 +316,7 @@ export function SiteFooter() {
           <a href={`mailto:${CONTACT}`}>{CONTACT}</a>
         </nav>
         <p>
-          Markless is a marking assistant for teachers. It proposes marks; the teacher decides them.
+          UMarkless is a marking assistant for teachers. It proposes marks; the teacher decides them.
           It is built with Flutter for Android and iOS, and the source is public.
         </p>
         <p>Google Forms, Google Drive and Google Play are trademarks of Google LLC.</p>

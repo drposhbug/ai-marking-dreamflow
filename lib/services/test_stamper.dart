@@ -56,7 +56,7 @@ class TestStamper {
       'mk-$testCode-${copyNumber.toString().padLeft(2, '0')}  p$pageNumber/$pageCount';
 
   /// Reads a stamp back off a scanned page. Returns null when the page
-  /// carries no Markless stamp — every other route (names, page numbers,
+  /// carries no UMarkless stamp — every other route (names, page numbers,
   /// handwriting) still applies to those.
   ///
   /// Tolerant of what OCR does to a tiny grey footer: the separators come
@@ -98,7 +98,7 @@ class TestStamper {
     required int copies,
     void Function(int done, int total)? onProgress,
   }) async {
-    final doc = pw.Document(title: 'Markless test $testCode');
+    final doc = pw.Document(title: 'UMarkless test $testCode');
     // Embed each source page ONCE. Without this a 30-copy set would carry
     // 90 copies of the same image and run to hundreds of megabytes.
     final images = [for (final bytes in pageImages) pw.MemoryImage(bytes)];

@@ -22,7 +22,7 @@ import 'package:share_plus/share_plus.dart';
 ///
 /// A teacher writes about thirty of these per class, three times a year, at
 /// three to five minutes each — five to ten hours a term, and the part of
-/// the job most of them dread more than the marking. Markless can do it
+/// the job most of them dread more than the marking. UMarkless can do it
 /// honestly because it already holds the evidence, so the drafts cite real
 /// marks instead of reading like the same paragraph thirty times.
 ///

@@ -16,7 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// Gets the marks out of Markless and into the school's gradebook.
+/// Gets the marks out of UMarkless and into the school's gradebook.
 ///
 /// This exists because marking thirty papers and then typing thirty numbers
 /// into PowerSchool by hand leaves the teacher doing the boring half of the
@@ -90,7 +90,7 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
       if (!mounted) return;
       _snack(link == null || link.isEmpty
           ? 'Saved to your Google Drive.'
-          : 'Saved to your Google Drive, in the Markless folder.');
+          : 'Saved to your Google Drive, in the UMarkless folder.');
     } on DriveAuthException {
       if (mounted) _snack('Sign in with Google again to save to Drive.');
     } catch (e) {
@@ -290,7 +290,7 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Puts the same marks in your own Drive as a Google Sheet, in a Markless folder. '
+                  'Puts the same marks in your own Drive as a Google Sheet, in a UMarkless folder. '
                   'Share it, keep it as a record, or copy the columns into Classroom yourself.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                 ),

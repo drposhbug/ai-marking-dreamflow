@@ -8,7 +8,7 @@ import { RevealItem } from './Reveal';
  *
  * Seven numbered principles, all of them implemented behaviour documented in
  * README.md and docs/security-and-compliance.md rather than aspiration -
- * including the last one, which is the list of things Markless does not do
+ * including the last one, which is the list of things UMarkless does not do
  * well.
  */
 export function Beliefs() {
@@ -18,7 +18,7 @@ export function Beliefs() {
         <p className="kicker">Rules, not preferences</p>
 
         <div className="head head--wide">
-          <h2 id="h-beliefs">What Markless will not do</h2>
+          <h2 id="h-beliefs">What UMarkless will not do</h2>
           <p className="sub">
             Seven rules the product is built around. Each of them costs something — speed, margin,
             or a claim we would rather be able to make — and each of them is in the code, not the
