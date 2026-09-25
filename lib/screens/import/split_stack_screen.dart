@@ -173,7 +173,7 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
   void _rebuildGroups() {
     // A printed copy code outranks everything else: it is the only signal
     // that says outright which pages are one paper, so when the stack was
-    // printed from Markless the split stops being a guess entirely.
+    // printed from UMarkless the split stops being a guess entirely.
     final stamps = [for (var i = 0; i < _pages.length; i++) i < _signals.length ? _signals[i].stamp : null];
     if (_fixedPerStudent == null && stamps.any((s) => s != null)) {
       final byStamp = TestStamper.groupByStamp(stamps);
@@ -287,7 +287,7 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Markless can read the handwriting and page numbers on those $pageCount pages and work out '
+              'UMarkless can read the handwriting and page numbers on those $pageCount pages and work out '
               'who wrote what${pct > 0 ? ' — about $pct% of this month\'s credits' : ''}. Anything it isn\'t '
               'sure about is left flagged for you rather than guessed.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.45),

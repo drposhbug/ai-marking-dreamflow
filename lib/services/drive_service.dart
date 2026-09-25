@@ -53,12 +53,12 @@ String markedResultHtml({required AiGradeResult result, required String studentN
   return b.toString();
 }
 
-/// Exports marked work into a "Markless" folder in the teacher's Google
+/// Exports marked work into a "UMarkless" folder in the teacher's Google
 /// Drive, using the Google token from their Supabase session. The app
 /// requests only the drive.file scope: it can touch files it created, and
 /// nothing else in the teacher's Drive.
 class DriveService {
-  static const _folderName = 'Markless';
+  static const _folderName = 'UMarkless';
   static const _kTokenKey = 'ai_marker.drive_token.v1';
 
   // Supabase drops providerToken from the session on refresh even though
@@ -115,7 +115,7 @@ class DriveService {
   Future<void> setAutoSave(String teacherId, bool enabled) =>
       const LocalStore().setString(_autoSaveKey(teacherId), enabled ? '1' : '');
 
-  /// Uploads a marked result as a formatted Google Doc in the Markless
+  /// Uploads a marked result as a formatted Google Doc in the UMarkless
   /// folder ("Marked — ‹student› — ‹date›"); returns the doc link.
   Future<String?> uploadMarkedResult({required AiGradeResult result, required String studentName}) {
     final now = DateTime.now();
@@ -144,16 +144,16 @@ class DriveService {
       body: jsonEncode({'name': _folderName, 'mimeType': 'application/vnd.google-apps.folder'}),
     );
     if (create.statusCode == 401 || create.statusCode == 403) throw DriveAuthException();
-    if (create.statusCode >= 300) throw Exception('Could not create the Markless folder in Drive.');
+    if (create.statusCode >= 300) throw Exception('Could not create the UMarkless folder in Drive.');
     return jsonDecode(create.body)['id'] as String;
   }
 
-  /// Uploads [html] as a Google Doc named [title] inside the Markless
+  /// Uploads [html] as a Google Doc named [title] inside the UMarkless
   /// folder. Returns the document's link.
   Future<String?> uploadDoc({required String title, required String html}) =>
       _upload(title: title, googleType: 'document', contentType: 'text/html', content: html);
 
-  /// Uploads [csv] as a Google **Sheet** named [title] in the Markless
+  /// Uploads [csv] as a Google **Sheet** named [title] in the UMarkless
   /// folder, and returns its link.
   ///
   /// This is as close to a Classroom integration as the app can get without

@@ -198,7 +198,7 @@ class _SidebarBrand extends StatelessWidget {
             child: const Icon(Icons.check_rounded, size: 20, color: AiMarkerColors.primary),
           ),
           const SizedBox(width: 10),
-          const Text('Markless', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+          const Text('UMarkless', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
         ],
       ),
     );

@@ -12,13 +12,13 @@ void main() {
   group('the address a browser is sent back to', () {
     test('is the page the teacher started from', () {
       expect(
-        webOAuthRedirectFrom(Uri.parse('https://markless.app/app/#/login')),
-        'https://markless.app/app/',
+        webOAuthRedirectFrom(Uri.parse('https://app.umarkless.com/app/#/login')),
+        'https://app.umarkless.com/app/',
       );
     });
 
     test('never a custom scheme, which is what broke web sign-in', () {
-      final url = webOAuthRedirectFrom(Uri.parse('https://markless.app/app/#/login'));
+      final url = webOAuthRedirectFrom(Uri.parse('https://app.umarkless.com/app/#/login'));
       expect(url.startsWith('https://'), isTrue);
       expect(url, isNot(contains('com.markless.app')));
     });

@@ -32,7 +32,7 @@
 // Secrets required (`npx supabase secrets set ...`):
 //   STRIPE_SECRET_KEY      — sk_test_… / sk_live_… from the Stripe dashboard.
 //   STRIPE_RETURN_ORIGIN   — the web app's own origin, e.g.
-//                            https://markless.app (NO trailing slash). The
+//                            https://app.umarkless.com (NO trailing slash). The
 //                            return URLs are built from this and never from
 //                            anything the client sends, so this endpoint can
 //                            not be turned into an open redirect.
@@ -325,7 +325,7 @@ Deno.serve(async (req) => {
       rail: "revenuecat",
       plan: String(entitlement.plan_revenuecat),
       message:
-        "This account already has a plan through the app store. Buying here would charge you a second time — manage the one you have in the Markless app instead.",
+        "This account already has a plan through the app store. Buying here would charge you a second time — manage the one you have in the UMarkless app instead.",
     }, 409);
   }
 

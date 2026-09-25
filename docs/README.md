@@ -5,7 +5,7 @@ This folder is the public website. GitHub Pages serves it at
 
 | File | What it is |
 | --- | --- |
-| `index.html` | **The landing page.** What Markless does, the four ways to mark, the privacy story, plans. Served at the site root. |
+| `index.html` | **The landing page.** What UMarkless does, the four ways to mark, the privacy story, plans. Served at the site root. |
 | `privacy.html` | The privacy policy as a self-contained page. This is the URL both stores want. |
 | `delete-account.html` | Standalone account-deletion instructions. Google Play requires this as its own URL — a section inside the privacy policy does not satisfy it. |
 | `app/` | **The built web app.** Produced by `tool/build_web.ps1`; served at `/app/` so the landing page can sign a teacher straight in. Committed on purpose — Pages serves what is committed. |
@@ -107,7 +107,7 @@ top of `index.html`.
 - `TODO:` `index.html` says every paid plan gives 10% to charities that help
   kids learn, with no charity named (`REMAINING.md` R9). The claim is marked
   with a `TODO:` comment in the file.
-- `TODO:` if `markless.app` (or whatever domain is registered) is set up, add a
+- `TODO:` if `app.umarkless.com` is set up, add a
   `CNAME` file here containing the bare hostname and point a DNS `CNAME` record
   at `drposhbug.github.io`. Every URL above then has to be updated to match, in
   the Play Console, in App Store Connect, and in the `canonical` / `og:url` tags

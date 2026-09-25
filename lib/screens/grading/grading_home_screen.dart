@@ -243,7 +243,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       final usable = markableDrops(files);
       final skipped = files.length - usable.length;
       if (usable.isEmpty) {
-        _snackBar(pasted ? 'There was no image on the clipboard. Copy a screenshot first, then paste.' : 'Nothing there Markless can mark. Drop photos of the work, or PDFs.');
+        _snackBar(pasted ? 'There was no image on the clipboard. Copy a screenshot first, then paste.' : 'Nothing there UMarkless can mark. Drop photos of the work, or PDFs.');
         return;
       }
 
@@ -747,9 +747,9 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                 Text(
                   // Not "we'll let you know": nothing tells the phone a
                   // batch has finished, so the marks are filed when she
-                  // next opens Markless. Promising a notification she
+                  // next opens UMarkless. Promising a notification she
                   // never gets is worse than promising nothing.
-                  'Marking carries on with the app closed. Open Markless in the morning and the marks are waiting on your dashboard.',
+                  'Marking carries on with the app closed. Open UMarkless in the morning and the marks are waiting on your dashboard.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                 ),
                 const SizedBox(height: 8),
@@ -917,7 +917,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
 
 
   /// The two ways to start marking right now, and the routes into the other
-  /// jobs a teacher opens Markless for.
+  /// jobs a teacher opens UMarkless for.
   ///
   /// A phone reads them as one list, in the order it always has. A desk
   /// monitor puts the camera and the paste box down the left and the routes
@@ -1216,7 +1216,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
               children: [
-                TeacherTopbar(title: 'Markless', onBell: () {}),
+                TeacherTopbar(title: 'UMarkless', onBell: () {}),
                 const SizedBox(height: 14),
                 Text('Good morning,', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
                 const SizedBox(height: 2),

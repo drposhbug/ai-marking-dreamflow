@@ -38,7 +38,7 @@ bool _magicIsImage(Uint8List b) {
   return false;
 }
 
-/// The dropped files Markless can do something with.
+/// The dropped files UMarkless can do something with.
 ///
 /// A teacher who drags a whole folder over gets its spreadsheets, its
 /// `.DS_Store` and its zip along with the scans. Those are dropped quietly

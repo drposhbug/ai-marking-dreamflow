@@ -154,7 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await DriveService().setAutoSave(auth.id, v);
     if (!mounted || !v) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Every marked test will now also be saved to your Drive\'s Markless folder — you\'ll see a note each time.')),
+      const SnackBar(content: Text('Every marked test will now also be saved to your Drive\'s UMarkless folder — you\'ll see a note each time.')),
     );
   }
 
@@ -745,7 +745,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     child: Text(
-                      'With your consent, every marked test is saved as a Google Doc in your Drive\'s "Markless" folder the moment marking finishes — and you get a notification each time.',
+                      'With your consent, every marked test is saved as a Google Doc in your Drive\'s "UMarkless" folder the moment marking finishes — and you get a notification each time.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                     ),
                   ),

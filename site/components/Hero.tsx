@@ -10,7 +10,7 @@ import { LAUNCH_MAILTO, ROUTES } from '../lib/content';
  * Every drawn visual elsewhere on this page is captioned as an illustration
  * for the same reason: the two are never allowed to be mistaken for each other.
  *
- * Under it, the only numbers Markless actually has - how long each route takes
+ * Under it, the only numbers UMarkless actually has - how long each route takes
  * for a class of thirty - in a strip whose rules run the full width of the
  * screen. There are no adoption rates, no hours-saved claims and no user
  * counts here, because none has ever been measured.
@@ -23,7 +23,7 @@ export function Hero() {
           <p className="eyebrow">
             Marking assistant for teachers · <b>not on any app store yet</b>
           </p>
-          <h1 id="h-hero">Marking eats your evenings. Markless takes the first pass.</h1>
+          <h1 id="h-hero">Marking eats your evenings. UMarkless takes the first pass.</h1>
 
           <p className="lede">
             Import a Google Form, scan a stack from the photocopier, or photograph papers one at a
@@ -48,7 +48,7 @@ export function Hero() {
         <figure className="shot hero-shot">
           <div className="shot-frame">
             <div className="shot-bar" aria-hidden="true">
-              <span>Markless · grading</span>
+              <span>UMarkless · grading</span>
               <span>running in a browser</span>
             </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -56,11 +56,11 @@ export function Hero() {
               src="shots/app-grading-home.png"
               width={2880}
               height={1800}
-              alt="A screenshot of the Markless web app on its grading screen. A navigation rail lists Grading, Dashboard, Classes, Answers and Settings. A Scan Assignment card offers From Gallery and From Drive, and below it sit the routes: import a Google Form, prepare a test to print, split a scanned stack, plan with Mark, and report card comments."
+              alt="A screenshot of the UMarkless web app on its grading screen. A navigation rail lists Grading, Dashboard, Classes, Answers and Settings. A Scan Assignment card offers From Gallery and From Drive, and below it sit the routes: import a Google Form, prepare a test to print, split a scanned stack, plan with Mark, and report card comments."
             />
           </div>
           <figcaption>
-            A screenshot of the Markless web app, running in a browser. The teacher name on it is
+            A screenshot of the UMarkless web app, running in a browser. The teacher name on it is
             sample data typed into a demo account.
           </figcaption>
         </figure>

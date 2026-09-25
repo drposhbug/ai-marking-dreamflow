@@ -25,7 +25,7 @@ const _dbName = 'markless_overnight';
 const _pages = 'pages';
 
 /// The browser's own durable storage, which is where a class set's scans
-/// wait when Markless is a tab rather than an app.
+/// wait when UMarkless is a tab rather than an app.
 ///
 /// IndexedDB, not localStorage and not the cache: it survives the tab being
 /// closed, the browser being quit and the laptop being rebooted, and it

@@ -109,7 +109,7 @@ class _ResultScreenState extends State<ResultScreen> {
     _displayFormat = _result?.gradingFormat ?? 'percentage';
   }
 
-  /// The marked result as a Google Doc in the teacher's Drive ("Markless"
+  /// The marked result as a Google Doc in the teacher's Drive ("UMarkless"
   /// folder): score, feedback, per-question notes, and the transcription.
   Future<void> _saveToDrive(AiGradeResult result, String? studentName) async {
     setState(() => _exportingToDrive = true);
@@ -120,7 +120,7 @@ class _ResultScreenState extends State<ResultScreen> {
       await DriveService().uploadMarkedResult(result: result, studentName: name);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Saved to Google Drive → Markless folder ✓'),
+        content: Text('Saved to Google Drive → UMarkless folder ✓'),
       ));
     } on DriveAuthException {
       if (!mounted) return;
@@ -1078,7 +1078,7 @@ class _ResultScreenState extends State<ResultScreen> {
       b.writeln('Marked result: ${sub.score.toStringAsFixed(sub.score % 1 == 0 ? 0 : 2)}/${sub.maxScore.toStringAsFixed(sub.maxScore % 1 == 0 ? 0 : 2)}');
       if (sub.feedback.trim().isNotEmpty) b.writeln('\n${sub.feedback.trim()}');
     }
-    b.writeln('\nMarked with Markless');
+    b.writeln('\nMarked with UMarkless');
     await Share.share(b.toString().trim(), subject: 'Marked result');
   }
 

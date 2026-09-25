@@ -66,7 +66,7 @@ void main() {
         nameColumn: 0,
       );
       final rows = CsvImport.parse(f.csv);
-      expect(rows.first.last, 'Markless');
+      expect(rows.first.last, 'UMarkless');
       expect(rows[1][0], 'Ana Lopez');
       expect(rows[1].last, '18');
       expect(rows[2][0], 'Ben Carter');
@@ -108,10 +108,10 @@ void main() {
     });
 
     test('writes into an existing column rather than adding a duplicate', () {
-      final t = template('Student,Markless\nAna Lopez,old\n');
+      final t = template('Student,UMarkless\nAna Lopez,old\n');
       final f = GradebookTemplate.fill(template: t, marks: [mark('Ana Lopez', 18)], nameColumn: 0);
       final rows = CsvImport.parse(f.csv);
-      expect(rows.first.length, 2, reason: 'a second Markless column was added');
+      expect(rows.first.length, 2, reason: 'a second UMarkless column was added');
       expect(rows[1][1], '18');
     });
 

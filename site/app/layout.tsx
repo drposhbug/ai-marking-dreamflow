@@ -34,19 +34,19 @@ const mono = Courier_Prime({
 // URLs and link-preview images cannot be relative — a share card that points
 // at a host the site is not on is a 404 in someone else's timeline.
 //
-// Set MARKLESS_SITE_URL when deploying anywhere other than GitHub Pages; the
-// Vercel build passes its own deployment URL. Trailing slash enforced here so
-// callers do not have to remember it.
+// Defaults to app.umarkless.com, the production home; set MARKLESS_SITE_URL to
+// build for any other host. Trailing slash enforced here so callers do not
+// have to remember it.
 const SITE = (() => {
   const raw = (process.env.MARKLESS_SITE_URL ?? '').trim();
-  const url = raw === '' ? 'https://drposhbug.github.io/ai-marking-dreamflow/' : raw;
+  const url = raw === '' ? 'https://app.umarkless.com/' : raw;
   return url.endsWith('/') ? url : `${url}/`;
 })();
 const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
-const TITLE = 'Markless — mark a class set in minutes, with real feedback';
+const TITLE = 'UMarkless — mark a class set in minutes, with real feedback';
 const DESCRIPTION =
-  'Markless takes the first pass at marking. Import a Google Form or scan a stack of paper and get question-by-question marks, a justification for every deduction, and feedback students will read. Student names are blacked out on your own device before anything is uploaded.';
+  'UMarkless takes the first pass at marking. Import a Google Form or scan a stack of paper and get question-by-question marks, a justification for every deduction, and feedback students will read. Student names are blacked out on your own device before anything is uploaded.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
@@ -59,19 +59,19 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
-    siteName: 'Markless',
+    siteName: 'UMarkless',
     url: SITE,
     title: TITLE,
     description:
-      'Marking eats your evenings. Markless takes the first pass: question-by-question marks, a justification for every deduction, and feedback students will read. The teacher decides the grade.',
-    images: [{ url: `${SITE}icon.png`, alt: 'The Markless app icon.' }],
+      'Marking eats your evenings. UMarkless takes the first pass: question-by-question marks, a justification for every deduction, and feedback students will read. The teacher decides the grade.',
+    images: [{ url: `${SITE}icon.png`, alt: 'The UMarkless app icon.' }],
   },
   twitter: {
     card: 'summary',
     title: TITLE,
     description:
-      'Marking eats your evenings. Markless takes the first pass: question-by-question marks, a justification for every deduction, and feedback students will read. The teacher decides the grade.',
-    images: [{ url: `${SITE}icon.png`, alt: 'The Markless app icon.' }],
+      'Marking eats your evenings. UMarkless takes the first pass: question-by-question marks, a justification for every deduction, and feedback students will read. The teacher decides the grade.',
+    images: [{ url: `${SITE}icon.png`, alt: 'The UMarkless app icon.' }],
   },
 };
 

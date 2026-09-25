@@ -1,4 +1,4 @@
-// Performance test battery for the Markless backend, against the REAL
+// Performance test battery for the UMarkless backend, against the REAL
 // MARKING-PROCESS edge function. One file, four modes:
 //
 //   node tool/load_test.mjs --mode ramp  --stages 100,250,500     # load / stress
