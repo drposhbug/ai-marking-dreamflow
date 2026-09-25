@@ -391,8 +391,8 @@ h3 { letter-spacing: -.008em; }
    marks, handwriting, tags, tables - follows without a single per-band rule.
    ========================================================================== */
 
-figure.illo, figure.shot { margin: 0; width: 100%; }
-figure.illo figcaption, figure.shot figcaption {
+figure.illo { margin: 0; width: 100%; }
+figure.illo figcaption {
   margin-top: .9rem;
   font-size: .8125rem; line-height: 1.5; color: var(--muted);
   max-width: 62ch;
@@ -555,38 +555,6 @@ figure.illo figcaption, figure.shot figcaption {
 .hero-intro .lede { margin-inline: auto; }
 .hero-intro .cta-row { justify-content: center; }
 .hero-intro .note-small { text-align: center; }
-
-/* The product, presented the way a finished product is: a real capture in a
-   plain hairline frame, and a caption that says exactly what it is. */
-.hero-shot {
-  width: min(100%, 66rem);
-  margin: clamp(2.8rem, 1.4rem + 3vw, 5.5rem) auto 0;
-}
-.shot-frame {
-  background: #fffef8;
-  border: 1px solid color-mix(in srgb, var(--c-ink) 22%, var(--c-paper));
-  border-radius: 6px;
-  overflow: hidden;
-  box-shadow: var(--lift-2);
-}
-.shot-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-  padding: .6rem 1rem;
-  background: var(--c-paper);
-  border-bottom: 1px solid var(--c-paper-rule);
-  font: 700 .68rem/1 var(--mono);
-  letter-spacing: .12em; text-transform: uppercase; color: var(--c-ink-muted);
-}
-@media (prefers-color-scheme: dark) {
-  .shot-frame { border-color: #4a442f; }
-}
-.shot-frame img {
-  display: block; width: 100%; height: auto;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-  object-position: left top;
-}
-.hero-shot figcaption { margin-inline: auto; text-align: center; }
 
 /* The four real timings. The strip is the whole width of the screen; the
    numbers inside it are held to the same column as the copy above. */

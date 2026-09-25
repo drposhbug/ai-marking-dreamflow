@@ -2,13 +2,8 @@ import { LAUNCH_MAILTO, ROUTES } from '../lib/content';
 
 /**
  * The cover page of the exam booklet: warm paper edge to edge, a faint red
- * margin rule down the left, the title centred in the schoolbook serif, and
- * the real product underneath it.
- *
- * The visual is a real screenshot of the Flutter web app, captured from the
- * running build. It is captioned as a screenshot because that is what it is.
- * Every drawn visual elsewhere on this page is captioned as an illustration
- * for the same reason: the two are never allowed to be mistaken for each other.
+ * margin rule down the left, and the title centred in the schoolbook serif.
+ * No app screenshot: the app's blue UI does not belong on this page's paper.
  *
  * Under it, the only numbers UMarkless actually has - how long each route takes
  * for a class of thirty - in a strip whose rules run the full width of the
@@ -44,26 +39,6 @@ export function Hero() {
             There is no app store listing yet — signing in opens the browser version.
           </p>
         </div>
-
-        <figure className="shot hero-shot">
-          <div className="shot-frame">
-            <div className="shot-bar" aria-hidden="true">
-              <span>UMarkless · grading</span>
-              <span>running in a browser</span>
-            </div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="shots/app-grading-home.png"
-              width={2880}
-              height={1800}
-              alt="A screenshot of the UMarkless web app on its grading screen. A navigation rail lists Grading, Dashboard, Classes, Answers and Settings. A Scan Assignment card offers From Gallery and From Drive, and below it sit the routes: import a Google Form, prepare a test to print, split a scanned stack, plan with Mark, and report card comments."
-            />
-          </div>
-          <figcaption>
-            A screenshot of the UMarkless web app, running in a browser. The teacher name on it is
-            sample data typed into a demo account.
-          </figcaption>
-        </figure>
       </div>
 
       <div className="hero-times-strip">
