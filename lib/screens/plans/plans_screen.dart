@@ -344,7 +344,7 @@ class _PlansScreenState extends State<PlansScreen> {
           const SizedBox(height: 8),
           Text(
             billing.onWeb
-                ? 'Marking overnight costs about a fifth of marking on the spot, which is why every plan goes so much further that way. Credits are cost-weighted, not a flat test count: a short multiple-choice quiz uses far less than a six-page problem set, and re-marking the same paper is free. Payment is handled by Stripe — your card details never touch Markless. Subscriptions renew until cancelled and can be cancelled any time from Manage subscription.'
+                ? 'Marking overnight costs about a fifth of marking on the spot, which is why every plan goes so much further that way. Credits are cost-weighted, not a flat test count: a short multiple-choice quiz uses far less than a six-page problem set, and re-marking the same paper is free. Payment is handled by Stripe — your card details never touch UMarkless. Subscriptions renew until cancelled and can be cancelled any time from Manage subscription.'
                 : 'Marking overnight costs about a fifth of marking on the spot, which is why every plan goes so much further that way. Credits are cost-weighted, not a flat test count: a short multiple-choice quiz uses far less than a six-page problem set, and re-marking the same paper is free. Subscriptions renew until cancelled and can be cancelled any time in the store.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
           ),

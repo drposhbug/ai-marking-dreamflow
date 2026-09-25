@@ -10,7 +10,7 @@ the app itself uses.
 ## One-time setup (15 minutes, today)
 
 - [ ] X account (personal is fine — judges follow people, not logos). Bio line:
-      `Building Markless — an AI marking assistant for teachers. Mark less,
+      `Building UMarkless — an AI marking assistant for teachers. Mark less,
       teach more. Shipping in public for @RevenueCat's #Shipaton.`
 - [ ] Check the Shipaton page/Discord for the required hashtag or tagging
       convention (the submission doc has a TODO for this — some years it is
@@ -39,7 +39,7 @@ Each has a suggested visual you can screenshot in two minutes.
 
 **1 — the pin.** (post today)
 > Teachers mark a class set at 9pm after planning all evening. I'm building
-> Markless so the marking is done before they sit down: photograph the stack,
+> UMarkless so the marking is done before they sit down: photograph the stack,
 > get question-by-question marks with a written reason for every deduction,
 > override anything. Building it in public for @RevenueCat's #Shipaton. 0
 > users, 22 days to launch. Follow along.
@@ -76,7 +76,7 @@ Visual: the commit message of 8ca775e next to the old tier card.
 
 **5 — corrections that teach the marker.**
 > New feature: if a teacher overrides the same thing on 3 different papers —
-> not 3 questions on one weird paper, 3 papers — Markless asks: "want me to
+> not 3 questions on one weird paper, 3 papers — UMarkless asks: "want me to
 > mark it your way from now on?" Shows the exact rule in an editable box.
 > Never silent, capped at 8 rules per scheme, two "no"s mutes it forever.
 > An AI marker that quietly changes how it marks is exactly what teachers
@@ -101,13 +101,13 @@ Visual: old hero vs new hero, side by side.
 
 **8 — quarter marks.**
 > Real teachers give 3¾ out of 5. Most marking software thinks in integers.
-> Markless marks in quarters because that's how marking actually works — and
+> UMarkless marks in quarters because that's how marking actually works — and
 > the model must write a reason for every deduction, so 3¾ comes with "right
 > method, arithmetic slip in the last line."
 Visual: the marked-paper card with 3¾ and the red note.
 
 **9 — one paper, not thirty.**
-> Design rule in Markless: the first paper of a class set is ALWAYS marked
+> Design rule in UMarkless: the first paper of a class set is ALWAYS marked
 > alone and shown to the teacher before the other 29 go anywhere. Wrong
 > answer key? You find out on paper one, for the cost of one paper. On every
 > plan, including free. Safety checks shouldn't be premium features.

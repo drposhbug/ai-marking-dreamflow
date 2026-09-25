@@ -23,7 +23,7 @@ class MarkRow {
   int get percent => maxScore <= 0 ? 0 : ((score / maxScore) * 100).round();
 }
 
-/// Gets the marks OUT of Markless and into whatever the school actually
+/// Gets the marks OUT of UMarkless and into whatever the school actually
 /// uses.
 ///
 /// Marking thirty papers and then typing thirty numbers into PowerSchool by
@@ -179,7 +179,7 @@ class GradebookTemplate {
     required List<MarkRow> marks,
     required int nameColumn,
     int lastNameColumn = -1,
-    String columnName = 'Markless',
+    String columnName = 'UMarkless',
     bool asPercent = false,
   }) {
     if (template.isEmpty || nameColumn < 0) {

@@ -28,9 +28,8 @@ param(
   # The absolute URL this build will be served from. Canonical links and
   # link-preview images are absolute and cannot be worked out at runtime, so
   # a build that does not know its own address advertises the wrong one.
-  # Left empty on a first deploy, when the address does not exist yet — then
-  # rebuild with it once Vercel has named the deployment.
-  [string]$SiteUrl = "",
+  # Defaults to the production domain; pass another to build for a preview.
+  [string]$SiteUrl = "https://app.umarkless.com",
   [switch]$SkipInstall
 )
 
@@ -52,7 +51,7 @@ if ($SiteUrl) {
   Write-Host "Canonical and link-preview URLs: $SiteUrl" -ForegroundColor Cyan
 } else {
   Remove-Item Env:\MARKLESS_SITE_URL -ErrorAction SilentlyContinue
-  Write-Warning "No -SiteUrl given: canonical and og: URLs will still point at GitHub Pages. Rebuild with -SiteUrl once this deployment has an address."
+  Write-Warning "-SiteUrl is empty: canonical and og: URLs fall back to https://app.umarkless.com/."
 }
 # Called in this session rather than through `powershell -File`, which drops
 # an empty-string argument — and an empty -BasePath is exactly the point of
