@@ -35,7 +35,7 @@ const int kMaxGalleryPhotos = 60;
 /// "too many photos" tells a teacher nothing about what to do next.
 String? bulkPickWarning(int picked) {
   if (picked <= kMaxGalleryPhotos) return null;
-  return 'You picked $picked photos. Markless will prepare the first $kMaxGalleryPhotos — '
+  return 'You picked $picked photos. UMarkless will prepare the first $kMaxGalleryPhotos — '
       'pick the rest afterwards, or scan the stack to a PDF and use "Split a scanned stack", '
       'which handles a whole class in one file.';
 }

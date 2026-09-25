@@ -148,7 +148,7 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
           // "Open it in the morning", not "they'll be waiting for you": the
           // marking really does run with the app closed, but nothing pushes
           // the results back — they are filed the next time she opens up.
-          content: Text('$sent papers are marking overnight — you can close the app. Open Markless in the morning and the marks are waiting.'),
+          content: Text('$sent papers are marking overnight — you can close the app. Open UMarkless in the morning and the marks are waiting.'),
         ),
       );
       Navigator.of(context).pop(true);

@@ -376,7 +376,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       FilledButton.icon(
                         onPressed: _refCode.isEmpty
                             ? null
-                            : () => _copy('Try Markless — the marking assistant that gives teachers their evenings back. '
+                            : () => _copy('Try UMarkless — the marking assistant that gives teachers their evenings back. '
                                 'Create an account, then enter my referral code $_refCode under Planning.'),
                         icon: const Icon(Icons.share_rounded, size: 18),
                         label: const Text('Copy invite message'),

@@ -1,4 +1,4 @@
-# Markless — store listing copy
+# UMarkless — store listing copy
 
 Paste-ready text for Google Play and App Store Connect. Character counts are
 the limits each store enforces.
@@ -9,12 +9,12 @@ the limits each store enforces.
 
 **Play (30 max):**
 ```
-Markless: AI Marking
+UMarkless: AI Marking
 ```
 
 **App Store (30 max):**
 ```
-Markless: AI Marking
+UMarkless: AI Marking
 ```
 
 **Subtitle — App Store only (30 max):**
@@ -35,12 +35,12 @@ Google Form or paper — mark a whole class set in minutes, with real feedback.
 ## Full description — Play (4000 max) / App Store description
 
 ```
-Marking eats your evenings. Markless gives them back.
+Marking eats your evenings. UMarkless gives them back.
 
 Fastest of all: if your quiz is a Google Form, upload the responses and the
 whole class comes back marked in about a minute — nothing to photograph.
 
-Or photograph a test, a homework sheet, a lab report or an essay — Markless reads
+Or photograph a test, a homework sheet, a lab report or an essay — UMarkless reads
 the actual handwriting, marks it against your expectations, and writes feedback
 a student can act on. A class set takes minutes.
 
@@ -57,7 +57,7 @@ WHAT IT DOES
 • Feedback in your voice, not a robot's: specific, kind, and short enough that
   a fourteen-year-old will read it.
 • Answer keys. Scan the key once and every paper is marked against it — or let
-  Markless learn the key from the first paper of a stack.
+  UMarkless learn the key from the first paper of a stack.
 • Flags what it shouldn't decide alone. A diagram, an unreadable page, a right
   answer reached by an unusual method — it says so instead of guessing.
 • Ontario KTCA categories, and curriculum expectations for your region.
@@ -88,7 +88,7 @@ Photos of student work are used to mark the work and are not kept on our
 servers. No ads. No tracking. No student accounts. Delete your account and
 everything in it from inside the app, any time.
 
-Markless is built by a teacher, for teachers.
+UMarkless is built by a teacher, for teachers.
 ```
 
 ---

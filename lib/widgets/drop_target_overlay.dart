@@ -32,7 +32,7 @@ class DropTargetOverlay extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Photos or PDFs. Drop a whole class set at once and Markless\nwill ask whether it is one test or one per student.',
+                  'Photos or PDFs. Drop a whole class set at once and UMarkless\nwill ask whether it is one test or one per student.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
                 ),

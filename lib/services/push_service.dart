@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 
-/// The four things Markless will interrupt a teacher's evening for.
+/// The four things UMarkless will interrupt a teacher's evening for.
 enum PushKind {
   /// "Your class set is marked" — the point of overnight marking.
   batchDone,
@@ -148,7 +148,7 @@ class OneSignalBridge implements PushBridge {
   }
 }
 
-/// Push notifications for Markless.
+/// Push notifications for UMarkless.
 ///
 /// The feature this exists for is overnight marking: a teacher scans a class
 /// set at bedtime and the marks land hours later. Without a notification the

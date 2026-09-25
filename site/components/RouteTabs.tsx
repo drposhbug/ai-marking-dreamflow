@@ -13,7 +13,7 @@ import { useReducedMotionSafe } from './useMedia';
    whole width of the screen while the tabs themselves sit on the content
    column.
 
-   The big number is the only kind of statistic Markless actually has: how long
+   The big number is the only kind of statistic UMarkless actually has: how long
    a route takes for a class of thirty, from README.md. There are no adoption
    rates, no satisfaction scores and no hours-saved claims on this page because
    there is no measurement behind any of them.

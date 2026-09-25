@@ -484,7 +484,7 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           MarklessMark(size: 32 * scale),
           SizedBox(width: 11 * scale),
-          Text('Markless', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 22 * scale, letterSpacing: -0.7 * scale)),
+          Text('UMarkless', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 22 * scale, letterSpacing: -0.7 * scale)),
         ],
       );
 
@@ -495,7 +495,7 @@ class _LoginScreenState extends State<LoginScreen> {
   /// and a hand-drawn underline on a sign-in screen was working hard to be
   /// liked rather than helping anyone sign in.
   Widget _promise(BuildContext context, PaperTones tones, {required double fontSize}) => Text(
-        'Marking eats your evenings. Markless takes the first pass.',
+        'Marking eats your evenings. UMarkless takes the first pass.',
         style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: fontSize, height: 1.14, letterSpacing: -0.7),
       );
 

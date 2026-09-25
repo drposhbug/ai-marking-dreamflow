@@ -1,6 +1,6 @@
 {
-    "name": "Markless: AI Marking",
-    "short_name": "Markless",
+    "name": "UMarkless: AI Marking",
+    "short_name": "UMarkless",
     "description": "Google Form or paper — mark a whole class set in minutes, with feedback a student can act on.",
     "start_url": ".",
     "scope": ".",

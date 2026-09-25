@@ -1,8 +1,8 @@
-# Markless — Privacy Policy
+# UMarkless — Privacy Policy
 
 **Last updated: 16 August 2026**
 
-Markless is a marking assistant for teachers. This policy explains what it
+UMarkless is a marking assistant for teachers. This policy explains what it
 collects, who it is shared with, and how to delete it. Plain language, because
 you are handing us other people's children's work.
 
@@ -52,7 +52,7 @@ you around. Students never have accounts and are never contacted.
 - **RevenueCat and your app store** (Google Play / Apple) — handle subscriptions.
   We never see your card details.
 - **Google Drive** — only if you switch on Drive export, and only inside the
-  "Markless" folder the app creates. The app cannot see the rest of your Drive.
+  "UMarkless" folder the app creates. The app cannot see the rest of your Drive.
 
 We do not sell your data, and we do not share it with anyone else.
 
@@ -60,7 +60,7 @@ We do not sell your data, and we do not share it with anyone else.
 
 You decide what to photograph. Your school or district likely has rules about
 sending student work to a third-party service — follow them. Where the law
-treats your school as the data controller, Markless acts as a processor on your
+treats your school as the data controller, UMarkless acts as a processor on your
 instructions.
 
 ## Deleting your data
@@ -88,7 +88,7 @@ service.
 
 ## Children
 
-Markless is for teachers, not students. It has no student sign-up, sends nothing
+UMarkless is for teachers, not students. It has no student sign-up, sends nothing
 to students, and shows no ads. Student work appears only because a teacher
 scanned it, and only that teacher can see the result.
 

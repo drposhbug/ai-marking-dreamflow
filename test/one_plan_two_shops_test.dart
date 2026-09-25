@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Markless takes money through two shops that cannot see each other: the app
+/// UMarkless takes money through two shops that cannot see each other: the app
 /// stores, and Stripe on the web. These are the app's half of keeping that
 /// one subscription — the server's half is proved against real Postgres in
 /// tool/sql/entitlement.test.mjs.

@@ -1,6 +1,6 @@
-# Markless
+# UMarkless
 
-Marking eats teachers' evenings. Markless takes the first pass.
+Marking eats teachers' evenings. UMarkless takes the first pass.
 
 A teacher points the app at a class set — a Google Form export, a scanned stack
 from the photocopier, or photographs of individual papers — and gets back

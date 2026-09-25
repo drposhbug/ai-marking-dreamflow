@@ -1,9 +1,9 @@
-# Markless — Security & Compliance
+# UMarkless — Security & Compliance
 
 **Last updated: 21 September 2026**
 
 This is the document a school administrator, district privacy officer or
-procurement reviewer should be handed. It states what Markless does with
+procurement reviewer should be handed. It states what UMarkless does with
 student data, what it will not do, and where the boundaries of that promise
 are. Everything below describes behaviour that is implemented in the app, not
 intentions — where something is a commitment rather than a control, it says so.
@@ -16,7 +16,7 @@ Contact: **oscar.cs.lee@gmail.com**
 
 ### The teacher decides the grade. Always.
 
-Markless produces a **proposed** mark. It is never final and never recorded as
+UMarkless produces a **proposed** mark. It is never final and never recorded as
 final without a teacher looking at it.
 
 - Every result opens in a review screen showing the score, the per-question
@@ -27,11 +27,11 @@ final without a teacher looking at it.
   marking"** rather than a guessed score — hand-drawn diagrams, unreadable
   handwriting, and answers reached by an unexpected method are flagged for a
   human rather than resolved automatically.
-- Nothing is transmitted to a gradebook, a student, or a parent by Markless.
+- Nothing is transmitted to a gradebook, a student, or a parent by UMarkless.
   The teacher carries the mark forward themselves.
 
 This matches the direction of state legislation requiring that AI assist with
-grading but not be the final decision-maker on it. The pattern Markless
+grading but not be the final decision-maker on it. The pattern UMarkless
 implements is **AI suggests → teacher reviews → teacher confirms**.
 
 ### Student identity does not go to the AI.
@@ -53,17 +53,17 @@ Details in §3.
 
 ## 2. Legal footing
 
-**FERPA (US).** Student work, names and scores are education records. Markless
+**FERPA (US).** Student work, names and scores are education records. UMarkless
 is used by the teacher as a school official with a legitimate educational
 interest, and acts as a service provider under the school's direction. It does
 not disclose student records to anyone outside the marking pipeline described
 in §4, and does not sell data or use it for advertising. There is no student
 sign-up, no student contact, and no student-facing surface at all.
 
-**Model training.** Markless does not train models. Its subprocessors are used
+**Model training.** UMarkless does not train models. Its subprocessors are used
 under API terms that do not train on submitted content (§4) — this is the
 requirement California has already legislated, and it is a condition of any
-provider Markless routes to. Where a provider's terms do not meet that bar,
+provider UMarkless routes to. Where a provider's terms do not meet that bar,
 that provider is named as such in §4 rather than quietly used.
 
 **Ontario / MFIPPA (and boards generally).** Boards must inventory the
@@ -71,11 +71,11 @@ software they use and the personal information disclosed to each vendor, and
 give written notice naming the vendor and the data disclosed (O. Reg. 52/26).
 §3 and §4 exist to be pasted directly into that inventory. Note that some
 boards additionally forbid entering student work into AI for assessment at
-all; where that is the local rule, Markless's marking features are not
+all; where that is the local rule, UMarkless's marking features are not
 compliant regardless of the safeguards here, and that is a decision for the
 board, not for us to argue around.
 
-**Age.** Markless is licensed to teachers, who are adults. It collects no
+**Age.** UMarkless is licensed to teachers, who are adults. It collects no
 information directly from children and shows no ads.
 
 ---
@@ -99,7 +99,7 @@ information directly from children and shows no ads.
    right student.
 
 This is controlled by **Settings → Privacy → "Hide student names before
-marking"**, on by default. It is live on every platform Markless ships on,
+marking"**, on by default. It is live on every platform UMarkless ships on,
 but a browser reads a page less well than a phone does and behaves
 differently as a result — §3.1 sets out exactly how.
 
@@ -111,14 +111,14 @@ reports that: before the teacher sends a paper it says whether names will be
 hidden, and on the check-the-first-one screen for a class set it says whether
 the name on that paper was actually covered — because that screen is where the
 teacher decides whether the other twenty-nine go the same way. Handwriting is
-itself arguably identifying, and nothing removes that. Markless reduces
+itself arguably identifying, and nothing removes that. UMarkless reduces
 exposure substantially; it does not make a scanned page anonymous, and no
 vendor should claim otherwise.
 
 ### 3.1 What is different in a browser
 
 Redaction runs in a browser too, and it runs **on the teacher's own machine**:
-a Tesseract build compiled to WebAssembly, served from Markless's own origin
+a Tesseract build compiled to WebAssembly, served from UMarkless's own origin
 (no CDN, no third-party script), reading the page in a worker. The page is not
 sent anywhere to be read. The network is not involved in this step on any
 platform.
@@ -204,7 +204,7 @@ analytics SDK in the app.
 | **DeepSeek** | Cheap route for objective/short answers | Answer **text** only, no images, no names | **Yes — see below** |
 | **Supabase** | Database, marking service hosting | Marks, feedback, classes, students, account | No |
 | **RevenueCat / Google Play / Apple** | Subscriptions | Purchase records. No payment details reach us | No |
-| **Google Drive** | Optional export, teacher-enabled | Only files Markless creates in its own folder | No |
+| **Google Drive** | Optional export, teacher-enabled | Only files UMarkless creates in its own folder | No |
 
 > **DeepSeek, stated honestly.** DeepSeek's published policy stores data on
 > servers in the People's Republic of China and permits use of submitted
@@ -215,7 +215,7 @@ analytics SDK in the app.
 > route exists to reduce cost and is not required for correct marking; marking
 > falls back to Claude when it is off.
 
-Page images are **not retained** by Markless. A one-way hash of each page is
+Page images are **not retained** by UMarkless. A one-way hash of each page is
 stored so that re-marking an identical page can be served from cache instead
 of being processed again; a hash cannot be reversed into the image.
 
@@ -245,7 +245,7 @@ of being processed again; a hash cannot be reversed into the image.
 ## 6. Access control
 
 - Accounts are Supabase Auth (email/password, Google, Apple). Passwords are
-  never stored by Markless.
+  never stored by UMarkless.
 - A teacher sees only their own data. Destructive endpoints verify the
   caller's own token rather than trusting an identifier in the request body.
 - Server-side spend caps limit what any single account can consume, which also
@@ -267,7 +267,7 @@ should not be trusted with student work.
    browser upload, but saying so is not the same as the field being found,
    and this remains a real difference between platforms.
 3. **DeepSeek's terms do not meet the no-training standard**, per §4.
-4. **No SOC 2 report.** Markless is a small product; there has been no
+4. **No SOC 2 report.** UMarkless is a small product; there has been no
    third-party security audit.
 5. **No signed DPA template yet.** Available on request, negotiated per
    district.

@@ -1,4 +1,4 @@
-# Hosting Markless on Vercel
+# Hosting UMarkless on Vercel
 
 The repository can stay **private**. Vercel authenticates against GitHub, so
 nothing has to be made public to deploy — which is the reason this exists
@@ -33,17 +33,22 @@ Without a Vercel login, `npx vercel deploy --temporary .vercel-out` puts it on
 a URL immediately and prints a claim link. **An unclaimed deployment expires in
 an hour** — claiming it is what makes it permanent and gives it a real domain.
 
-### Once you have a real domain
+### The domain: app.umarkless.com
 
 Canonical URLs and link-preview images are absolute and cannot be worked out at
-runtime, so the build has to be told its own address. Until it is, they point
-at the GitHub Pages URL, and a share card pointing at a host the site is not on
-is a 404 in someone else's timeline.
+runtime, so the build has to be told its own address. It defaults to
+`https://app.umarkless.com`; pass `-SiteUrl` only to build for somewhere else,
+because a share card pointing at a host the site is not on is a 404 in someone
+else's timeline.
+
+The domain itself is attached in Vercel, not in this repository:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tool/build_vercel.ps1 -SiteUrl 'https://markless.app'
-npx vercel deploy --prod .vercel-out
+npx vercel domains add app.umarkless.com
 ```
+
+then add the DNS record Vercel asks for (a `CNAME` from `app` to
+`cname.vercel-dns.com`) at whoever hosts `umarkless.com`.
 
 ### Also update, or web payments break
 

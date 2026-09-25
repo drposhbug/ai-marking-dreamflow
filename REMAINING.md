@@ -1,4 +1,4 @@
-# Markless — Remaining Work
+# UMarkless — Remaining Work
 
 Working doc for the agent team. Each item is tagged (R1.1, R1.2, etc.) so agents can
 reference it precisely. Delete anything already done; add anything missing.
@@ -52,13 +52,13 @@ reference it precisely. Delete anything already done; add anything missing.
 ## R3 — Drive export
 
 - [ ] **R3.1** Consent-first toggle in Settings behaves correctly on first enable.
-- [ ] **R3.2** Marked test saves as a Google Doc into the "Markless" folder.
+- [ ] **R3.2** Marked test saves as a Google Doc into the "UMarkless" folder.
 - [ ] **R3.3** Success and failure notifications both fire correctly.
 - [ ] **R3.4** Email-only accounts can link Google via the "Connect Google Drive" path
       (Supabase identity linking).
 - [ ] **R3.5** Failure handling — expired token, revoked access, no network. Should fail
       gracefully, not lose the marked output.
-- [ ] **R3.6** Supabase custom domain (e.g. auth.markless.app) so the OAuth consent
+- [ ] **R3.6** Supabase custom domain (e.g. auth.umarkless.com) so the OAuth consent
       screen doesn't show the raw supabase.co URL.
 
 ---
@@ -222,7 +222,7 @@ history rather than engineering, and it cannot be caught up later.
 ## R10 — Web app (done 2026-08-30)
 
 - [x] **R10.1** Web shell branded: real title/description/OG tags, PWA manifest,
-      Markless icons, `theme-color` #2563EB. Was still the Flutter template.
+      UMarkless icons, `theme-color` #2563EB. Was still the Flutter template.
 - [x] **R10.2** Splash screen so first load isn't a blank white page. Torn down on
       the engine's `flutter-first-frame`, with a 20s hard timeout so a failed boot
       can never leave a stuck spinner.
@@ -395,7 +395,7 @@ corrections-train-the-preset (better), drag-drop + paste intake (faster).
       student identification exact instead of inferred — it removes name matching,
       the mis-split recovery flow, and the two-Anas problem in one step. ~80% of
       the machinery exists.
-- [ ] **R15.6 Share sheet / "Open with Markless".** Receive work from Drive,
+- [ ] **R15.6 Share sheet / "Open with UMarkless".** Receive work from Drive,
       email or Photos via the OS share sheet. Needs `android/` + `ios/` config,
       so it is its own piece of work, but it matches how teachers actually
       receive student work.
@@ -421,7 +421,7 @@ corrections-train-the-preset (better), drag-drop + paste intake (faster).
 - [ ] **R15.11 Student self-submit link.** Teacher shares a link; students upload
       their own work straight into the class. Removes the entire collection step
       — the slowest part of the whole workflow — and every student who opens it
-      sees Markless, which is a real growth loop rather than a bolted-on referral.
+      sees UMarkless, which is a real growth loop rather than a bolted-on referral.
       Pairs with the web app now that it is a proper product.
 - [ ] **R15.12 Google Classroom import.** Pull assignments and submissions
       directly. Biggest workflow unlock available; also the biggest effort
