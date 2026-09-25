@@ -18,6 +18,7 @@ import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/blocking_progress.dart';
+import 'package:marking_prokect_v2/widgets/redaction_review.dart';
 import 'package:provider/provider.dart';
 
 /// Sentinel returned by the key sheet when the trash icon on a saved key is
@@ -424,16 +425,35 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
         answerKeyId: _answerKeyId,
       );
 
+      // In a browser, show the teacher every page with its name covered
+      // before any of it is sent, and let her cover anything the reader
+      // missed. A phone redacts at marking time and has nowhere to put this,
+      // so off the web it returns the pages untouched. Backing out here
+      // sends nothing at all.
+      var toSend = pages;
+      var coveredInReview = false;
+      if (context.read<AppState>().anonymizeUploads) {
+        final reviewed = await reviewBeforeUpload(context, pages: pages);
+        if (reviewed == null) {
+          if (mounted) setState(() => _grading = false);
+          return;
+        }
+        toSend = reviewed.pages;
+        coveredInReview = reviewed.allCovered;
+      }
+      if (!mounted) return;
+
       // Marking runs in the background so the teacher can keep scanning —
       // the queue auto-links the student, saves the submission, and notifies
       // when the result is ready in the home-screen tray.
       context.read<GradingQueueService>().anonymizeUploads = context.read<AppState>().anonymizeUploads;
       context.read<GradingQueueService>().enqueue(
             req: req,
-            pages: pages,
+            pages: toSend,
             students: context.read<StudentsService>(),
             submissions: context.read<SubmissionsService>(),
             label: preStudent?.name,
+            namesCoveredAlready: coveredInReview,
           );
 
       // Keep the class, grade level, and answer key for the next paper in

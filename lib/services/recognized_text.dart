@@ -20,9 +20,15 @@ enum OcrTrust {
   readsHandwriting,
 
   /// A reader that is reliable on printed text and is not reading the
-  /// child's handwriting — Tesseract in a browser. It can find the printed
-  /// "Name:" on a test template, but what it makes of the writing beside it
-  /// is a guess, and so is where that writing ends.
+  /// child's handwriting — Tesseract in a browser. It finds the printed
+  /// "Name:" on a test template; what it makes of the writing beside it is
+  /// a guess, so no name is reported from it.
+  ///
+  /// Where that writing *ends* is no longer a guess: `InkExtent` measures it
+  /// off the pixels, which needs no reading. So a redaction here is as tight
+  /// as one from a reader that sees handwriting. What is still missing is
+  /// the name itself, which is why results from this reader cannot file
+  /// themselves.
   printedLabelsOnly,
 }
 

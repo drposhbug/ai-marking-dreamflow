@@ -3,7 +3,7 @@ import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
-import 'package:marking_prokect_v2/services/local_store.dart';
+import 'package:marking_prokect_v2/services/ink_extent.dart';
 import 'package:marking_prokect_v2/services/word_locator.dart';
 
 /// A page prepared for marking, with the student's identity kept behind.
@@ -131,7 +131,7 @@ class Anonymizer {
         OcrTrust.readsHandwriting =>
           'Your phone reads the name off each paper and blacks it out before the page is sent to be marked — so the work is marked, not the student. The name never leaves this device; it is what files the result under the right student here. You still see the original paper, name and all. If it cannot read a name field on a page, that page is sent as it is, and the app tells you so.',
         OcrTrust.printedLabelsOnly =>
-          'This browser reads each page here, on your machine, finds the printed "Name:" line and blacks out that whole line before the page is sent to be marked. Nothing is read anywhere else and the page never leaves your machine unredacted. Browser reading is weaker than a phone\'s: it reads the printed label, not the handwriting, so it covers the line edge to edge rather than the name exactly — and on a page where it cannot find a label, nothing is covered and the app tells you so.',
+          'This browser reads each page here, on your machine, finds the printed "Name:" line, measures where the writing on it ends and paints over exactly that before the page is sent to be marked. The page never leaves your machine uncovered. It does not read the handwriting, so it does not learn the name — which is why marks from a browser are filed by you rather than automatically. On a page with no printed "Name:" on it, nothing is covered, and you are shown that page before anything is sent.',
       };
 
   /// The line shown just above the Mark button, saying what is about to
@@ -140,7 +140,7 @@ class Anonymizer {
         OcrTrust.readsHandwriting =>
           'Your device reads the name off the page and blacks it out before this is sent. If it can\'t read one, the page goes up as it is.',
         OcrTrust.printedLabelsOnly =>
-          'This browser finds the printed "Name:" line and blacks out that whole line before this is sent. If it can\'t find one, the page goes up as it is, and you\'ll be told.',
+          'This browser finds the "Name:" line, measures where the writing ends and paints over exactly that before this is sent. You see every page, with what was covered, before anything goes.',
       };
 
   /// What to tell the teacher, given the setting and what actually
@@ -274,6 +274,31 @@ class Anonymizer {
     return (set.pages, set.nameOnPaper);
   }
 
+  /// Runs [page] across a paper and keeps each page's own outcome.
+  ///
+  /// [pageSet] answers "did anything get covered anywhere", which is all a
+  /// phone can act on. A browser can do better: on a full screen a teacher
+  /// can see all thirty pages before any of them is sent, and go straight to
+  /// the two where nothing was found. That needs the per-page answer.
+  static Future<List<AnonymizedPage>> review(List<Uint8List> pages) async {
+    final out = <AnonymizedPage>[];
+    for (final p in pages) {
+      out.add(await page(p));
+    }
+    return out;
+  }
+
+  /// Paints more black onto a page, over what was covered already.
+  ///
+  /// The reader finding no name is a real outcome, not a bug to paper over,
+  /// and until now the only answer was "cover it yourself" in some other
+  /// program. This is that fix, done in place. [regions] are image pixels.
+  static Future<Uint8List> cover(Uint8List bytes, List<Rect> regions) async {
+    if (regions.isEmpty) return bytes;
+    final out = await compute(_maskRegions, _MaskJob(bytes, regions));
+    return out ?? bytes;
+  }
+
   static Rect _lineBounds(List<RecognizedWord> words) {
     var left = double.infinity, top = double.infinity, right = 0.0, bottom = 0.0;
     for (final w in words) {
@@ -343,31 +368,6 @@ class IdentityOnPage {
   bool get found => regions.isNotEmpty;
 }
 
-/// Remembers that a teacher has been told what hiding names in a browser
-/// does and does not do.
-///
-/// Asked once per teacher, before their first upload of student work in a
-/// browser. It is a fact they have to have before they decide, not a dialog
-/// to sit through every time they mark.
-class WebUploadNotice {
-  final LocalStore _store;
-
-  const WebUploadNotice({LocalStore store = const LocalStore()}) : _store = store;
-
-  /// v2 deliberately does not read v1. Teachers on v1 agreed to "names go
-  /// up uncovered in a browser", which is no longer what happens; the thing
-  /// they agreed to is not the thing they should be agreeing to, so they
-  /// are told once more and asked again.
-  static String _key(String teacherId) => 'ai_marker.web_upload_ack.v2.$teacherId';
-
-  /// Whether the teacher still has to be asked before this upload.
-  static bool needed({required bool onWeb, required bool alreadyAcknowledged}) => onWeb && !alreadyAcknowledged;
-
-  Future<bool> acknowledged(String teacherId) async => (await _store.getString(_key(teacherId))) == '1';
-
-  Future<void> acknowledge(String teacherId) => _store.setString(_key(teacherId), '1');
-}
-
 class _MaskJob {
   final Uint8List bytes;
   final List<Rect> regions;
@@ -384,13 +384,22 @@ Uint8List? _maskRegions(_MaskJob job) {
       // A little padding: recognition boxes hug the glyphs, and a descender
       // or a long tail on handwriting can sit outside them.
       final pad = (image.height * 0.006).round().clamp(2, 14);
-      // An infinite edge means "as far as the paper goes" — what a reader
+      // An infinite edge means "as far as the writing goes" — what a reader
       // that cannot see the handwriting asks for, because it does not know
-      // where the name ends. This is the only place that knows the answer.
+      // where the name ends. This is the only place that knows the answer,
+      // because it is the only place holding the pixels.
+      //
+      // Where the ink stops is an image question, not a reading one, so it
+      // can be answered here even though the reader could not answer it.
+      // Only when that fails does this fall back to the paper's edge.
       final left = r.left.isFinite ? r.left : 0.0;
       final top = r.top.isFinite ? r.top : 0.0;
-      final right = r.right.isFinite ? r.right : image.width.toDouble();
       final bottom = r.bottom.isFinite ? r.bottom : image.height.toDouble();
+      var right = r.right;
+      if (!right.isFinite) {
+        final inkEnds = InkExtent.endOfWriting(image, top: top, bottom: bottom, fromX: left);
+        right = inkEnds ?? image.width.toDouble();
+      }
       final x = (left - pad).round().clamp(0, image.width - 1);
       final y = (top - pad).round().clamp(0, image.height - 1);
       final w = (right - left + pad * 2).round().clamp(1, image.width - x);
