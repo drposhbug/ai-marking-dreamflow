@@ -43,6 +43,16 @@ class GradingJob {
   /// paper that went out with the name on it must not be a silent event.
   NameHiding nameHiding = NameHiding.notFound;
 
+  /// True when these pages already went through the browser's redaction
+  /// review and came out covered.
+  ///
+  /// Without this the report lies in the one case that matters most. A
+  /// teacher who painted over a name the reader missed hands up a page whose
+  /// `Name:` label is itself under the black box — so the second pass finds
+  /// no label, reports nothing covered, and the app tells her the name went
+  /// out uncovered when she is looking at proof that it did not.
+  bool namesCoveredAlready = false;
+
   /// Completes when this job finishes (done or error) — lets a batch wait
   /// for its pilot paper before releasing the rest.
   final Completer<void> _done = Completer<void>();
@@ -124,6 +134,7 @@ class GradingQueueService extends ChangeNotifier {
     required SubmissionsService submissions,
     String? label,
     bool notifyLearnedKey = true,
+    bool namesCoveredAlready = false,
   }) {
     final job = GradingJob(
       id: 'job_${IdFactory.newId()}',
@@ -133,6 +144,7 @@ class GradingQueueService extends ChangeNotifier {
       label: (label != null && label.trim().isNotEmpty) ? label : _timeLabel(DateTime.now()),
     );
     job.notifyLearnedKey = notifyLearnedKey;
+    job.namesCoveredAlready = namesCoveredAlready;
     _jobs.insert(0, job);
     notifyListeners();
     _run(job, req, students, submissions); // deliberately not awaited
@@ -374,7 +386,9 @@ class GradingQueueService extends ChangeNotifier {
       if (anonymizeUploads && Anonymizer.available) {
         final set = await Anonymizer.pageSet(job.pages);
         localName = set.nameOnPaper;
-        anyRedacted = set.anyRedacted;
+        // A page already covered in the browser review has nothing left for
+        // this pass to find, and that is a success rather than a miss.
+        anyRedacted = set.anyRedacted || job.namesCoveredAlready;
         uploadReq = _withPages(req, set.pages);
       }
       // Recorded before the request goes out, so whatever the teacher is

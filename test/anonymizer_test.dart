@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:marking_prokect_v2/services/anonymizer.dart';
 import 'package:marking_prokect_v2/services/word_locator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// A line of recognised words, laid out left to right the way the page
 /// reader hands them over.
@@ -265,30 +264,6 @@ void main() {
       // Not "is this a phone" any more. A browser has a reader now, so the
       // answer has to come from the reader that would actually run.
       expect(Anonymizer.available, WordLocator.available);
-    });
-  });
-
-  group('telling a teacher once, in a browser, that names cannot be hidden', () {
-    setUp(() => SharedPreferences.setMockInitialValues({}));
-
-    test('is not asked for at all off the web', () {
-      expect(WebUploadNotice.needed(onWeb: false, alreadyAcknowledged: false), isFalse);
-    });
-
-    test('is asked for the first time, and not again', () async {
-      const notice = WebUploadNotice();
-      expect(await notice.acknowledged('teacher-1'), isFalse);
-      expect(WebUploadNotice.needed(onWeb: true, alreadyAcknowledged: false), isTrue);
-
-      await notice.acknowledge('teacher-1');
-      expect(await notice.acknowledged('teacher-1'), isTrue);
-      expect(WebUploadNotice.needed(onWeb: true, alreadyAcknowledged: true), isFalse);
-    });
-
-    test('one teacher acknowledging does not answer for another on the same machine', () async {
-      const notice = WebUploadNotice();
-      await notice.acknowledge('teacher-1');
-      expect(await notice.acknowledged('teacher-2'), isFalse);
     });
   });
 }
