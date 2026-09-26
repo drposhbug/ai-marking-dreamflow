@@ -21,19 +21,20 @@ function mulberry32(seed: number) {
   };
 }
 
-/* Lines of working from the same quiz the rendered class set is marked on
-   (site/art/worksheet.html) — all of it true algebra, so whichever lines a
-   seed happens to pick, a maths teacher finds nothing to wince at. */
+/* Lines of student work across a staffroom's subjects, not one department's
+   — every line true in its own discipline, so whichever a seed picks, the
+   teacher of that subject finds nothing to wince at. Every current call
+   site passes explicit strings; this bank is the safety net for the next
+   one that only says how many lines it wants. */
 const WORKING = [
-  '3x + 5 = 20',
   '3x = 15, so x = 5',
   '4(2x − 3) = 8x − 12',
-  'x² + 5x + 6',
-  '= (x + 2)(x + 3)',
-  'check: 2 × 3 = 6, 2 + 3 = 5',
-  '2(x − 1) = x + 7',
-  '2x − 2 = x + 7, x = 9',
-  '6x² ÷ 3x = 2x',
+  '(x + 2)(x + 3)',
+  'The fog hides the truth from everyone.',
+  'Je suis allé au cinéma samedi.',
+  'The reactant is used up over time.',
+  'People borrowed to buy shares.',
+  '2x − 2 = x + 7, so x = 9',
 ];
 
 type HandwritingProps = {

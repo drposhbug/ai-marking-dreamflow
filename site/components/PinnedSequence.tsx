@@ -225,22 +225,22 @@ function ScanVisual({ local, staticMode }: VisProps) {
           <ul className="qlist">
             <li>
               <span className="qn">Q1</span>
-              <Handwriting lines={['3x + 5 = 20', '3x = 15, so x = 5']} seed={101} />
+              <Handwriting lines={['Je suis allé au cinéma.', 'Nous avons vu le film.']} seed={101} />
               <span className="tag-ok">uploaded</span>
             </li>
             <li>
               <span className="qn">Q2</span>
-              <Handwriting lines={['4(2x − 3) = 8x − 12']} seed={137} />
+              <Handwriting lines={['C’était vraiment super.']} seed={137} />
               <span className="tag-ok">uploaded</span>
             </li>
             <li>
               <span className="qn">Q3</span>
-              <Handwriting lines={['x² + 5x + 6', '= (x + 2)(x + 3)']} seed={173} />
+              <Handwriting lines={['Mes amis ont aimé aussi,', 'surtout la fin du film.']} seed={173} />
               <span className="tag-ok">uploaded</span>
             </li>
             <li>
               <span className="qn">Q4</span>
-              <Handwriting lines={['2x − 2 = x + 7, x = 9']} seed={199} />
+              <Handwriting lines={['Nous y retournerons samedi.']} seed={199} />
               <span className="tag-ok">uploaded</span>
             </li>
           </ul>
@@ -271,16 +271,19 @@ function SplitVisual({ local, staticMode }: VisProps) {
               style={{ opacity: staticMode ? 1 : appear, y: staticMode ? 0 : lift }}
             >
               <span className="code">{code}</span>
+              {/* Three papers, three classes: a stack is where different
+                  subjects genuinely sit together on one desk, so it is the
+                  one illustration that should NOT be all algebra. */}
               <ul className="qlist" style={{ marginTop: '.7rem' }}>
-                <li>
-                  <Handwriting lines={[88, 62]} seed={211 + i * 53} />
-                </li>
-                <li>
-                  <Handwriting lines={[76, 91, 44]} seed={281 + i * 53} />
-                </li>
-                <li style={{ borderBottom: 0 }}>
-                  <Handwriting lines={[83, 55]} seed={349 + i * 53} />
-                </li>
+                {[
+                  ['3x = 15, so x = 5', '4(2x − 3) = 8x − 12', '2x − 2 = x + 7'],
+                  ['The fog hides the truth', 'from everyone in the case,', 'and follows the lawyers.'],
+                  ['Je suis allé au cinéma.', 'Nous avons vu le film,', 'c’était vraiment super.'],
+                ][i % 3].map((line, li, arr) => (
+                  <li key={line} style={li === arr.length - 1 ? { borderBottom: 0 } : undefined}>
+                    <Handwriting lines={[line]} seed={211 + i * 53 + li} />
+                  </li>
+                ))}
               </ul>
               <p className="pg-note" style={{ fontSize: '.72rem' }}>page 1 of 4</p>
             </motion.div>
@@ -295,11 +298,15 @@ function SplitVisual({ local, staticMode }: VisProps) {
   );
 }
 
+/* One paper, so one subject — the same algebra quiz the marked-paper card
+   shows, because this storyboard IS that paper being marked. The subject
+   variety lives where there are several papers: the stamped stack and the
+   redaction card each carry a different class's work. */
 const MARK_ROWS = [
-  { q: 'Q1', lines: [88, 61], mark: '5', tone: 'good' as const, seed: 311 },
-  { q: 'Q2', lines: [94, 47], mark: '3¾', tone: 'cut' as const, seed: 337, slip: 1 },
-  { q: 'Q3', lines: [79, 88], mark: '4¾', tone: 'cut' as const, seed: 373 },
-  { q: 'Q4', lines: [72, 52], mark: '4', tone: 'cut' as const, seed: 397 },
+  { q: 'Q1', lines: ['3x + 5 = 20', '3x = 15, so x = 5'], mark: '5', tone: 'good' as const, seed: 311 },
+  { q: 'Q2', lines: ['4(2x − 3)', '= 8x − 3'], mark: '3¾', tone: 'cut' as const, seed: 337, slip: 1 },
+  { q: 'Q3', lines: ['x² + 5x + 6', '= (x + 2)(x + 3)'], mark: '4¾', tone: 'cut' as const, seed: 373 },
+  { q: 'Q4', lines: ['2(x − 1) = x + 7', 'x = 9'], mark: '4', tone: 'cut' as const, seed: 397 },
 ];
 
 function MarkVisual({ local, staticMode }: VisProps) {
@@ -365,7 +372,7 @@ function ReviewVisual({ local, staticMode }: VisProps) {
         <ul className="qlist">
           <li>
             <span className="qn">Q2</span>
-            <Handwriting lines={[94, 47]} seed={521} slip={1} />
+            <Handwriting lines={['4(2x − 3)', '= 8x − 3']} seed={521} slip={1} />
             <span className="mk cut">
               <span className="strike">3¾</span>
               <motion.span style={{ opacity: staticMode ? 1 : override }}>4</motion.span>
@@ -373,12 +380,12 @@ function ReviewVisual({ local, staticMode }: VisProps) {
           </li>
           <li>
             <span className="qn">Q3</span>
-            <Handwriting lines={[79, 88, 34]} seed={541} />
+            <Handwriting lines={['x² + 5x + 6', '= (x + 2)(x + 3)']} seed={541} />
             <span className="mk cut">4¾</span>
           </li>
           <li>
             <span className="qn">Q7</span>
-            <Handwriting lines={[64, 41]} seed={563} />
+            <Handwriting lines={['— hand-drawn diagram —']} seed={563} />
             <span className="chip-ask">Asks you</span>
           </li>
         </ul>
