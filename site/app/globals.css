@@ -867,7 +867,149 @@ figure.illo figcaption, figure.shot figcaption {
 /* `figure.illo` above is more specific than a bare class, so the spacing here
    has to name the element too or the margin is silently dropped. */
 figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8vw, 5rem); }
-.marking-paper .page { box-shadow: var(--lift-2); }
+
+/* --- the two hands, and the paper they write on ---------------------------
+   Blue ballpoint for the student, red pen for the teacher. Paper and inks
+   are fixed colours in both themes: it is a sheet on a desk, not UI. */
+.sheet, .icard {
+  --paper-a:   #fffdf7;
+  --paper-b:   #f7f2e4;
+  --print:     #2b2a26;
+  --print-2:   #6d6a60;
+  --answer-rule: rgba(143, 138, 124, .5);
+  --index-rule:  rgba(169, 193, 222, .75);
+  --index-top:   rgba(224, 113, 106, .85);
+  --ballpoint: #23358f;
+  --red-pen:   #c0281e;
+  --stamp-ink: rgba(107, 63, 160, .8);
+  --paper-shadow: 0 1px 2px rgba(33, 28, 20, .1), 0 18px 34px -14px rgba(33, 28, 20, .28);
+  color: var(--print);
+}
+.bp {
+  font-family: var(--font-ballpoint), var(--font-hand), cursive;
+  font-weight: 400; color: var(--ballpoint);
+}
+.pen {
+  font-family: var(--font-hand), cursive;
+  font-weight: 700; color: var(--red-pen);
+}
+/* the wavy line a teacher draws under the line that went wrong */
+.bp.slip {
+  text-decoration: underline wavy var(--red-pen);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: .3em;
+  text-decoration-skip-ink: none;
+}
+.xout { position: relative; }
+.xout::after {
+  content: ""; position: absolute; left: 50%; width: 1.45em; margin-left: -.72em; top: 52%;
+  height: 3px; background: var(--red-pen); border-radius: 2px;
+  transform: rotate(-58deg);
+}
+.pen-loop {
+  position: absolute; left: -.28em; top: -.18em;
+  width: calc(100% + .56em); height: calc(100% + .36em);
+  fill: none; stroke: var(--red-pen); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  opacity: .92; pointer-events: none;
+}
+.pen-tick {
+  display: inline-block; width: .9em; height: .9em; margin-left: .45em; vertical-align: -.05em;
+  fill: none; stroke: var(--red-pen); stroke-width: 2.6;
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* --- the marked quiz ------------------------------------------------------ */
+.sheet {
+  position: relative;
+  font-size: clamp(.78rem, .62rem + .5vw, 1rem);
+  padding: 2.2em 2.4em 2.4em 5em;
+  background: linear-gradient(160deg, var(--paper-a), var(--paper-b));
+  border-radius: 2px;
+  box-shadow: var(--paper-shadow);
+  transform: rotate(-1deg);
+}
+/* three punched holes: the desk shows through them */
+.sheet-hole {
+  position: absolute; left: 1.7em; width: 1.5em; height: 1.5em; border-radius: 50%;
+  background: var(--bg);
+  box-shadow: inset 1px 2px 3px rgba(51, 41, 20, .35);
+}
+.sheet-hole:nth-of-type(1) { top: 14%; }
+.sheet-hole:nth-of-type(2) { top: 48%; }
+.sheet-hole:nth-of-type(3) { top: 82%; }
+
+.sheet-head { padding-right: 11em; }
+.sheet-kicker {
+  margin: 0; font: 600 .8em/1 var(--sans);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--print-2);
+}
+.sheet-title { margin: .55em 0 0; font: 600 1.6em/1.2 var(--display); color: var(--print); }
+.sheet-fields {
+  display: flex; flex-wrap: wrap; gap: .4em 2.4em; align-items: baseline;
+  margin: 1.1em 0 0; font: 400 .86em/1 var(--sans); color: var(--print-2);
+}
+.sheet-blank {
+  display: inline-block; min-width: 16em; margin-left: .35em; padding: 0 .4em .1em;
+  border-bottom: 1px solid rgba(43, 42, 38, .55);
+}
+.sheet-blank--short { min-width: 7.5em; }
+.sheet-blank .bp { font-size: 1.65em; line-height: 1; }
+.sheet-inst { margin: 1.2em 0 0; font: 400 .86em/1 var(--sans); color: var(--print-2); }
+
+.sheet-total {
+  position: absolute; top: 1.2em; right: 2.2em;
+  display: grid; justify-items: center;
+  width: 9.5em; padding: 1.1em 0 1.3em;
+  font-family: var(--font-hand), cursive; font-weight: 700; color: var(--red-pen); line-height: 1;
+  transform: rotate(-2deg);
+}
+.sheet-total .pen-loop { left: 0; top: 0; width: 100%; height: 100%; stroke-width: 2.6; }
+.sheet-total-n { font-size: 4.3em; padding: 0 .12em .02em; border-bottom: 2.6px solid var(--red-pen); }
+.sheet-total-d { font-size: 2.7em; margin-top: .1em; }
+
+.sheet-qs { list-style: none; margin: 1.6em 0 0; padding: 0; }
+.sheet-qs li {
+  display: grid; grid-template-columns: minmax(0, 1fr) 7.5em; gap: 0 2em; align-items: center;
+  padding: .6em 0 1.4em;
+}
+.sheet-prompt {
+  display: flex; justify-content: space-between; gap: 1em;
+  margin: 0; font: 400 .95em/1.3 var(--sans); color: var(--print);
+}
+.sheet-pts { flex: none; font-size: .85em; color: var(--print-2); }
+.sheet-line {
+  margin: 0; padding: .35em 0 0 1.6em;
+  border-bottom: 1px solid var(--answer-rule);
+  font-size: 1.55em; line-height: 1.3; white-space: nowrap;
+}
+.sheet-fix { display: inline-block; margin-left: .35em; font-size: 1.05em; transform: translateY(-.3em); }
+
+.sheet-mark { display: flex; align-items: baseline; gap: 1.1em; padding-top: 1.2em; }
+.sheet-mark-n {
+  position: relative; display: inline-block; padding: .08em .3em;
+  font-family: var(--font-hand), cursive; font-weight: 700; font-size: 2.35em; line-height: 1;
+  color: var(--red-pen); transform: rotate(-2deg);
+}
+.sheet-mark-of { font-family: var(--font-hand), cursive; font-size: 1.45em; color: var(--red-pen); opacity: .9; }
+.sheet-note { margin: .6em 0 0 24%; font-size: 1.75em; line-height: 1.15; transform: rotate(-1deg); }
+
+@media (max-width: 46rem) {
+  .sheet { transform: none; padding: 1.8em 1.2em 1.8em 3.6em; }
+  .sheet-hole { left: 1.1em; width: 1.2em; height: 1.2em; }
+  .sheet-total { top: 1.4em; right: 1em; width: 8em; font-size: .78em; }
+  .sheet-total-n { font-size: 3.5em; }
+  .sheet-total-d { font-size: 2.3em; }
+  .sheet-head { padding-right: 6.5em; }
+  .sheet-qs li { grid-template-columns: minmax(0, 1fr) 6.6em; gap: 0 .6em; }
+  .sheet-mark { gap: .7em; }
+  .sheet-mark-n { font-size: 2em; }
+  .sheet-line { padding-left: .6em; font-size: 1.4em; }
+  .sheet-pts { display: none; }
+  .sheet-note { margin-left: 0; }
+}
 
 .flip-grid {
   display: grid; gap: clamp(1rem, 1.6vw, 2rem);
@@ -891,49 +1033,82 @@ figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8v
   display: flex; flex-direction: column;
 }
 .flip-face--back { transform: rotateY(180deg); }
-.flip-face .page { flex: 1; display: flex; flex-direction: column; }
 
+/* An index card. Each face is one side of it: ruled on the front, blank on
+   the back. */
+.icard {
+  --rule-gap: 1.95rem;
+  position: relative; flex: 1;
+  display: flex; flex-direction: column;
+  min-height: 23rem;
+  padding: 1rem 1.1rem 1.2rem;
+  background: #fffefa;
+  border-radius: 3px;
+  box-shadow: var(--paper-shadow);
+}
+.icard--ruled { padding: 0; }
+.icard-head { padding: 1rem 1.1rem .7rem; border-bottom: 1.5px solid var(--index-top); }
 .flip-sub {
-  font: 700 .68rem/1 var(--mono);
-  letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  font: 600 .66rem/1 var(--sans);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--print-2);
 }
-/* The question is set in the exam-paper serif, because that is what it is. */
-.flip-q {
-  margin: .8rem 0 0;
-  font-family: var(--display);
-  font-size: 1.05rem; font-weight: 600; letter-spacing: -.005em; line-height: 1.35;
+/* The question is printed, like a slip glued above the red line. */
+.flip-q { margin: .5rem 0 0; font: 400 .88rem/1.35 var(--sans); color: var(--print); }
+/* The answer sits on the card's blue rules: one line of text per rule. */
+.icard-lines {
+  flex: 1; display: flex; flex-direction: column;
+  padding: .55rem 1.1rem 2.6rem 1.3rem;
+  background:
+    repeating-linear-gradient(to bottom,
+      transparent 0 calc(var(--rule-gap) - 1px),
+      var(--index-rule) calc(var(--rule-gap) - 1px) var(--rule-gap))
+    0 .55rem / 100% calc(100% - .55rem) no-repeat;
 }
-/* What the student wrote: their hand, in pencil-grey italic. */
-.flip-answer {
-  margin: 1rem 0 0; padding: .9rem 1rem;
-  background: var(--bg); border: 1px dashed var(--graphite); border-radius: 3px;
-  font: italic 400 .98rem/1.75 var(--display);
-  color: var(--ink-2);
-}
-.flip-answer span { display: block; }
+.icard-lines .bp { display: block; font-size: 1.22rem; line-height: var(--rule-gap); transform: translateY(.3rem); }
+.icard-lines .bp.slip { text-underline-offset: .18em; }
+.fbd { display: block; width: 100%; max-width: 17rem; margin: .8rem auto 0; stroke: var(--ballpoint); }
+.fbd-label { fill: var(--ballpoint); stroke: none; font: 400 20px var(--font-ballpoint), cursive; }
 .flip-hint {
-  margin: auto 0 0; padding-top: 1rem;
-  font: 700 .66rem/1.3 var(--mono);
-  letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+  position: absolute; right: 1rem; bottom: .6rem; margin: 0;
+  font-size: 1.1rem; font-weight: 500; color: var(--print-2); opacity: .8;
 }
-.flip-mark {
-  display: flex; align-items: baseline; gap: .4rem;
-  padding-bottom: .8rem; margin-bottom: .9rem;
-  border-bottom: 1px solid var(--feint);
+
+.icard-mark { display: flex; align-items: baseline; gap: .9rem; margin: 1.1rem 0 0 .5rem; }
+.icard-mark-n {
+  position: relative; display: inline-block; padding: .05em .35em;
+  font-family: var(--font-hand), cursive; font-weight: 700; font-size: 3.5rem; line-height: 1;
+  color: var(--red-pen); transform: rotate(-2deg);
 }
-.flip-mark b {
-  font: italic 700 2.2rem/1 var(--display);
-  font-size: clamp(2.2rem, 1.3rem + 1.5vw, 3.6rem);
-  letter-spacing: -.02em;
+.icard-mark-n .pen-loop { stroke-width: 2.4; }
+.icard-mark-of { font-family: var(--font-hand), cursive; font-size: 1.6rem; color: var(--red-pen); }
+.flip-reason { margin: 1.1rem 0 0; font-size: 1.3rem; line-height: 1.12; }
+
+/* The feedback, on a sticky note stuck to the bottom of the card. */
+.sticky {
+  position: relative;
+  margin: auto .2rem 0; padding: 1.05rem .85rem .9rem;
+  background: #fbe57a;
+  font: 400 1rem/1.35 var(--font-ballpoint), cursive; color: #3b3526;
+  box-shadow: 1px 6px 8px -3px rgba(51, 41, 13, .25);
+  transform: rotate(1deg);
 }
-.flip-mark b.cut  { color: var(--pen-bright); }
-.flip-mark b.good { color: var(--tick-ink); }
-.flip-mark b.ask  { color: var(--pen); font-size: clamp(1.15rem, .9rem + .5vw, 1.7rem); letter-spacing: 0; }
-.flip-mark i { font-style: normal; font-size: .9rem; font-weight: 700; color: var(--muted); font-family: var(--mono); }
-.flip-reason { margin: 0; font-size: .925rem; line-height: 1.55; color: var(--ink-2); }
-.flip-feedback {
-  margin: .9rem 0 0; padding-top: .9rem; border-top: 1px dashed var(--graphite);
-  font: italic 400 .95rem/1.5 var(--display); color: var(--pen);
+.sticky--left { transform: rotate(-1deg); }
+.sticky::before {
+  content: ""; position: absolute; inset: 0 0 auto; height: .9rem;
+  background: rgba(0, 0, 0, .04);
+}
+.icard > .flip-reason + .sticky { margin-top: auto; }
+.icard > .flip-reason { margin-bottom: 1.4rem; }
+
+/* The teacher's rubber stamp, for the question the model hands back. */
+.stamp {
+  align-self: flex-start;
+  margin: 1.6rem 0 0 .6rem; padding: .7rem 1.6rem;
+  border: 3px solid var(--stamp-ink); border-radius: 8px;
+  outline: 1.2px solid var(--stamp-ink); outline-offset: -8px;
+  font: 700 1.05rem/1.2 var(--sans); letter-spacing: .12em; text-transform: uppercase; text-align: center;
+  color: var(--stamp-ink);
+  transform: rotate(-4deg);
 }
 
 /* ==========================================================================
