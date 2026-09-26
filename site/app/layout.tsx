@@ -43,12 +43,13 @@ const hand = Caveat({
 // URLs and link-preview images cannot be relative — a share card that points
 // at a host the site is not on is a 404 in someone else's timeline.
 //
-// Defaults to app.umarkless.com, the production home; set MARKLESS_SITE_URL to
+// Defaults to umarkless.com, the production home (site at /, app at /app/);
+// set MARKLESS_SITE_URL to
 // build for any other host. Trailing slash enforced here so callers do not
 // have to remember it.
 const SITE = (() => {
   const raw = (process.env.MARKLESS_SITE_URL ?? '').trim();
-  const url = raw === '' ? 'https://app.umarkless.com/' : raw;
+  const url = raw === '' ? 'https://umarkless.com/' : raw;
   return url.endsWith('/') ? url : `${url}/`;
 })();
 const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
