@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Besley, Caveat, Courier_Prime, Public_Sans } from 'next/font/google';
+import { Besley, Caveat, Courier_Prime, Kalam, Public_Sans } from 'next/font/google';
 import './globals.css';
 
 /* next/font fetches and self-hosts these at build time, so the static export
@@ -35,8 +35,17 @@ const mono = Courier_Prime({
 const hand = Caveat({
   subsets: ['latin'],
   display: 'swap',
-  weight: ['500', '600'],
+  weight: ['500', '600', '700'],
   variable: '--font-hand',
+});
+/* The student's ballpoint on the marked quiz and the index cards: rounder and
+   steadier than Caveat, so the two hands on one page - the student's blue
+   and the teacher's red - read as two different people. */
+const ballpoint = Kalam({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400'],
+  variable: '--font-ballpoint',
 });
 
 // Where this build will actually be served from. Absolute, because canonical
@@ -93,7 +102,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable} ${hand.variable}`}>
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable} ${hand.variable} ${ballpoint.variable}`}>
       <body>{children}</body>
     </html>
   );

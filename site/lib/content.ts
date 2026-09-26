@@ -160,6 +160,10 @@ export type FlipCard = {
   reason: string;
   feedback: string;
   tone: 'cut' | 'good' | 'ask';
+  /** Index of the answer line the red pen underlines, if any. */
+  slip?: number;
+  /** Draw this answer instead of writing it out. */
+  diagram?: 'free-body';
 };
 
 /* Four cards, four subjects, because a marking assistant that only ever shows
@@ -174,9 +178,10 @@ export const FLIP_CARDS: FlipCard[] = [
     answer: ['3x + 7 = 25', '3x = 32', 'x = 10.67'],
     mark: '3¾',
     outOf: '/5',
-    reason: 'Method correct throughout. Arithmetic slip on line two: 25 − 7 is 18, not 32.',
+    reason: 'Method correct throughout. Slip on line two: 25 − 7 is 18, not 32.',
     feedback: 'Write the subtraction on its own line before you divide.',
     tone: 'cut',
+    slip: 1,
   },
   {
     id: 'q3',
@@ -185,20 +190,20 @@ export const FLIP_CARDS: FlipCard[] = [
     answer: ['J’ai allé au cinéma.'],
     mark: '2½',
     outOf: '/4',
-    reason:
-      'Right tense, wrong auxiliary: « aller » takes être, and the participle agrees — « je suis allé », or « allée ».',
-    feedback: 'Aller is a VANDERTRAMP verb. Say the sentence once with « suis » and it will stick.',
+    reason: 'Right tense, wrong auxiliary — aller takes être: « je suis allé(e) ».',
+    feedback: 'Aller is a VANDERTRAMP verb. Say it once with « suis » and it will stick.',
     tone: 'cut',
+    slip: 0,
   },
   {
     id: 'q5',
     subject: 'History',
     question: 'Q5 · Give one cause of the 1929 crash and explain it',
-    answer: ['People borrowed money to buy shares,', 'so when prices fell they had to sell,', 'and selling pushed prices down further.'],
+    answer: ['People borrowed money to buy shares, so when prices fell they had to sell, and selling pushed prices down further.'],
     mark: '4',
     outOf: '/4',
-    reason: 'Names a real cause — buying on margin — and runs the mechanism in both directions. Full marks.',
-    feedback: 'Use the term “buying on margin” and the same answer earns its keep in the exam.',
+    reason: 'A real cause — buying on margin — and the mechanism both ways. Full marks.',
+    feedback: 'Use the term “buying on margin” in the exam.',
     tone: 'good',
   },
   {
@@ -208,9 +213,10 @@ export const FLIP_CARDS: FlipCard[] = [
     answer: ['[ hand-drawn free-body diagram ]'],
     mark: 'Asks you',
     outOf: '',
-    reason: 'A hand-drawn diagram. Not scored on a hunch — handed back for a teacher to mark.',
+    reason: 'A hand-drawn diagram. Not scored on a hunch — handed back for you to mark.',
     feedback: 'Flagged as “requires teacher marking”.',
     tone: 'ask',
+    diagram: 'free-body',
   },
 ];
 

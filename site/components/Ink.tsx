@@ -64,6 +64,39 @@ export function Handwriting({ lines, seed, slip }: HandwritingProps) {
   );
 }
 
+/** The ring a teacher draws round a mark: one stroke that runs a little past
+ *  where it started, its radius drifting the way a hand's does. Deterministic
+ *  per seed, so server and browser draw the same ring. It stretches to fill
+ *  its box; the stroke stays the same weight whatever shape the box is. */
+function loopPath(seed: number) {
+  const a0 = -2.2 + seed * 0.3;
+  const N = 56;
+  let d = '';
+  for (let k = 0; k <= N; k++) {
+    const t = k / N;
+    const a = a0 + (2 * Math.PI + 0.55) * t;
+    const drift = 1 + 0.07 * t + 0.025 * Math.sin(a * 3 + seed);
+    const x = 50 + Math.cos(a) * 50 * drift;
+    const y = 50 + Math.sin(a) * 50 * drift;
+    d += `${k ? ' L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }
+  return d;
+}
+
+export function PenLoop({ seed = 1, className }: { seed?: number; className?: string }) {
+  return (
+    <svg
+      className={`pen-loop${className ? ` ${className}` : ''}`}
+      viewBox="-6 -6 112 112"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={loopPath(seed)} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 export function Tick({ className }: { className?: string }) {
   return (
     <svg

@@ -1,91 +1,121 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Handwriting, Tick } from './Ink';
+import { PenLoop, Tick } from './Ink';
 import { useReducedMotionSafe } from './useMedia';
 
 /**
- * The hero illustration: one marked paper, seen from above.
+ * One whole marked paper, seen from above: a photocopied, three-hole-punched
+ * algebra quiz. The student's working is in blue ballpoint on the printed
+ * answer lines; everything the teacher did is in red pen - a tick, a wavy
+ * line under the slip with the wrong digit struck out and the right one
+ * written beside it, each mark ringed in the margin, the total ringed in the
+ * corner, and a note at the foot of the page.
  *
- * The name field is blacked out, four questions are scored down the page with
- * half and quarter marks, the error on Q2 is underlined in red pen, and the
- * total is written in the corner at the angle a person writes it at.
- *
- * It is an illustration. Every caption on the page says so.
+ * Mirrors the approved design in Figma ("UMarkless — realistic paper & flip
+ * cards"). It is an illustration, and its caption says so.
  */
 
-/* Four questions: 5 + 3¾ + 4¾ + 4 = 17½ out of 20, which is the total written
-   in the corner. Any change here has to keep that arithmetic true — and the
-   working is real algebra from the same quiz the rendered class set is marked
-   on, because a squiggle where a student's writing should be is the fastest
-   way for a page about real marking to look fake. The red pen sits under
-   Q2's last line, which is the line the note below calls the slip: 4 times
-   −3 is −12, not −3. */
-const ROWS = [
-  { q: 'Q1', lines: ['3x + 5 = 20', '3x = 15, so x = 5'], mark: '5', tone: 'good' as const, seed: 11 },
-  { q: 'Q2', lines: ['4(2x − 3)', '= 8x − 3'], mark: '3¾', tone: 'cut' as const, seed: 29, slip: 1 },
-  { q: 'Q3', lines: ['x² + 5x + 6', '= (x + 2)(x + 3)'], mark: '4¾', tone: 'cut' as const, seed: 47 },
-  { q: 'Q4', lines: ['2(x − 1) = x + 7', '2x − 2 = x + 7, x = 9'], mark: '4', tone: 'cut' as const, seed: 63 },
+type Line = { text: string; tick?: boolean; slip?: { wrong: string; right: string } };
+
+/* 5 + 3¾ + 4¾ + 4 = 17½, the total ringed in the corner. Any change here has
+   to keep that arithmetic true. The working is real algebra; Q2's last line
+   is the slip the note at the foot calls out: 4 × −3 is −12, not −3. */
+const QUESTIONS: { prompt: string; lines: Line[]; mark: string }[] = [
+  { prompt: 'Solve 3x + 5 = 20', lines: [{ text: '3x + 5 = 20' }, { text: '3x = 15  so  x = 5', tick: true }], mark: '5' },
+  { prompt: 'Expand 4(2x − 3)', lines: [{ text: '4(2x − 3)' }, { text: '= 8x − ', slip: { wrong: '3', right: '12' } }], mark: '3¾' },
+  { prompt: 'Factor x² + 5x + 6', lines: [{ text: 'x² + 5x + 6' }, { text: '= (x + 2)(x + 3)' }], mark: '4¾' },
+  { prompt: 'Solve 2(x − 1) = x + 7', lines: [{ text: '2x − 2 = x + 7' }, { text: 'x = 9' }], mark: '4' },
 ];
 
 export function MarkedPaper() {
   const reduced = useReducedMotionSafe();
-
-  const rise = reduced
-    ? {}
-    : {
-        initial: { opacity: 0, y: 14 },
-        animate: { opacity: 1, y: 0 },
-      };
+  const rise = (delay: number) =>
+    reduced
+      ? {}
+      : {
+          initial: { opacity: 0, y: 12 },
+          animate: { opacity: 1, y: 0 },
+          transition: { duration: 0.4, delay, ease: [0.4, 0, 0.2, 1] as const },
+        };
 
   return (
     <div
-      className="page page-tilt"
+      className="sheet"
       role="img"
-      aria-label="Illustration of a marked algebra paper. The name field at the top is painted out in black. Four questions of handwritten working are scored down the page, including three and three quarters out of five for an expansion where the last line, eight x minus three, is underlined in red. A total of seventeen and a half out of twenty is written in red in the corner."
+      aria-label="Illustration of a marked algebra quiz. Four questions of handwritten working in blue pen are marked in red down the page: a tick on question one, and on question two the last line, eight x minus three, is underlined, the three crossed out and twelve written beside it. Each mark is circled in the margin, five, three and three quarters, four and three quarters, and four, out of five. Seventeen and a half out of twenty is circled in the corner, with a note: right method, show the substitution next time."
     >
-      <div className="pg-top">
-        <span className="field">Name</span>
-        <motion.span
-          className="redact"
-          initial={reduced ? undefined : { scaleX: 0 }}
-          animate={reduced ? undefined : { scaleX: 1 }}
-          transition={{ duration: 0.42, delay: 0.15, ease: [0.4, 0, 0.2, 1] }}
-          style={{ transformOrigin: '0 50%' }}
-        />
-        <motion.span
-          className="total"
-          initial={reduced ? undefined : { opacity: 0, rotate: -14, scale: 0.9 }}
-          animate={reduced ? undefined : { opacity: 1, rotate: -3.5, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.75, ease: [0.34, 1.3, 0.64, 1] }}
-        >
-          17½<i>/20</i>
-        </motion.span>
+      <span className="sheet-hole" />
+      <span className="sheet-hole" />
+      <span className="sheet-hole" />
+
+      <div className="sheet-head">
+        <p className="sheet-kicker">Unit 3 quiz</p>
+        <p className="sheet-title">Linear equations &amp; factoring</p>
+        <p className="sheet-fields">
+          <span>
+            Name <span className="sheet-blank"><span className="bp">Alex M.</span></span>
+          </span>
+          <span>
+            Date <span className="sheet-blank sheet-blank--short"><span className="bp">Oct 14</span></span>
+          </span>
+        </p>
+        <p className="sheet-inst">Show all work.</p>
       </div>
 
-      <ul className="qlist">
-        {ROWS.map((row, i) => (
-          <motion.li
-            key={row.q}
-            {...rise}
-            transition={{ duration: 0.4, delay: 0.2 + i * 0.09, ease: [0.4, 0, 0.2, 1] }}
-          >
-            <span className="qn">{row.q}</span>
-            <Handwriting lines={row.lines} seed={row.seed} slip={row.slip} />
-            <span className={`mk ${row.tone}`}>
-              {row.tone === 'good' && <Tick />}
-              {row.mark}
-            </span>
+      <motion.div
+        className="sheet-total"
+        initial={reduced ? undefined : { opacity: 0, scale: 0.92 }}
+        animate={reduced ? undefined : { opacity: 1, scale: 1 }}
+        transition={{ duration: 0.45, delay: 0.7, ease: [0.34, 1.3, 0.64, 1] }}
+      >
+        <PenLoop seed={7} />
+        <span className="sheet-total-n">17½</span>
+        <span className="sheet-total-d">20</span>
+      </motion.div>
+
+      <ol className="sheet-qs">
+        {QUESTIONS.map((q, i) => (
+          <motion.li key={q.prompt} {...rise(0.15 + i * 0.09)}>
+            <div className="sheet-q">
+              <p className="sheet-prompt">
+                <span>
+                  {i + 1}.&nbsp;&nbsp;{q.prompt}
+                </span>
+                <span className="sheet-pts">(5 marks)</span>
+              </p>
+              {q.lines.map((line) => (
+                <p key={line.text} className="sheet-line">
+                  {line.slip ? (
+                    <>
+                      <span className="bp slip">
+                        {line.text}
+                        <span className="xout">{line.slip.wrong}</span>
+                      </span>
+                      <span className="pen sheet-fix">{line.slip.right}</span>
+                    </>
+                  ) : (
+                    <span className="bp">{line.text}</span>
+                  )}
+                  {line.tick && <Tick className="pen-tick" />}
+                </p>
+              ))}
+            </div>
+            <div className="sheet-mark">
+              <span className="sheet-mark-n">
+                <PenLoop seed={i + 1} />
+                {q.mark}
+              </span>
+              <span className="sheet-mark-of">/5</span>
+            </div>
           </motion.li>
         ))}
-      </ul>
+      </ol>
 
-      <motion.p
-        className="pg-note"
-        {...rise}
-        transition={{ duration: 0.45, delay: 0.85, ease: [0.4, 0, 0.2, 1] }}
-      >
-        Q2 — right method, arithmetic slip in the last line. Show the substitution next time.
+      <motion.p className="pen sheet-note" {...rise(0.85)}>
+        Q2 — right method! 4 × −3 = −12, not −3.
+        <br />
+        Show the substitution next time.
       </motion.p>
     </div>
   );

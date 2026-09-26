@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import { motion, useMotionValue, useMotionValueEvent, useScroll, useSpring, useTransform } from 'framer-motion';
 import { FLIP_CARDS, type FlipCard } from '../lib/content';
+import { PenLoop, Tick } from './Ink';
 import { MarkedPaper } from './MarkedPaper';
 import { useReducedMotionSafe } from './useMedia';
 
@@ -43,8 +44,8 @@ export function FlipCards() {
         <figure className="illo marking-paper">
           <MarkedPaper />
           <figcaption>
-            An illustration of one whole marked paper — the name blacked out, half and quarter
-            marks down the page, the slip on Q2 underlined. Not a screenshot.
+            An illustration of one whole marked paper — half and quarter marks down the page, the
+            slip on Q2 underlined and corrected. Not a screenshot.
           </figcaption>
         </figure>
 
@@ -103,31 +104,87 @@ function Card({ card, index }: { card: FlipCard; index: number }) {
   return (
     <div className="flip" ref={ref}>
       <motion.div className="flip-inner" style={{ rotateY: reduced ? 0 : rotateY }}>
+        {/* The front is a ruled index card: the question printed above the red
+            line, the answer in the student's ballpoint on the rules below it. */}
         <div className="flip-face flip-face--front">
-          <div className="page">
-            <span className="flip-sub">{card.subject} · the answer</span>
-            <p className="flip-q">{card.question}</p>
-            <div className="flip-answer">
-              {card.answer.map((line) => (
-                <span key={line}>{line}</span>
-              ))}
+          <div className="icard icard--ruled">
+            <div className="icard-head">
+              <span className="flip-sub">{card.subject}</span>
+              <p className="flip-q">{card.question}</p>
             </div>
-            <p className="flip-hint">Keep scrolling →</p>
+            <div className="icard-lines">
+              {card.diagram === 'free-body' ? (
+                <>
+                  <FreeBody />
+                  <span className="sr-only">{card.answer.join(' ')}</span>
+                </>
+              ) : (
+                card.answer.map((line, i) => (
+                  <span key={line} className={`bp${card.slip === i ? ' slip' : ''}`}>
+                    {line}
+                    {card.tone === 'good' && i === card.answer.length - 1 && <Tick className="pen-tick" />}
+                  </span>
+                ))
+              )}
+            </div>
+            <p className="pen flip-hint" aria-hidden="true">turn over →</p>
           </div>
         </div>
 
+        {/* The back is the card's blank side: the mark ringed in red pen, the
+            reason in the same pen, and the feedback on a sticky note. A
+            question the model will not guess at gets the teacher's stamp. */}
         <div className="flip-face flip-face--back">
-          <div className="page">
+          <div className="icard">
             <span className="flip-sub">{card.subject} · what came back</span>
-            <div className="flip-mark" style={{ marginTop: '.7rem' }}>
-              <b className={card.tone}>{card.mark}</b>
-              {card.outOf && <i>{card.outOf}</i>}
-            </div>
-            <p className="flip-reason">{card.reason}</p>
-            <p className="flip-feedback">{card.feedback}</p>
+            {card.tone === 'ask' ? (
+              <p className="stamp">
+                Teacher
+                <br />
+                to mark
+              </p>
+            ) : (
+              <p className="icard-mark">
+                <span className="icard-mark-n">
+                  <PenLoop seed={index + 2} />
+                  {card.mark}
+                </span>
+                {card.outOf && <span className="icard-mark-of">{card.outOf}</span>}
+              </p>
+            )}
+            <p className="pen flip-reason">{card.reason}</p>
+            {card.tone === 'ask' ? (
+              <p className="sr-only">{card.feedback}</p>
+            ) : (
+              <p className={`sticky${index % 2 ? ' sticky--left' : ''}`}>{card.feedback}</p>
+            )}
           </div>
         </div>
       </motion.div>
     </div>
+  );
+}
+
+/** The physics answer, drawn the way a student draws it in ballpoint: a block
+ *  on the floor and four forces leaving its edges - normal up, weight down,
+ *  the push to the right, friction to the left. */
+function FreeBody() {
+  return (
+    <svg className="fbd" viewBox="0 0 270 220" aria-hidden="true" focusable="false">
+      <g fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M90 80 L180 81 L179 142 L91 141 Z" />
+        <path d="M24 143 L250 145" strokeWidth="1.6" />
+        <path d="M135 78 L136 18 M128 28 L136 17 L144 29" />
+        <path d="M135 144 L134 204 M127 194 L134 205 L141 195" />
+        <path d="M181 111 L251 110 M241 103 L252 110 L242 118" />
+        <path d="M89 113 L31 114 M41 106 L30 114 L40 121" />
+      </g>
+      <g className="fbd-label">
+        <text x="146" y="30">N</text>
+        <text x="143" y="210">mg</text>
+        <text x="236" y="98">F</text>
+        <text x="34" y="100">f</text>
+      </g>
+    </svg>
   );
 }
