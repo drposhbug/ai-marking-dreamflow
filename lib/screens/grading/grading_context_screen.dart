@@ -449,7 +449,16 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       // Marking runs in the background so the teacher can keep scanning —
       // the queue auto-links the student, saves the submission, and notifies
       // when the result is ready in the home-screen tray.
-      context.read<GradingQueueService>().anonymizeUploads = context.read<AppState>().anonymizeUploads;
+      final appState = context.read<AppState>();
+      context.read<GradingQueueService>().anonymizeUploads = appState.anonymizeUploads;
+      // A keyless paper that teaches a key hands it to the next scan — only
+      // when this paper had no key of its own, so a teacher's own choice is
+      // never swapped out behind their back.
+      context.read<GradingQueueService>().onKeyLearned = _answerKeyId == null
+          ? (id, name) {
+              if (appState.draft.answerKeyId.isEmpty) appState.setAnswerKey(id: id, name: name);
+            }
+          : null;
       context.read<GradingQueueService>().enqueue(
             req: req,
             pages: toSend,
