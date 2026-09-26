@@ -1,8 +1,7 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import type { CSSProperties } from 'react';
 import { PenLoop, Tick } from './Ink';
-import { useReducedMotionSafe } from './useMedia';
 
 /**
  * One whole marked paper, seen from above: a photocopied, three-hole-punched
@@ -14,6 +13,12 @@ import { useReducedMotionSafe } from './useMedia';
  *
  * Mirrors the approved design in Figma ("UMarkless — realistic paper & flip
  * cards"). It is an illustration, and its caption says so.
+ *
+ * On the "What comes back" section it marks itself as it scrolls into view:
+ * the student's working writes in, then the red pen goes down the page one
+ * question at a time and finishes on the total and the note. That timeline
+ * lives in globals.css under `.marking-lead[data-write]`; each question
+ * carries its place in it as `--q`, each line as `--l`.
  */
 
 export type Line = { text: string; tick?: boolean; slip?: { wrong: string; right: string } };
@@ -31,16 +36,6 @@ export const QUESTIONS: Question[] = [
 ];
 
 export function MarkedPaper() {
-  const reduced = useReducedMotionSafe();
-  // Under reduced motion the parts still get an end state to go to, with no
-  // tween: the server has already drawn them at their starting frame (faded
-  // out), and a motion element with nothing to animate would stay there.
-  const rise = (delay: number) => ({
-    initial: { opacity: 0, y: 12 },
-    animate: { opacity: 1, y: 0 },
-    transition: reduced ? { duration: 0 } : { duration: 0.4, delay, ease: [0.4, 0, 0.2, 1] as const },
-  });
-
   return (
     <div
       className="sheet"
@@ -65,20 +60,15 @@ export function MarkedPaper() {
         <p className="sheet-inst">Show all work.</p>
       </div>
 
-      <motion.div
-        className="sheet-total"
-        initial={{ opacity: 0, scale: 0.92 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={reduced ? { duration: 0 } : { duration: 0.45, delay: 0.7, ease: [0.34, 1.3, 0.64, 1] }}
-      >
+      <div className="sheet-total">
         <PenLoop seed={7} />
         <span className="sheet-total-n">17½</span>
         <span className="sheet-total-d">20</span>
-      </motion.div>
+      </div>
 
       <ol className="sheet-qs">
         {QUESTIONS.map((q, i) => (
-          <motion.li key={q.prompt} {...rise(0.15 + i * 0.09)}>
+          <li key={q.prompt} style={{ '--q': i } as CSSProperties}>
             <SheetQuestion n={i + 1} q={q} />
             <div className="sheet-mark">
               <span className="sheet-mark-n">
@@ -87,15 +77,15 @@ export function MarkedPaper() {
               </span>
               <span className="sheet-mark-of">/5</span>
             </div>
-          </motion.li>
+          </li>
         ))}
       </ol>
 
-      <motion.p className="pen sheet-note" {...rise(0.85)}>
+      <p className="pen sheet-note">
         Q2 — right method! 4 × −3 = −12, not −3.
         <br />
         Show the substitution next time.
-      </motion.p>
+      </p>
     </div>
   );
 }
@@ -111,8 +101,8 @@ export function SheetQuestion({ n, q }: { n: number; q: Question }) {
         </span>
         <span className="sheet-pts">(5 marks)</span>
       </p>
-      {q.lines.map((line) => (
-        <p key={line.text} className="sheet-line">
+      {q.lines.map((line, l) => (
+        <p key={line.text} className="sheet-line" style={{ '--l': l } as CSSProperties}>
           {line.slip ? (
             <>
               <span className="bp slip">
