@@ -793,7 +793,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<int?>(
-                value: _classGrade,
+                // Keyed on the value so a change from outside rebuilds the field;
+                // initialValue alone is only read once.
+                key: ValueKey<Object?>(_classGrade),
+                initialValue: _classGrade,
                 items: [
                   const DropdownMenuItem<int?>(value: null, child: Text('Not set')),
                   for (var g = 1; g <= 13; g++) DropdownMenuItem<int?>(value: g, child: Text('Grade $g')),

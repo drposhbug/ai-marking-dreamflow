@@ -162,7 +162,10 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
             TextField(controller: _name, decoration: const InputDecoration(labelText: 'Scheme name')),
             const SizedBox(height: 12),
             DropdownButtonFormField<GradingMode>(
-              value: _mode,
+              // Keyed on the value so a change from outside rebuilds the field;
+              // initialValue alone is only read once.
+              key: ValueKey<Object?>(_mode),
+              initialValue: _mode,
               decoration: const InputDecoration(labelText: 'Grading mode'),
               items: const [
                 DropdownMenuItem(value: GradingMode.homework, child: Text('Homework')),

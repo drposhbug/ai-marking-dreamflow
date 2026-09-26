@@ -37,7 +37,10 @@ void main() async {
 
   if (supabaseAnonKey.isNotEmpty) {
     try {
-      await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+      // The client sends this key as the apikey header either way
+      // (publishableKey ?? anonKey); the legacy anon key is still accepted
+      // under the new name, so nothing changes on the wire.
+      await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey);
       // Google Drive tokens outlive the Supabase session field they arrive
       // in — restore the persisted copy so Drive export works after restart.
       await DriveService.restore();

@@ -3,15 +3,7 @@ import 'dart:async';
 // web_image_picker_web.dart already use: these files only ever compile for
 // the browser, and a second style here would be one more thing to keep in
 // step for no gain.
-// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
-import 'dart:html' as html;
-// The analyser's SDK no longer lists dart:indexed_db, but dart2js — which
-// is what actually builds this file — still ships it, and the web bundle
-// compiles and runs against it. The alternative is hand-written js_interop
-// bindings for six IndexedDB types, which is more code to get wrong for the
-// same result.
-// ignore: avoid_web_libraries_in_flutter, uri_does_not_exist
-import 'dart:indexed_db' as idb;
+import 'dart:js_interop';
 // Only for the type in the factory below. Nothing here ever builds one — a
 // browser has no documents folder, which is the whole reason this file
 // exists.
@@ -20,6 +12,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:marking_prokect_v2/services/overnight_page_store.dart';
+import 'package:web/web.dart' as web;
 
 const _dbName = 'markless_overnight';
 const _pages = 'pages';
@@ -36,16 +29,16 @@ const _pages = 'pages';
 /// ("overnight/ov_abc/p0.jpg"), so a batch reads back the same way on either
 /// platform and nothing above this file has to know the difference.
 class IndexedDbPageStore implements OvernightPageStore {
-  Future<idb.Database>? _opening;
+  Future<web.IDBDatabase>? _opening;
 
-  Future<idb.Database> _db() => _opening ??= html.window.indexedDB!.open(
-        _dbName,
-        version: 1,
-        onUpgradeNeeded: (event) {
-          final db = (event.target as idb.Request).result as idb.Database;
-          if (!(db.objectStoreNames ?? const []).contains(_pages)) db.createObjectStore(_pages);
-        },
-      );
+  Future<web.IDBDatabase> _db() => _opening ??= () async {
+        final request = web.window.indexedDB.open(_dbName, 1);
+        request.onupgradeneeded = ((web.Event _) {
+          final db = request.result as web.IDBDatabase;
+          if (!db.objectStoreNames.contains(_pages)) db.createObjectStore(_pages);
+        }).toJS;
+        return await _awaitRequest(request) as web.IDBDatabase;
+      }();
 
   /// The result screen reopens a marked paper's scan from here, exactly as
   /// a phone reopens it from disk — it used to read only real files, so on
@@ -60,19 +53,20 @@ class IndexedDbPageStore implements OvernightPageStore {
     final keys = <String>[];
     try {
       final db = await _db();
-      final txn = db.transaction(_pages, 'readwrite');
+      final txn = db.transaction(_pages.toJS, 'readwrite');
       final store = txn.objectStore(_pages);
+      final done = _awaitTransaction(txn);
       // Every page is asked for in this one turn of the event loop and only
       // then waited on. Awaiting them one at a time lets the browser close
       // the transaction underneath us between pages.
-      final writes = <Future<dynamic>>[];
+      final writes = <Future<JSAny?>>[];
       for (var i = 0; i < pages.length; i++) {
         final key = 'overnight/$customId/p$i.jpg';
-        writes.add(store.put(pages[i], key));
+        writes.add(_awaitRequest(store.put(pages[i].toJS, key.toJS)));
         keys.add(key);
       }
       await Future.wait(writes);
-      await txn.completed;
+      await done;
       return keys;
     } catch (e) {
       // A half-written paper is no use to anyone, and on a browser that has
@@ -91,35 +85,24 @@ class IndexedDbPageStore implements OvernightPageStore {
   /// A browser refuses a write it has no room for with a QuotaExceededError;
   /// Firefox has its own name for the same thing.
   ///
-  /// What arrives here is usually the failed request's error *event*, not
-  /// the exception itself — IndexedDB reports failures by firing at the
-  /// request — so the reason has to be fished off whatever fired.
+  /// IndexedDB reports a failure by firing at the request or transaction;
+  /// the waits below turn that into an [_IdbFailure] carrying its name.
   static bool _outOfRoom(Object e) {
-    final name = _failureName(e);
+    final name = e is _IdbFailure ? e.name : '';
     if (name == 'QuotaExceededError' || name == 'NS_ERROR_DOM_QUOTA_REACHED') return true;
     return '$e'.toLowerCase().contains('quota');
-  }
-
-  static String _failureName(Object e) {
-    if (e is html.DomException) return e.name;
-    if (e is html.Event) {
-      final target = e.target;
-      if (target is idb.Request) return target.error?.name ?? '';
-      if (target is idb.Transaction) return target.error?.name ?? '';
-    }
-    return '';
   }
 
   @override
   Future<void> discard(String customId) async {
     try {
       final db = await _db();
-      final txn = db.transaction(_pages, 'readwrite');
+      final txn = db.transaction(_pages.toJS, 'readwrite');
       // Every page of one paper in a single delete: they all sort together
       // under the paper's own prefix.
       final prefix = 'overnight/$customId/';
-      final done = txn.completed;
-      await txn.objectStore(_pages).delete(idb.KeyRange.bound(prefix, '$prefix￿'));
+      final done = _awaitTransaction(txn);
+      await _awaitRequest(txn.objectStore(_pages).delete(web.IDBKeyRange.bound(prefix.toJS, '$prefix￿'.toJS)));
       await done;
     } catch (e) {
       debugPrint('IndexedDbPageStore.discard failed: $e');
@@ -130,10 +113,12 @@ class IndexedDbPageStore implements OvernightPageStore {
   Future<Uint8List?> read(String key) async {
     try {
       final db = await _db();
-      final value = await db.transaction(_pages, 'readonly').objectStore(_pages).getObject(key);
-      if (value is Uint8List) return value;
-      if (value is ByteBuffer) return Uint8List.view(value);
-      if (value is List<int>) return Uint8List.fromList(value);
+      final value = await _awaitRequest(db.transaction(_pages.toJS, 'readonly').objectStore(_pages).get(key.toJS));
+      if (value == null) return null;
+      // Pages go in as a Uint8Array; an ArrayBuffer is read too, in case
+      // anything ever stored one.
+      if (value.isA<JSUint8Array>()) return (value as JSUint8Array).toDart;
+      if (value.isA<JSArrayBuffer>()) return (value as JSArrayBuffer).toDart.asUint8List();
       return null;
     } catch (e) {
       debugPrint('IndexedDbPageStore.read failed: $e');
@@ -145,11 +130,11 @@ class IndexedDbPageStore implements OvernightPageStore {
   Future<List<String>> keys() async {
     try {
       final db = await _db();
-      final store = db.transaction(_pages, 'readonly').objectStore(_pages);
+      final store = db.transaction(_pages.toJS, 'readonly').objectStore(_pages);
       // Keys only. Walking a cursor would drag every page's bytes back out
       // of the database just to find out what is in there.
-      final result = await _awaitRequest(store.getAllKeys(null));
-      final out = [for (final k in (result as List? ?? const [])) k.toString()];
+      final result = await _awaitRequest(store.getAllKeys());
+      final out = [for (final k in (result.dartify() as List? ?? const [])) k.toString()];
       out.sort();
       return out;
     } catch (e) {
@@ -158,16 +143,31 @@ class IndexedDbPageStore implements OvernightPageStore {
     }
   }
 
-  /// The handful of IndexedDB calls that hand back a raw request rather than
-  /// a future.
-  static Future<dynamic> _awaitRequest(idb.Request request) {
-    final done = Completer<dynamic>.sync();
-    request.onSuccess.listen((_) {
+  /// Every IndexedDB call hands back a raw request rather than a future.
+  static Future<JSAny?> _awaitRequest(web.IDBRequest request) {
+    final done = Completer<JSAny?>.sync();
+    request.onsuccess = ((web.Event _) {
       if (!done.isCompleted) done.complete(request.result);
-    });
-    request.onError.listen((e) {
-      if (!done.isCompleted) done.completeError(e);
-    });
+    }).toJS;
+    request.onerror = ((web.Event _) {
+      if (!done.isCompleted) done.completeError(_IdbFailure.from(request.error));
+    }).toJS;
+    return done.future;
+  }
+
+  /// A write is only kept once its transaction completes, and running out of
+  /// room often shows up here, as an abort, rather than on any one request.
+  static Future<void> _awaitTransaction(web.IDBTransaction txn) {
+    final done = Completer<void>.sync();
+    txn.oncomplete = ((web.Event _) {
+      if (!done.isCompleted) done.complete();
+    }).toJS;
+    void fail(web.Event _) {
+      if (!done.isCompleted) done.completeError(_IdbFailure.from(txn.error));
+    }
+
+    txn.onerror = fail.toJS;
+    txn.onabort = fail.toJS;
     return done.future;
   }
 
@@ -177,3 +177,17 @@ class IndexedDbPageStore implements OvernightPageStore {
 }
 
 OvernightPageStore createOvernightPageStore({Future<Directory> Function()? documentsDir}) => IndexedDbPageStore();
+
+/// An IndexedDB failure, named the way the browser named it.
+class _IdbFailure implements Exception {
+  _IdbFailure(this.name, this.message);
+
+  factory _IdbFailure.from(web.DOMException? error) =>
+      _IdbFailure(error?.name ?? 'UnknownError', error?.message ?? '');
+
+  final String name;
+  final String message;
+
+  @override
+  String toString() => 'IndexedDB $name: $message';
+}

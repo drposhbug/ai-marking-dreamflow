@@ -413,7 +413,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Column(
                           children: [
                             DropdownButtonFormField<String>(
-                              value: (title.isEmpty) ? 'Teacher' : title,
+                              // Keyed on the value so a change from outside rebuilds the field;
+                              // initialValue alone is only read once.
+                              key: ValueKey<Object?>((title.isEmpty) ? 'Teacher' : title),
+                              initialValue: (title.isEmpty) ? 'Teacher' : title,
                               decoration: const InputDecoration(labelText: 'Role / Title'),
                               items: const [
                                 DropdownMenuItem(value: 'Teacher', child: Text('Teacher')),

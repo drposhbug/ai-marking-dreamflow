@@ -325,7 +325,10 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _subject,
+                      // Keyed on the value so a change from outside rebuilds the field;
+                      // initialValue alone is only read once.
+                      key: ValueKey<Object?>(_subject),
+                      initialValue: _subject,
                       hint: const Text('Subject'),
                       items: const ['Physics', 'Chemistry', 'Biology', 'Science', 'Math', 'English', 'History', 'Geography', 'French', 'Art', 'Music', 'General']
                           .map((s) => DropdownMenuItem(value: s, child: Text(s)))
@@ -337,7 +340,10 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField(
-                      value: _period,
+                      // Keyed on the value so a change from outside rebuilds the field;
+                      // initialValue alone is only read once.
+                      key: ValueKey<Object?>(_period),
+                      initialValue: _period,
                       items: [for (var p = 1; p <= 12; p++) DropdownMenuItem(value: 'P$p', child: Text('P$p'))],
                       onChanged: (v) => setState(() => _period = v.toString()),
                       decoration: const InputDecoration(labelText: 'Period'),
@@ -350,7 +356,10 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<int?>(
-                      value: _gradeLevel,
+                      // Keyed on the value so a change from outside rebuilds the field;
+                      // initialValue alone is only read once.
+                      key: ValueKey<Object?>(_gradeLevel),
+                      initialValue: _gradeLevel,
                       items: [
                         const DropdownMenuItem<int?>(value: null, child: Text('Not set')),
                         for (var g = 1; g <= 13; g++) DropdownMenuItem<int?>(value: g, child: Text('Grade $g')),
