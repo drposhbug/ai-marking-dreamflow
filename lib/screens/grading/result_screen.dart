@@ -4,8 +4,11 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:marking_prokect_v2/services/overnight_page_store.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:marking_prokect_v2/app/app_routes.dart';
+import 'package:marking_prokect_v2/utils/mark_format.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
@@ -93,11 +96,18 @@ class _ResultScreenState extends State<ResultScreen> {
       // Page photos are kept on-device per submission — load them so the
       // Original/Annotated tabs work on reopen too.
       final paths = sub?.pageImagePaths ?? const [];
-      if (!kIsWeb && paths.isNotEmpty && (widget.pageImages == null || widget.pageImages!.isEmpty)) {
+      if (paths.isNotEmpty && (widget.pageImages == null || widget.pageImages!.isEmpty)) {
         Future(() async {
           final loaded = <Uint8List>[];
+          // A browser keeps them in IndexedDB rather than as files.
+          final store = kIsWeb ? createOvernightPageStore() : null;
           for (final p in paths) {
             try {
+              if (store != null) {
+                final bytes = await store.read(p);
+                if (bytes != null) loaded.add(bytes);
+                continue;
+              }
               final f = File(p);
               if (await f.exists()) loaded.add(await f.readAsBytes());
             } catch (_) {}
@@ -216,7 +226,15 @@ class _ResultScreenState extends State<ResultScreen> {
   void _applyOverride(AiGradeResult updated) {
     final pct = updated.maxScore <= 0 ? 0.0 : (updated.rawScore / updated.maxScore * 100).clamp(0.0, 100.0);
     final (level, levelDisplay) = _levelFor(pct);
+    // A summary that quotes the score ("Imported from quiz.csv — 6/8") would
+    // otherwise keep the old number after the override, and it is what the
+    // marks export writes in its feedback column.
+    final before = _result;
+    final oldScore = before == null ? null : '${formatMark(before.rawScore)}/${formatMark(before.maxScore)}';
+    final newScore = '${formatMark(updated.rawScore)}/${formatMark(updated.maxScore)}';
+    final summary = oldScore != null && oldScore != newScore ? updated.summary.replaceAll(oldScore, newScore) : updated.summary;
     final finalResult = updated.copyWith(
+      summary: summary,
       percentage: pct,
       percentageDisplay: '${pct.round()}%',
       level: level,
@@ -231,6 +249,10 @@ class _ResultScreenState extends State<ResultScreen> {
             sub.copyWith(
               score: finalResult.rawScore,
               maxScore: finalResult.maxScore,
+              // The teacher changed the marking: this is what the
+              // dashboard's "overrides" count and the "override used" tag mean.
+              overrideUsed: true,
+              feedback: finalResult.summary,
               // Keep the saved payload in step so reopening shows the
               // override, not the original AI marks.
               resultJson: finalResult.toJson(),
@@ -740,7 +762,10 @@ class _ResultScreenState extends State<ResultScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // ── Tab switcher ──────────────────────────────────────
+                  // ── Tab switcher and page — only when there is a page.
+                  // A Google Form import has none, and an empty picture box
+                  // with two tabs that both show nothing read as broken.
+                  if (_pages.isNotEmpty || (sub?.pageImagePaths.isNotEmpty ?? false)) ...[
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
@@ -815,6 +840,7 @@ class _ResultScreenState extends State<ResultScreen> {
                         ),
                       ],
                     ),
+                  ],
                   ],
                   const SizedBox(height: 14),
 
@@ -971,19 +997,23 @@ class _ResultScreenState extends State<ResultScreen> {
                     ],
 
                     // Criteria appear ONLY when they carry marks: KTCA
-                    // categories, a printed rubric, or the essay breakdown
-                    // (content / evidence / flow / grammar / spelling).
+                    // categories, a printed rubric, the essay breakdown
+                    // (content / evidence / flow / grammar / spelling) — or
+                    // a result with nothing marked on a page, like a Google
+                    // Form import, where the per-question breakdown IS the
+                    // marking and hiding it left the teacher a bare total.
                     ...(() {
                       final ktca = _ktcaOf(result);
                       final isEssay = sub?.gradingMode == GradingMode.englishEssay;
+                      final perQuestion = result.provider == 'import' || result.annotations.isEmpty;
                       final crits = ktca.isNotEmpty
                           ? ktca
-                          : (isEssay
+                          : (isEssay || perQuestion
                               ? result.criteriaBreakdown.where((c) => c.name.isNotEmpty && c.maxScore > 0).toList(growable: false)
                               : const <CriterionResult>[]);
                       if (crits.isEmpty) return const <Widget>[];
                       return <Widget>[
-                        Text(ktca.isNotEmpty ? 'Categories' : 'Breakdown', style: Theme.of(context).textTheme.titleMedium),
+                        Text(ktca.isNotEmpty ? 'Categories' : (perQuestion && !isEssay ? 'Questions' : 'Breakdown'), style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 10),
                         ...crits.map((c) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
@@ -1679,17 +1709,16 @@ class _TriageBadge extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.w900)),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 4),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.85))),
-                ],
+                const SizedBox(height: 4),
+                Text(subtitle, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.85))),
               ],
             ),
           ),
           if (triageStatus == TriageStatus.unableToGrade)
             TextButton(
               style: TextButton.styleFrom(foregroundColor: fg, splashFactory: NoSplash.splashFactory),
-              onPressed: () {},
+              // Back to the scan screen for a fresh photo of this paper.
+              onPressed: () => GoRouter.of(context).go(AppRoutes.grading),
               child: const Text('Retake Photo'),
             ),
         ],

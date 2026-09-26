@@ -45,6 +45,7 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
     // The plan and allowance, so each button can show what it costs before
     // it is pressed rather than after the credits are gone.
     Future.microtask(() async {
+      if (!mounted) return;
       final auth = context.read<AuthService>().currentUser;
       if (auth == null) return;
       try {

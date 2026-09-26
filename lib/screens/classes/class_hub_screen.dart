@@ -116,7 +116,9 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
     final students = studentsService.byClass(widget.classId);
     final classSubmissions = submissions.where((s) => s.classId == widget.classId).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    final scored = classSubmissions.where((s) => s.maxScore > 0).toList();
+    // Unmarkable papers carry no real score; the dashboard and class
+    // analysis leave them out of the average too.
+    final scored = classSubmissions.where((s) => s.maxScore > 0 && s.triageStatus != TriageStatus.unableToGrade).toList();
     final avg = scored.isEmpty
         ? 0.0
         : (scored.map((e) => e.score / e.maxScore).reduce((a, b) => a + b) / scored.length).clamp(0.0, 1.0).toDouble();
@@ -175,7 +177,7 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                         children: [
                           _MiniStat(label: 'STUDENTS', value: '${students.length}'),
                           const SizedBox(width: 10),
-                          _MiniStat(label: 'ASSIGNMENTS', value: '${classSubmissions.length}'),
+                          _MiniStat(label: 'PAPERS MARKED', value: '${classSubmissions.length}'),
                           const SizedBox(width: 10),
                           _MiniStat(label: 'LAST GRADED', value: classSubmissions.isEmpty ? '—' : timeAgo(classSubmissions.first.createdAt)),
                         ],
@@ -207,7 +209,7 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
               // The marked work itself — teachers look for it HERE, in the
               // class, not just on the dashboard.
               if (classSubmissions.isNotEmpty) ...[
-                Text('Assignments', style: Theme.of(context).textTheme.titleMedium),
+                Text('Marked papers', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 10),
                 Card(
                   child: Column(
@@ -276,7 +278,7 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                         leading: CircleAvatar(backgroundColor: cs.primary.withValues(alpha: 0.12), child: Text(s.name.isEmpty ? '?' : s.name.substring(0, 1), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800))),
                         title: Text(s.name, style: Theme.of(context).textTheme.titleSmall),
                         subtitle: Text(_lastMarkLabel(s.id, classSubmissions), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                        trailing: _TrendBadge(kind: _trendFor(s.id, classSubmissions)),
+                        trailing: _trendFor(s.id, classSubmissions) == null ? null : _TrendBadge(kind: _trendFor(s.id, classSubmissions)!),
                         onTap: () => context.push('${AppRoutes.studentProfile}?studentId=${s.id}&classId=${widget.classId}'),
                       ),
                   ],
@@ -348,9 +350,11 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
   }
 
   /// Real trend: compares the student's two most recent percentages.
-  TrendKind _trendFor(String studentId, List<Submission> submissions) {
-    final own = submissions.where((s) => s.studentId == studentId && s.maxScore > 0).toList();
-    if (own.length < 2) return TrendKind.consistent;
+  /// Null — no badge — until there are two marks to compare; one mark, or
+  /// none, used to read "CONSISTENT".
+  TrendKind? _trendFor(String studentId, List<Submission> submissions) {
+    final own = submissions.where((s) => s.studentId == studentId && s.maxScore > 0 && s.triageStatus != TriageStatus.unableToGrade).toList();
+    if (own.length < 2) return null;
     final latest = own[0].score / own[0].maxScore;
     final previous = own[1].score / own[1].maxScore;
     final diff = latest - previous;

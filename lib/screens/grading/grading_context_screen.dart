@@ -414,7 +414,10 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
         criteria: const {},
         harshness: _harshness.round(),
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-        overrideUsed: draft.oneTimeOverride,
+        // "Override" means the teacher changed a mark (ResultScreen._applyOverride).
+        // The "apply to this assignment only" switch is a settings choice, and
+        // saving it here tagged every paper marked with the default switch.
+        overrideUsed: false,
         imageBytes: draft.imageBytes!,
         pageImages: pages,
         studentName: preStudent?.name,
@@ -671,7 +674,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                         children: [
                           Text(student?.name ?? 'Student', style: Theme.of(context).textTheme.titleMedium),
                           const SizedBox(height: 2),
-                          Text(klass == null ? 'Select class' : '${klass.name} · ${klass.period}${klass.gradeLevel != null ? ' · Grade ${klass.gradeLevel}' : ''}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
+                          Text(klass == null ? 'Select class' : '${klass.label}${klass.gradeLevel != null ? ' · Grade ${klass.gradeLevel}' : ''}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                         ],
                       ),
                     ),
@@ -803,7 +806,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                     Switch(
                       value: draft.oneTimeOverride,
                       onChanged: (v) => context.read<AppState>().setOneTimeOverride(v),
-                      activeColor: cs.secondary,
+                      activeThumbColor: cs.secondary,
                     ),
                   ],
                 ),

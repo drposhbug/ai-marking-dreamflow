@@ -47,12 +47,13 @@ class IndexedDbPageStore implements OvernightPageStore {
         },
       );
 
-  /// Nothing in a browser reopens a marked paper's scan — the result screen
-  /// only reads pages back off a real filesystem — so a filed paper's blobs
-  /// are dead weight in a teacher's site data. They go as soon as the batch
-  /// is over.
+  /// The result screen reopens a marked paper's scan from here, exactly as
+  /// a phone reopens it from disk — it used to read only real files, so on
+  /// the web the Original and Annotated tabs were always empty. A filed
+  /// paper's pages now stay until its result is deleted, which discards
+  /// them (SubmissionsService.delete).
   @override
-  bool get keepsFiledPages => false;
+  bool get keepsFiledPages => true;
 
   @override
   Future<List<String>> write(String customId, List<Uint8List> pages) async {

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:marking_prokect_v2/services/overnight_page_store.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/local_store.dart';
@@ -169,6 +170,13 @@ class SubmissionsService extends ChangeNotifier {
         try {
           await File(p).delete();
         } catch (_) {}
+      }
+    } else {
+      // In a browser the pages sit in IndexedDB under "overnight/<paper>/pN";
+      // the paper is the folder, and discarding it takes every page at once.
+      final store = createOvernightPageStore();
+      for (final paper in {for (final k in sub.pageImagePaths) if (k.split('/').length >= 3) k.split('/')[1]}) {
+        await store.discard(paper);
       }
     }
     _cloudDelete(sub.teacherId, id);

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -468,6 +467,7 @@ class AiGradeResult {
     String? levelDisplay,
     double? rawScore,
     double? maxScore,
+    String? summary,
     List<QuestionAnnotation>? annotations,
   }) {
     return AiGradeResult(
@@ -482,7 +482,7 @@ class AiGradeResult {
       levelDisplay: levelDisplay ?? this.levelDisplay,
       rawScore: rawScore ?? this.rawScore,
       maxScore: maxScore ?? this.maxScore,
-      summary: summary,
+      summary: summary ?? this.summary,
       strengths: strengths,
       improvements: improvements,
       criteriaBreakdown: criteriaBreakdown,
@@ -1605,7 +1605,11 @@ class AiGradingService {
       studentId: req.studentId,
       classId: req.classId,
       presetId: req.presetId,
-      subject: req.subject,
+      // "Subject" is the placeholder a request carries when nothing named
+      // the subject; the marked paper usually has — use what it detected.
+      subject: (req.subject.trim().isEmpty || req.subject == 'Subject') && res.detectedSubject.trim().isNotEmpty
+          ? res.detectedSubject.trim()
+          : req.subject,
       gradingMode: req.mode,
       score: res.rawScore,
       maxScore: res.maxScore,

@@ -231,7 +231,7 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
                     return;
                   }
                   await context.read<PresetsService>().delete(widget.presetId);
-                  if (!mounted) return;
+                  if (!context.mounted) return;
                   context.pop();
                 },
                 style: OutlinedButton.styleFrom(foregroundColor: AiMarkerColors.error, side: BorderSide(color: AiMarkerColors.error.withValues(alpha: 0.35))),

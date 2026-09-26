@@ -70,7 +70,10 @@ int enqueueStudentGroups({
       criteria: const {},
       harshness: draft.harshness,
       notes: null,
-      overrideUsed: draft.oneTimeOverride,
+      // "Override" means the teacher changed a mark (ResultScreen._applyOverride).
+      // The "apply to this assignment only" switch is a settings choice, and
+      // saving it here tagged every paper marked with the default switch.
+      overrideUsed: false,
       imageBytes: bytes.first,
       pageImages: bytes,
       studentName: (name != null && name.trim().isNotEmpty) ? name.trim() : null,

@@ -31,6 +31,10 @@ import 'package:marking_prokect_v2/widgets/teacher_topbar.dart';
 import 'package:marking_prokect_v2/widgets/web_upload_gate.dart';
 import 'package:provider/provider.dart';
 
+/// The greeting for the teacher's own clock — it used to say "Good morning"
+/// at every hour of the day.
+String _greeting(int hour) => hour < 12 ? 'Good morning,' : (hour < 17 ? 'Good afternoon,' : 'Good evening,');
+
 class GradingHomeScreen extends StatefulWidget {
   const GradingHomeScreen({super.key});
 
@@ -899,7 +903,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
               _ClassRow(
                 label: selectedClass == null
                     ? 'Which class? Tap to choose'
-                    : '${selectedClass.name} · ${selectedClass.period}${selectedClass.gradeLevel != null ? ' · Grade ${selectedClass.gradeLevel}' : ''}',
+                    : '${selectedClass.label}${selectedClass.gradeLevel != null ? ' · Grade ${selectedClass.gradeLevel}' : ''}',
                 hasClass: selectedClass != null,
                 onTap: () => _askWhichClass(),
               ),
@@ -1216,9 +1220,9 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
               children: [
-                TeacherTopbar(title: 'UMarkless', onBell: () {}),
+                const TeacherTopbar(title: 'UMarkless'),
                 const SizedBox(height: 14),
-                Text('Good morning,', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
+                Text(_greeting(DateTime.now().hour), style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral)),
                 const SizedBox(height: 2),
                 Text('${user?.name.isNotEmpty == true ? user!.name : 'Teacher'} 👋', style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 14),
@@ -1362,7 +1366,7 @@ class _ClassPickerSheet extends StatelessWidget {
                       ),
                       title: Text(c.name, style: Theme.of(context).textTheme.titleSmall),
                       subtitle: Text(
-                        '${c.period}${c.gradeLevel != null ? ' · Grade ${c.gradeLevel}' : ''}',
+                        '${c.periodLabel}${c.gradeLevel != null ? ' · Grade ${c.gradeLevel}' : ''}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
                       ),
                       trailing: c.id == currentId ? Icon(Icons.check_circle_rounded, color: cs.primary) : Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral.withValues(alpha: 0.8)),

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/models/grading_preset.dart';
@@ -68,6 +67,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
       };
 
       await context.read<AppState>().initTheme();
+      if (!mounted) return;
 
       final auth = context.read<AuthService>();
       _auth = auth;

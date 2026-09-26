@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -8,13 +8,12 @@ import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/csv_import.dart';
 import 'package:marking_prokect_v2/services/drive_service.dart';
+import 'package:marking_prokect_v2/services/file_saver.dart';
 import 'package:marking_prokect_v2/services/gradebook_export.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 /// Gets the marks out of UMarkless and into the school's gradebook.
 ///
@@ -48,10 +47,10 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
   }
 
   Future<void> _shareCsv(String csv, String filename) async {
-    final dir = await getTemporaryDirectory();
-    final f = File('${dir.path}/$filename');
-    await f.writeAsString(csv, flush: true);
-    await Share.shareXFiles([XFile(f.path)], subject: filename);
+    // UTF-8 with a byte-order mark, so Excel opens names like "Zoë" or
+    // "Nguyễn" as written instead of as mojibake.
+    await saveFile(Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(csv)]), filename, mimeType: 'text/csv');
+    if (mounted) _snack('Saved $filename');
   }
 
   Future<void> _exportPlain() async {
@@ -206,7 +205,7 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
                   decoration: const InputDecoration(labelText: 'Class', border: OutlineInputBorder()),
                   items: [
                     for (final TeacherClass c in classes)
-                      DropdownMenuItem(value: c.id, child: Text('${c.name} · ${c.period}')),
+                      DropdownMenuItem(value: c.id, child: Text(c.label)),
                   ],
                   onChanged: (v) => setState(() => _classId = v),
                 ),

@@ -103,7 +103,14 @@ class BottomNavShell extends StatelessWidget {
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Sidebar(currentIndex: shell.currentIndex, onDestination: _go),
+          // Its own labelled region, so a screen reader can find and move
+          // through the navigation the way a sighted teacher does.
+          Semantics(
+            container: true,
+            explicitChildNodes: true,
+            label: 'Navigation',
+            child: _Sidebar(currentIndex: shell.currentIndex, onDestination: _go),
+          ),
           Expanded(child: shell),
         ],
       ),
@@ -233,7 +240,13 @@ class _SidebarItem extends StatelessWidget {
     // White pill for the tab you are on: on a blue field that reads as
     // "you are here" faster than a tint does.
     final fg = selected ? AiMarkerColors.primary : Colors.white.withValues(alpha: 0.92);
-    return Padding(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
         color: selected ? Colors.white : Colors.transparent,
@@ -260,6 +273,7 @@ class _SidebarItem extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

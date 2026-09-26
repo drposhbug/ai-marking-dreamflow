@@ -52,7 +52,7 @@ class PresetDetailScreen extends StatelessWidget {
                         children: [
                           Icon(Icons.class_rounded, color: cs.primary),
                           const SizedBox(width: 10),
-                          Expanded(child: Text(klass == null ? 'Class' : '${klass.name} · ${klass.period}', style: Theme.of(context).textTheme.titleSmall)),
+                          Expanded(child: Text(klass == null ? 'Class' : klass.label, style: Theme.of(context).textTheme.titleSmall)),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999), border: Border.all(color: accent.withValues(alpha: 0.18))),

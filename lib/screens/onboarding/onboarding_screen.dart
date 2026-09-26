@@ -353,10 +353,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final name = _displayName;
     final school = _school.text.trim();
     if (name.isEmpty || school.isEmpty) return;
-    final user = context.read<AuthService>().currentUser;
+    final authService = context.read<AuthService>();
+    final appState = context.read<AppState>();
+    final user = authService.currentUser;
     if (user != null) {
-      await context.read<AuthService>().updateProfile(name: name, school: school, title: _title ?? user.title);
-      await context.read<AppState>().setSchool(teacherId: user.id, school: school);
+      await authService.updateProfile(name: name, school: school, title: _title ?? user.title);
+      await appState.setSchool(teacherId: user.id, school: school);
     }
     if (!mounted) return;
     if (_regionLabel.isEmpty && _regionCandidates.isEmpty) _inferRegionFromSchool();

@@ -251,10 +251,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
-    if (selected == null) return;
+    if (selected == null || !mounted) return;
 
+    final hook = context.read<SupabaseHook>();
     await context.read<AppState>().setDefaultMode(teacherId: auth.id, mode: selected);
-    await context.read<SupabaseHook>().updateUserPreferences(userId: auth.id, defaultMode: selected);
+    await hook.updateUserPreferences(userId: auth.id, defaultMode: selected);
   }
 
   Future<void> _pickDefaultHarshness() async {
@@ -304,12 +305,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               min: 1,
                               max: 10,
                               divisions: 9,
-                              label: '$label (${intValue}/10)',
+                              label: '$label ($intValue/10)',
                               onChanged: (nv) => setModalState(() => v = nv),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '$label (${intValue}/10)',
+                              '$label ($intValue/10)',
                               style: Theme.of(context).textTheme.labelLarge?.copyWith(color: accent, fontWeight: FontWeight.w800),
                             ),
                             const SizedBox(height: 6),
@@ -354,9 +355,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
 
-    if (selected == null) return;
+    if (selected == null || !mounted) return;
+    final hook = context.read<SupabaseHook>();
     await context.read<AppState>().setDefaultHarshness(teacherId: auth.id, harshness: selected);
-    await context.read<SupabaseHook>().updateUserPreferences(userId: auth.id, defaultHarshness: selected);
+    await hook.updateUserPreferences(userId: auth.id, defaultHarshness: selected);
   }
 
   Future<void> _editProfile() async {
@@ -481,7 +483,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
 
-    if (saved != true) return;
+    if (saved != true || !mounted) return;
 
     final nextName = composeName(title, nameCtrl.text);
     final nextSchool = schoolCtrl.text.trim();
@@ -812,7 +814,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 final push = context.read<PushService>();
                 await context.read<AuthService>().signOut();
                 await push.logOut();
-                if (!mounted) return;
+                if (!context.mounted) return;
                 context.go(AppRoutes.login);
               },
               child: const Text('→ Sign Out'),
@@ -967,7 +969,7 @@ class _ToggleRow extends StatelessWidget {
                   ),
             ),
           ),
-          Switch(value: value, onChanged: onChanged, activeColor: cs.primary),
+          Switch(value: value, onChanged: onChanged, activeThumbColor: cs.primary),
         ],
       ),
     );
