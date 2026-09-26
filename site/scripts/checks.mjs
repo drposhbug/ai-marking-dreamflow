@@ -153,20 +153,32 @@ const ok = (name, pass, detail = '') => {
   const afterJump = await page.locator('.seq-count').textContent();
   ok('a rail button jumps to its stage', /05 \/ 05/.test(afterJump ?? ''), afterJump?.trim());
 
-  // --- flip cards actually turn
+  // --- flip cards actually turn. The rotation rides a spring now, so the
+  // card is measured by angle after it has had time to settle, not by an
+  // exact matrix string a spring will never quite reach.
   const flip = await page.evaluate(async () => {
     const grid = document.querySelector('.flip-grid');
     const top = grid.getBoundingClientRect().top + window.scrollY;
-    const at = async (frac) => {
-      window.scrollTo(0, top - window.innerHeight * frac);
-      await new Promise((r) => setTimeout(r, 300));
-      const m = getComputedStyle(document.querySelector('.flip-inner')).transform;
-      return m;
+    const angleOf = (m) => {
+      if (!m || m === 'none') return 0;
+      // Parse INSIDE the parentheses: a bare number-regex on the whole
+      // string grabs the 3 out of "matrix3d" as its first match, and every
+      // angle then reads as acos(1) = 0.
+      const parts = m.slice(m.indexOf('(') + 1).match(/-?\d+\.?\d*(?:e-?\d+)?/g).map(Number);
+      // rotateY leaves cos(angle) in m11 of either matrix form.
+      return (Math.acos(Math.max(-1, Math.min(1, parts[0]))) * 180) / Math.PI;
     };
-    return { front: await at(0.98), back: await at(0.1) };
+    const at = async (frac, settleMs) => {
+      window.scrollTo(0, top - window.innerHeight * frac);
+      await new Promise((r) => setTimeout(r, settleMs));
+      return angleOf(getComputedStyle(document.querySelector('.flip-inner')).transform);
+    };
+    // The spring turns at a paper pace on purpose, so the turned sample
+    // waits well into the settle rather than expecting an instant 180.
+    return { front: await at(0.98, 900), back: await at(0.1, 2600) };
   });
-  ok('a flip card is unrotated as it arrives', flip.front === 'none' || flip.front.includes('matrix(1, 0, 0, 1'), flip.front.slice(0, 40));
-  ok('a flip card has turned once it is up the page', flip.back !== flip.front, flip.back.slice(0, 40));
+  ok('a flip card is unrotated as it arrives', flip.front < 8, `${flip.front.toFixed(1)}deg`);
+  ok('a flip card has turned once it is up the page', flip.back > 150, `${flip.back.toFixed(1)}deg`);
 
   ok('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
   await ctx.close();
@@ -251,7 +263,11 @@ const ok = (name, pass, detail = '') => {
     };
   });
   ok('reduced motion: the sequence is not pinned', r.stickyPosition === 'static', r.stickyPosition);
-  ok('reduced motion: the track is no taller than its content', r.trackHeight < r.viewport * 5,
+  // Six, not five: the stages carry real handwritten working now, which is
+  // taller than the squiggles it replaced. What this still catches is the
+  // failure it exists for - a pinned track keeping its scroll-length height
+  // (tens of viewports) after reduced motion unpinned it.
+  ok('reduced motion: the track is no taller than its content', r.trackHeight < r.viewport * 6,
     `${r.trackHeight}px`);
   ok('reduced motion: every stage is fully visible', r.stageOpacities.every((o) => o === 1),
     r.stageOpacities.join(','));

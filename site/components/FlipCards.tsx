@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion, useScroll, useSpring, useTransform } from 'framer-motion';
 import { FLIP_CARDS, type FlipCard } from '../lib/content';
 import { MarkedPaper } from './MarkedPaper';
 import { useReducedMotionSafe } from './useMedia';
@@ -75,13 +75,20 @@ function Card({ card, index }: { card: FlipCard; index: number }) {
 
   const { scrollYProgress } = useScroll({
     target: ref,
-    offset: ['start 0.92', 'start 0.3'],
+    // The whole lower two-thirds of the viewport, so the turn spends real
+    // scroll distance turning. The old window was a third as deep, which on
+    // one wheel-flick meant the card had already snapped over.
+    offset: ['start 0.98', 'start 0.22'],
   });
 
   // The card holds its answer face until it is well inside the viewport, then
-  // turns; each card in a row starts a little after the one before it.
+  // turns; each card in a row starts a little after the one before it. The
+  // spring is what stops a fast scroll reading as an instant snap: however
+  // hard the wheel is flicked, the card itself turns at a paper pace and
+  // settles, instead of teleporting to its end state.
   const lead = Math.min(index, 3) * 0.045;
-  const rotateY = useTransform(scrollYProgress, [0.3 + lead, 0.86 + lead], [0, 180]);
+  const raw = useTransform(scrollYProgress, [0.12 + lead, 0.92 + lead], [0, 180]);
+  const rotateY = useSpring(raw, { stiffness: 48, damping: 38, mass: 1, restDelta: 0.01 });
 
   return (
     <div className="flip" ref={ref}>

@@ -1,10 +1,14 @@
 /**
- * The drawing primitives the illustrations are made of: a line of handwriting
- * and a green tick.
+ * The drawing primitives the illustrations are made of: a line of a
+ * student's handwriting and a green tick.
  *
- * Everything here is deterministic. The "random" wobble comes from a seeded
- * generator, so the server and the browser draw the same path and hydration
- * does not blink.
+ * Handwriting used to be a wobbly SVG stroke standing in for words. It is
+ * real words now, set in a handwriting face — a squiggle where writing
+ * should be is the fastest way for a page about real marking to look fake.
+ * Call sites that say what the line reads pass the string; older call sites
+ * that only ever said how long the line was get real algebra from a seeded
+ * bank instead, so the server and the browser always agree on the words and
+ * hydration does not blink.
  */
 
 function mulberry32(seed: number) {
@@ -17,63 +21,44 @@ function mulberry32(seed: number) {
   };
 }
 
-/**
- * A wobbly line that reads as handwriting.
- *
- * The SVG is stretched to the column with preserveAspectRatio="none", so a wave
- * count fixed in viewBox units flattens out into a long ripple on a 2557px
- * monitor. The segment count therefore scales with the line's length, which
- * keeps the stroke rhythm roughly constant however wide the page gets.
- */
-export function scribblePath(seed: number, widthPct: number, segs = Math.max(12, Math.round(widthPct / 3.4))) {
-  const rand = mulberry32(seed);
-  const step = (widthPct - 1.2) / segs;
-  let d = 'M 0.6 5.6';
-  for (let i = 0; i < segs; i += 1) {
-    const x0 = 0.6 + i * step;
-    const x1 = 0.6 + (i + 1) * step;
-    const up = i % 2 === 0;
-    const cy = up ? 1.5 + rand() * 1.7 : 6.3 + rand() * 1.5;
-    const my = 5.2 + (rand() - 0.5) * 1.3;
-    d += ` Q ${((x0 + x1) / 2).toFixed(2)} ${cy.toFixed(2)} ${x1.toFixed(2)} ${my.toFixed(2)}`;
-  }
-  return d;
-}
+/* Lines of working from the same quiz the rendered class set is marked on
+   (site/art/worksheet.html) — all of it true algebra, so whichever lines a
+   seed happens to pick, a maths teacher finds nothing to wince at. */
+const WORKING = [
+  '3x + 5 = 20',
+  '3x = 15, so x = 5',
+  '4(2x − 3) = 8x − 12',
+  'x² + 5x + 6',
+  '= (x + 2)(x + 3)',
+  'check: 2 × 3 = 6, 2 + 3 = 5',
+  '2(x − 1) = x + 7',
+  '2x − 2 = x + 7, x = 9',
+  '6x² ÷ 3x = 2x',
+];
 
 type HandwritingProps = {
-  /** Line widths as percentages of the column. One path per line. */
-  lines: number[];
+  /** What each line reads. A number (the old API's width) draws a line of
+   *  real working from the bank instead. */
+  lines: (string | number)[];
   seed: number;
   /** Index of the line the red pen is under, if any. */
   slip?: number;
 };
 
-/** Two or three lines of stylised handwriting, optionally with one underlined. */
+/** Two or three lines of a student's handwriting, optionally with one
+ *  underlined in red. */
 export function Handwriting({ lines, seed, slip }: HandwritingProps) {
-  const lineH = 12;
-  const height = lines.length * lineH;
+  const rand = mulberry32(seed);
   return (
-    <span className="hw">
-      <svg
-        viewBox={`0 0 100 ${height}`}
-        preserveAspectRatio="none"
-        aria-hidden="true"
-        focusable="false"
-        style={{ height: `${lines.length * 0.7}rem` }}
-      >
-        {lines.map((w, i) => (
-          <g key={i} transform={`translate(0 ${i * lineH})`}>
-            <path d={scribblePath(seed + i * 977, w)} vectorEffect="non-scaling-stroke" />
-            {slip === i && (
-              <path
-                className="mark-slip"
-                d={`M 1 9.6 Q ${w * 0.3} 8.4 ${w * 0.55} 9.7 T ${w * 0.94} 9.2`}
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-          </g>
-        ))}
-      </svg>
+    <span className="hw" aria-hidden="true">
+      {lines.map((line, i) => {
+        const text = typeof line === 'string' ? line : WORKING[Math.floor(rand() * WORKING.length)];
+        return (
+          <span key={i} className={`hw-line${slip === i ? ' hw-line--slip' : ''}`}>
+            {text}
+          </span>
+        );
+      })}
     </span>
   );
 }

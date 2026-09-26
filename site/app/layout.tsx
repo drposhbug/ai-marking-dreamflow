@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Besley, Courier_Prime, Public_Sans } from 'next/font/google';
+import { Besley, Caveat, Courier_Prime, Public_Sans } from 'next/font/google';
 import './globals.css';
 
 /* next/font fetches and self-hosts these at build time, so the static export
@@ -28,6 +28,15 @@ const mono = Courier_Prime({
   display: 'swap',
   weight: ['400', '700'],
   variable: '--font-mono',
+});
+/* The fourth instrument: the student's own hand. The illustrations used to
+   fake handwriting with wobbly SVG strokes; they write real working now, and
+   real words need a real handwriting face. */
+const hand = Caveat({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['500', '600'],
+  variable: '--font-hand',
 });
 
 // Where this build will actually be served from. Absolute, because canonical
@@ -83,7 +92,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable} ${hand.variable}`}>
       <body>{children}</body>
     </html>
   );
