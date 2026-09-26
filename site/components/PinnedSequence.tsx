@@ -225,22 +225,22 @@ function ScanVisual({ local, staticMode }: VisProps) {
           <ul className="qlist">
             <li>
               <span className="qn">Q1</span>
-              <Handwriting lines={[86, 57]} seed={101} />
+              <Handwriting lines={['3x + 5 = 20', '3x = 15, so x = 5']} seed={101} />
               <span className="tag-ok">uploaded</span>
             </li>
             <li>
               <span className="qn">Q2</span>
-              <Handwriting lines={[93, 44]} seed={137} />
+              <Handwriting lines={['4(2x − 3) = 8x − 12']} seed={137} />
               <span className="tag-ok">uploaded</span>
             </li>
             <li>
               <span className="qn">Q3</span>
-              <Handwriting lines={[81, 90, 38]} seed={173} />
+              <Handwriting lines={['x² + 5x + 6', '= (x + 2)(x + 3)']} seed={173} />
               <span className="tag-ok">uploaded</span>
             </li>
             <li>
               <span className="qn">Q4</span>
-              <Handwriting lines={[74, 53]} seed={199} />
+              <Handwriting lines={['2x − 2 = x + 7, x = 9']} seed={199} />
               <span className="tag-ok">uploaded</span>
             </li>
           </ul>

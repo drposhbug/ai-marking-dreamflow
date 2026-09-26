@@ -477,10 +477,24 @@ figure.illo figcaption, figure.shot figcaption {
   font: 700 .72rem/1 var(--mono);
   color: var(--muted); letter-spacing: .02em;
 }
-.hw { flex: 1; min-width: 0; display: block; }
-.hw svg { display: block; width: 100%; height: auto; overflow: visible; }
-.hw path { fill: none; stroke: var(--graphite); stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
-.hw path.mark-slip { stroke: var(--pen-bright); stroke-width: 2.4; }
+/* A student's working: real words in a handwriting face, in pencil grey.
+   Each line clips rather than wraps — working never rewraps itself on a
+   narrow page, it just runs off the edge of the column. */
+.hw { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .05rem; }
+.hw-line {
+  font: 500 clamp(1.02rem, .92rem + .3vw, 1.5rem)/1.22 var(--font-hand, cursive);
+  color: var(--graphite);
+  letter-spacing: .01em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.hw-line--slip {
+  text-decoration: underline;
+  text-decoration-color: var(--pen-bright);
+  text-decoration-thickness: 2px;
+  text-underline-offset: .22em;
+  text-decoration-skip-ink: none;
+}
 .mk {
   flex: none; min-width: 2.9rem;
   display: inline-flex; align-items: center; justify-content: flex-end; gap: .3rem;
@@ -559,7 +573,7 @@ figure.illo figcaption, figure.shot figcaption {
 /* The product, presented the way a finished product is: a real capture in a
    plain hairline frame, and a caption that says exactly what it is. */
 .hero-shot {
-  width: min(100%, 66rem);
+  width: min(100%, 74rem);
   margin: clamp(2.8rem, 1.4rem + 3vw, 5.5rem) auto 0;
 }
 .shot-frame {

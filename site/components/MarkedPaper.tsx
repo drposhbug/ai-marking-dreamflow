@@ -15,12 +15,17 @@ import { useReducedMotionSafe } from './useMedia';
  */
 
 /* Four questions: 5 + 3¾ + 4¾ + 4 = 17½ out of 20, which is the total written
-   in the corner. Any change here has to keep that arithmetic true. */
+   in the corner. Any change here has to keep that arithmetic true — and the
+   working is real algebra from the same quiz the rendered class set is marked
+   on, because a squiggle where a student's writing should be is the fastest
+   way for a page about real marking to look fake. The red pen sits under
+   Q2's last line, which is the line the note below calls the slip: 4 times
+   −3 is −12, not −3. */
 const ROWS = [
-  { q: 'Q1', lines: [88, 61, 42], mark: '5', tone: 'good' as const, seed: 11 },
-  { q: 'Q2', lines: [94, 47], mark: '3¾', tone: 'cut' as const, seed: 29, slip: 1 },
-  { q: 'Q3', lines: [79, 88, 34], mark: '4¾', tone: 'cut' as const, seed: 47 },
-  { q: 'Q4', lines: [72, 52, 39], mark: '4', tone: 'cut' as const, seed: 63 },
+  { q: 'Q1', lines: ['3x + 5 = 20', '3x = 15, so x = 5'], mark: '5', tone: 'good' as const, seed: 11 },
+  { q: 'Q2', lines: ['4(2x − 3)', '= 8x − 3'], mark: '3¾', tone: 'cut' as const, seed: 29, slip: 1 },
+  { q: 'Q3', lines: ['x² + 5x + 6', '= (x + 2)(x + 3)'], mark: '4¾', tone: 'cut' as const, seed: 47 },
+  { q: 'Q4', lines: ['2(x − 1) = x + 7', '2x − 2 = x + 7, x = 9'], mark: '4', tone: 'cut' as const, seed: 63 },
 ];
 
 export function MarkedPaper() {
@@ -37,7 +42,7 @@ export function MarkedPaper() {
     <div
       className="page page-tilt"
       role="img"
-      aria-label="Stylised illustration of a marked paper. The name field at the top is painted out in black. Four questions are scored down the page, including three and three quarters out of five with the error underlined in red and a written reason beneath it. A total of seventeen and a half out of twenty is written in red in the corner."
+      aria-label="Illustration of a marked algebra paper. The name field at the top is painted out in black. Four questions of handwritten working are scored down the page, including three and three quarters out of five for an expansion where the last line, eight x minus three, is underlined in red. A total of seventeen and a half out of twenty is written in red in the corner."
     >
       <div className="pg-top">
         <span className="field">Name</span>
