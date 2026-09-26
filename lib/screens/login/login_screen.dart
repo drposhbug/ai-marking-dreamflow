@@ -61,6 +61,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       _prefillEmailFromSite();
       _adoptSessionIfAny();
+      _maybeStartSso();
     });
     _authSub = auth.authStateChanges?.listen((s) {
       if (s.session != null) _adoptSessionIfAny();
@@ -216,6 +217,21 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     if (!mounted) return;
     context.go(AppRoutes.onboarding);
+  }
+
+  /// The site's "Continue with Google" lands here as `app/?sso=google`. The
+  /// click already chose the door, so the app walks straight through it
+  /// instead of showing the hallway again.
+  ///
+  /// Web only, signed-out only, and safe against looping by construction:
+  /// the OAuth round trip returns to origin+path with the query stripped
+  /// (see [oauthRedirectUrl]), so neither a completed nor a cancelled Google
+  /// screen ever carries `sso=google` back with it.
+  void _maybeStartSso() {
+    if (!kIsWeb || _loading) return;
+    if (context.read<AuthService>().currentUser != null) return;
+    if (Uri.base.queryParameters['sso'] != 'google') return;
+    _oauth(OAuthProvider.google);
   }
 
   Future<void> _oauth(OAuthProvider provider) async {

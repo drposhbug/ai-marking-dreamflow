@@ -1260,6 +1260,26 @@ figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8v
 }
 
 .signin-form { display: grid; gap: .55rem; align-content: start; width: 100%; max-width: 34rem; margin-inline-start: auto; }
+/* The formal front door. The G wears Google's own colours because a sign-in
+   button is the one place the familiar mark IS the meaning; everything else
+   about it stays in the site's materials — paper, hairline, ink. */
+.btn-google {
+  display: inline-flex; align-items: center; justify-content: center; gap: .6rem;
+  background: #fffef8;
+  color: var(--ink);
+  border: 1px solid var(--rule-strong, var(--rule));
+  font-weight: 700;
+}
+.btn-google svg { width: 1.15em; height: 1.15em; flex: none; }
+.btn-google:hover { background: var(--paper-2, #f9f4e5); }
+.or-rule {
+  display: flex; align-items: center; gap: .8rem;
+  margin: .35rem 0 .1rem;
+  color: var(--ink-muted);
+  font: 700 .68rem/1 var(--mono);
+  letter-spacing: .12em; text-transform: uppercase;
+}
+.or-rule::before, .or-rule::after { content: ''; flex: 1; border-top: 1px solid var(--rule); }
 .signin-form + .note-small { max-width: 34rem; margin-inline-start: auto; }
 .signin-form .pg-top { margin-bottom: .5rem; }
 .signin-form label.field { margin-top: .3rem; }
