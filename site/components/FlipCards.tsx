@@ -5,6 +5,8 @@ import { motion, useMotionValue, useMotionValueEvent, useScroll, useSpring, useT
 import { FLIP_CARDS, type FlipCard } from '../lib/content';
 import { FreeBody, PenLoop, Tick } from './Ink';
 import { MarkedPaper } from './MarkedPaper';
+import { RiseWords } from './RiseWords';
+import { useWriteOn } from './useWriteOn';
 import { useReducedMotionSafe } from './useMedia';
 
 /* ==========================================================================
@@ -26,13 +28,16 @@ import { useReducedMotionSafe } from './useMedia';
    ========================================================================== */
 
 export function FlipCards() {
+  // One trigger for the paper and its key, so each line of the key lights up
+  // as the pen reaches the mark it explains.
+  const leadRef = useWriteOn<HTMLDivElement>(0.2);
   return (
     <section className="s s--tint" id="marking" aria-labelledby="h-flip">
       <div className="wrap">
         <p className="kicker">Turn one over</p>
 
         <div className="head head--wide">
-          <h2 id="h-flip">Real marking, not a vibe check</h2>
+          <h2 id="h-flip"><RiseWords>Real marking, not a vibe check</RiseWords></h2>
           <p className="sub">
             Every card is one question. The front is what the student wrote; the back is what came
             back — the mark, the quarter mark, the reason for the deduction, and something to do
@@ -42,7 +47,7 @@ export function FlipCards() {
 
         {/* One whole paper first, then one question of it turned over. */}
         {/* The paper, and beside it a key to what the red pen on it means. */}
-        <div className="marking-lead">
+        <div className="marking-lead" ref={leadRef}>
           <figure className="illo marking-paper">
             <MarkedPaper />
             <figcaption>

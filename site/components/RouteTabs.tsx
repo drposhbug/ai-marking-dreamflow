@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ROUTES } from '../lib/content';
 import { Tick } from './Ink';
 import { useReducedMotionSafe } from './useMedia';
+import { RiseWords } from './RiseWords';
 
 /* ==========================================================================
    The four marking routes, as a tabbed panel.
@@ -49,7 +50,7 @@ export function RouteTabs() {
         <p className="kicker">Times are for a class of thirty</p>
 
         <div className="head head--wide">
-          <h2 id="h-how">Four ways to mark. The fastest is the one nobody guesses.</h2>
+          <h2 id="h-how"><RiseWords>Four ways to mark. The fastest is the one nobody guesses.</RiseWords></h2>
           <p className="sub">
             Most teachers settle on two of them — one for quizzes, one for real tests on paper. Pick
             a route to see what it costs you in minutes.
