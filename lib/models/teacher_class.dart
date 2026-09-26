@@ -14,6 +14,24 @@ class TeacherClass {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// The class as a teacher reads it. A class that names itself from its
+  /// subject and period ("Science 2") already carries the period, so
+  /// "name · period" read "Science 2 · 2"; the period is only added when the
+  /// name doesn't already end with it.
+  String get label {
+    final p = period.trim();
+    final n = name.trim();
+    if (p.isEmpty || n.toLowerCase().endsWith(p.toLowerCase())) return n;
+    return '$n · $p';
+  }
+
+  /// "Period 2" for a bare number, the period as typed otherwise ("P2",
+  /// "Block A") — a lone "2" beside "Science 2" read as a typo.
+  String get periodLabel {
+    final p = period.trim();
+    return RegExp(r'^[0-9]+$').hasMatch(p) ? 'Period $p' : p;
+  }
+
   const TeacherClass({required this.id, required this.teacherId, required this.name, required this.subject, required this.period, required this.createdAt, required this.updatedAt, this.room, this.gradeLevel});
 
   TeacherClass copyWith({String? id, String? teacherId, String? name, String? subject, String? period, String? room, int? gradeLevel, DateTime? createdAt, DateTime? updatedAt}) => TeacherClass(

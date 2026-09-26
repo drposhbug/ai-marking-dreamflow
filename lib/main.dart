@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_bootstrap.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
 import 'package:marking_prokect_v2/nav.dart';
@@ -25,6 +26,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// - Material 3 theming with light/dark modes
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // A screen opened with context.push (a class, a student, a result) gets
+  // its own address and browser-history entry, so the browser's Back button
+  // closes it. Without this, go_router leaves the URL alone on push and
+  // Back did nothing on the web.
+  GoRouter.optionURLReflectsImperativeAPIs = true;
 
   const supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: 'https://zxikjizraeqejbsncqpg.supabase.co');
   const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');

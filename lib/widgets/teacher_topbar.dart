@@ -12,7 +12,10 @@ class TeacherTopbar extends StatelessWidget {
   final IconData? trailingIcon;
   final VoidCallback? onBell;
 
-  const TeacherTopbar({super.key, required this.title, this.leadingIcon, this.onLeading, this.trailingIcon = Icons.notifications_none_rounded, this.onBell});
+  /// [trailingIcon] only appears when a screen asks for one. It used to
+  /// default to a notifications bell that no screen ever wired up, so the
+  /// home screen and the dashboard each had a button that did nothing.
+  const TeacherTopbar({super.key, required this.title, this.leadingIcon, this.onLeading, this.trailingIcon, this.onBell});
 
   /// Avatar initial from the teacher's actual name — honorifics are
   /// skipped so "Mr. Lee" shows "L", not "M".
@@ -48,7 +51,7 @@ class TeacherTopbar extends StatelessWidget {
           ),
         const SizedBox(width: 10),
         Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: cs.primary))),
-        IconButton(onPressed: onBell, icon: Icon(trailingIcon, color: AiMarkerColors.neutral)),
+        if (trailingIcon != null) IconButton(onPressed: onBell, icon: Icon(trailingIcon, color: AiMarkerColors.neutral)),
       ],
     );
   }

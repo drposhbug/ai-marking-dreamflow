@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:marking_prokect_v2/services/overnight_page_store.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:marking_prokect_v2/services/anonymizer.dart';
@@ -518,7 +519,16 @@ class GradingQueueService extends ChangeNotifier {
   /// Writes the scanned pages to the app's documents folder so reopened
   /// results can show the original/annotated views.
   Future<List<String>> _savePagesLocally(String submissionId, List<Uint8List> pages) async {
-    if (kIsWeb) return const [];
+    // A browser keeps them in IndexedDB, under the same keys overnight
+    // marking files its pages by, so the result screen reads both alike.
+    if (kIsWeb) {
+      try {
+        return await createOvernightPageStore().write('marked-$submissionId', pages);
+      } catch (e) {
+        debugPrint('Saving marked pages in the browser failed: $e');
+        return const [];
+      }
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final folder = Directory('${dir.path}/marked');

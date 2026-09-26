@@ -1,14 +1,12 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/services/drive_picker.dart';
+import 'package:marking_prokect_v2/services/file_saver.dart';
 import 'package:marking_prokect_v2/services/test_stamper.dart';
 import 'package:marking_prokect_v2/theme.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 /// Prints the identity onto the paper so the student never has to.
 ///
@@ -84,15 +82,14 @@ class _PrepareTestScreenState extends State<PrepareTestScreen> {
           if (mounted) setState(() => _progress = 'Making copies… $done of $total');
         },
       );
-      final dir = await getTemporaryDirectory();
-      final out = File('${dir.path}/markless-$_code-$_copies-copies.pdf');
-      await out.writeAsBytes(bytes, flush: true);
       if (!mounted) return;
       setState(() => _busy = false);
       // Hand it straight to whatever the teacher prints with — the copier
-      // app, Drive, or email to themselves.
-      await Share.shareXFiles(
-        [XFile(out.path)],
+      // app, Drive, or email to themselves; in a browser, a download.
+      await saveFile(
+        bytes,
+        'markless-$_code-$_copies-copies.pdf',
+        mimeType: 'application/pdf',
         subject: 'UMarkless test $_code — $_copies copies',
         text: 'Print this one file. Every copy carries its own code.',
       );

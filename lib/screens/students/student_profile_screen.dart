@@ -1,17 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:marking_prokect_v2/app/app_routes.dart';
+import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/utils/mark_format.dart';
 import 'package:marking_prokect_v2/widgets/time_ago.dart';
 import 'package:provider/provider.dart';
 
-class StudentProfileScreen extends StatelessWidget {
+class StudentProfileScreen extends StatefulWidget {
   final String studentId;
   final String? classId;
   const StudentProfileScreen({super.key, required this.studentId, required this.classId});
+
+  @override
+  State<StudentProfileScreen> createState() => _StudentProfileScreenState();
+}
+
+class _StudentProfileScreenState extends State<StudentProfileScreen> {
+  /// Past submissions show the latest four until "View all" is tapped.
+  bool _showAll = false;
+
+  String get studentId => widget.studentId;
+  String? get classId => widget.classId;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +38,7 @@ class StudentProfileScreen extends StatelessWidget {
       return Scaffold(appBar: AppBar(title: const Text('Student Profile')), body: const Center(child: Text('Student not found')));
     }
 
-    final scored = submissions.where((s) => s.maxScore > 0).toList();
+    final scored = submissions.where((s) => s.maxScore > 0 && s.triageStatus != TriageStatus.unableToGrade).toList();
     final avg = scored.isEmpty ? 0.0 : (scored.map((s) => s.score / s.maxScore).reduce((a, b) => a + b) / scored.length).clamp(0.0, 1.0);
     final flags = submissions.where((s) => s.triageStatus == TriageStatus.needsReview).length;
 
@@ -32,7 +46,6 @@ class StudentProfileScreen extends StatelessWidget {
       appBar: AppBar(
         leading: IconButton(onPressed: () => context.pop(), icon: Icon(Icons.arrow_back_rounded, color: cs.primary)),
         title: const Text('Student Profile'),
-        actions: [IconButton(onPressed: () {}, icon: Icon(Icons.more_vert_rounded, color: AiMarkerColors.neutral))],
       ),
       body: SafeArea(
         child: ListView(
@@ -47,13 +60,7 @@ class StudentProfileScreen extends StatelessWidget {
                     const SizedBox(height: 10),
                     Text(student.name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
                     const SizedBox(height: 4),
-                    Text(klass == null ? '' : '${klass.name} · ${klass.period}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: Icon(Icons.mail_outline_rounded, color: cs.primary),
-                      label: Text('Message', style: TextStyle(color: cs.primary)),
-                    ),
+                    Text(klass == null ? '' : klass.label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                   ],
                 ),
               ),
@@ -72,19 +79,26 @@ class StudentProfileScreen extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text('Past Submissions', style: Theme.of(context).textTheme.titleMedium)),
-                TextButton(style: TextButton.styleFrom(splashFactory: NoSplash.splashFactory, foregroundColor: cs.primary), onPressed: () {}, child: const Text('View All')),
+                if (submissions.length > 4)
+                  TextButton(
+                    style: TextButton.styleFrom(splashFactory: NoSplash.splashFactory, foregroundColor: cs.primary),
+                    onPressed: () => setState(() => _showAll = !_showAll),
+                    child: Text(_showAll ? 'Show fewer' : 'View all ${submissions.length}'),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
             Card(
               child: Column(
                 children: [
-                  for (final s in submissions.take(4))
+                  if (submissions.isEmpty)
+                    ListTile(title: Text('No marks yet', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AiMarkerColors.neutral))),
+                  for (final s in _showAll ? submissions : submissions.take(4))
                     ListTile(
                       title: Text(_assignmentName(s), style: Theme.of(context).textTheme.titleSmall),
                       subtitle: Text('${timeAgo(s.createdAt)} · ${_harshnessWordFromConfidence(s.confidence)}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
                       trailing: _ScoreCircle(score: s.score, max: s.maxScore),
-                      onTap: () {},
+                      onTap: () => context.push('${AppRoutes.result}?submissionId=${s.id}'),
                     ),
                 ],
               ),
@@ -108,7 +122,7 @@ class StudentProfileScreen extends StatelessWidget {
                           backgroundColor: Colors.transparent,
                           builder: (ctx) => _NotesEditor(initial: student.notes ?? ''),
                         );
-                        if (updated == null) return;
+                        if (updated == null || !context.mounted) return;
                         await context.read<StudentsService>().updateNotes(studentId: student.id, notes: updated);
                       },
                       icon: Icon(Icons.edit_rounded, color: cs.primary),
@@ -124,9 +138,19 @@ class StudentProfileScreen extends StatelessWidget {
     );
   }
 
-  String _assignmentName(Submission s) => switch (s.gradingMode) {
-    _ => 'Unit ${s.createdAt.day} ${s.subject} Assignment',
-  };
+  /// "Science test · 26 Sep". It used to invent "Unit 26" out of the day of
+  /// the month the paper was marked on.
+  String _assignmentName(Submission s) {
+    final kind = switch (s.gradingMode) {
+      GradingMode.testQuiz => 'test',
+      GradingMode.labReport => 'lab report',
+      GradingMode.englishEssay => 'essay',
+      GradingMode.homework => 'homework',
+    };
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final subject = s.subject.trim().isEmpty ? 'Assignment' : s.subject.trim();
+    return '$subject $kind · ${s.createdAt.day} ${months[s.createdAt.month - 1]}';
+  }
 
   String _harshnessWordFromConfidence(int c) => c >= 92 ? 'Lenient' : (c >= 85 ? 'Balanced' : 'Strict');
 }
@@ -203,7 +227,7 @@ class _ScoreCircle extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: 0.10), border: Border.all(color: color, width: 2)),
-      child: Center(child: Text(max == 0 ? '—' : '${score.round()}/${max.round()}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w900))),
+      child: Center(child: Text(max == 0 ? '—' : '${formatMark(score)}/${formatMark(max)}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w900))),
     );
   }
 }

@@ -127,6 +127,19 @@
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     if (bitmap.close) bitmap.close();
+    // Grey, not colour. The app's scanner pass sharpens every photo, and the
+    // coloured fringes sharpening leaves round printed type made Tesseract
+    // drop whole lines — on a clean test page it lost "Name: Ana Lopez"
+    // entirely, so the name went up unhidden. The same page in grey reads
+    // at 96%. Done by hand rather than with ctx.filter, which older Safari
+    // ignores.
+    var px = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var d = px.data;
+    for (var i = 0; i < d.length; i += 4) {
+      var g = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0;
+      d[i] = d[i + 1] = d[i + 2] = g;
+    }
+    ctx.putImageData(px, 0, 0);
     return { canvas: canvas, scale: canvas.width / w };
   }
 

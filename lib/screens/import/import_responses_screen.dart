@@ -470,16 +470,25 @@ class _ImportResponsesScreenState extends State<ImportResponsesScreen> {
         ),
         const SizedBox(height: 10),
         DropdownButtonFormField<String>(
+          // Keyed so a class created on this screen shows as picked.
+          key: ValueKey(_classId),
           initialValue: _classId,
           decoration: const InputDecoration(labelText: 'Class', border: OutlineInputBorder()),
-          items: [for (final c in classes) DropdownMenuItem(value: c.id, child: Text('${c.name} · ${c.period}'))],
+          items: [for (final c in classes) DropdownMenuItem(value: c.id, child: Text(c.label))],
           onChanged: _marking ? null : (v) => setState(() => _classId = v),
         ),
+        // A brand-new teacher reaches this screen from onboarding with no
+        // class yet, and used to be told to go to a Classes tab onboarding
+        // doesn't have. Marking creates the students from the name column,
+        // so a class is all that is missing — make it here.
         if (classes.isEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text('No classes yet — add one in the Classes tab first.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.error)),
+            padding: const EdgeInsets.only(top: 8),
+            child: OutlinedButton.icon(
+              onPressed: _marking ? null : _createClassHere,
+              icon: const Icon(Icons.add_rounded),
+              label: Text('Create a class for these ${sheet.rows.length} students'),
+            ),
           ),
         const SizedBox(height: 16),
         Text('QUESTIONS', style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: AiMarkerColors.neutral)),
@@ -487,6 +496,47 @@ class _ImportResponsesScreenState extends State<ImportResponsesScreen> {
         for (final q in sheet.questions) _questionCard(sheet, q),
       ],
     );
+  }
+
+  /// Makes the class the responses will be filed into, without leaving the
+  /// screen. The students themselves are added when the file is marked.
+  Future<void> _createClassHere() async {
+    final auth = context.read<AuthService>().currentUser;
+    if (auth == null) return;
+    final subject = TextEditingController();
+    final period = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New class'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: subject, autofocus: true, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Subject', hintText: 'e.g. Science')),
+            const SizedBox(height: 8),
+            TextField(controller: period, decoration: const InputDecoration(labelText: 'Period (optional)', hintText: 'e.g. 2')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create class')),
+        ],
+      ),
+    );
+    final s = subject.text.trim();
+    final p = period.text.trim();
+    subject.dispose();
+    period.dispose();
+    if (ok != true || s.isEmpty || !mounted) return;
+    final klass = await context.read<ClassesService>().create(
+          teacherId: auth.id,
+          name: p.isEmpty ? s : '$s $p',
+          subject: s,
+          period: p,
+        );
+    if (!mounted) return;
+    setState(() => _classId = klass.id);
+    _snack('Created ${klass.label}. The students are added when you mark.');
   }
 
   Widget _questionCard(ParsedSheet sheet, ImportColumn q) {

@@ -10,6 +10,7 @@ import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/progress_ring.dart';
+import 'package:marking_prokect_v2/utils/mark_format.dart';
 import 'package:marking_prokect_v2/widgets/teacher_topbar.dart';
 import 'package:marking_prokect_v2/widgets/time_ago.dart';
 import 'package:provider/provider.dart';
@@ -105,7 +106,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final flagged = sortedSubmissions.where((s) => s.triageStatus == TriageStatus.needsReview).length;
       final overrides = sortedSubmissions.where((s) => s.overrideUsed).length;
 
-      final scoreRows = sortedSubmissions.where((s) => s.maxScore > 0).toList();
+      // A paper the AI could not mark has no real score — class analysis and
+      // report comments already leave it out, and the average must agree.
+      final scoreRows = sortedSubmissions.where((s) => s.maxScore > 0 && s.triageStatus != TriageStatus.unableToGrade).toList();
       final avg = scoreRows.isEmpty
           ? 0.0
           : (scoreRows.map((e) => (e.score / e.maxScore)).reduce((a, b) => a + b) / scoreRows.length).clamp(0.0, 1.0).toDouble();
@@ -115,7 +118,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
             children: [
-              TeacherTopbar(title: 'Dashboard', leadingIcon: Icons.menu_rounded, onLeading: () {}, trailingIcon: Icons.filter_alt_rounded, onBell: () {}),
+              // No menu or filter icon: neither was ever wired up, and the
+              // filter chips below already filter.
+              const TeacherTopbar(title: 'Dashboard'),
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -408,7 +413,7 @@ class _SubmissionRow extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Text(
-              submission.maxScore == 0 ? '—' : '${submission.score.round()}/${submission.maxScore.round()}',
+              submission.maxScore == 0 ? '—' : '${formatMark(submission.score)}/${formatMark(submission.maxScore)}',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(color: scoreColor, fontWeight: FontWeight.w800),
             ),
           ],

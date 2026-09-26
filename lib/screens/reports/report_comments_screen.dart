@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,15 +7,14 @@ import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/classes_service.dart';
+import 'package:marking_prokect_v2/services/file_saver.dart';
 import 'package:marking_prokect_v2/services/gradebook_export.dart';
 import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/report_comments.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 /// Drafts a report card comment for every student in a class, out of the
 /// work they actually had marked.
@@ -233,11 +232,8 @@ class _ReportCommentsScreenState extends State<ReportCommentsScreen> {
       ].join(','));
     }
     try {
-      final dir = await getTemporaryDirectory();
       final name = 'markless-report-comments-${(klass?.name ?? 'class').replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')}.csv';
-      final f = File('${dir.path}/$name');
-      await f.writeAsString(b.toString(), flush: true);
-      await Share.shareXFiles([XFile(f.path)], subject: name);
+      await saveFile(Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(b.toString())]), name, mimeType: 'text/csv');
     } catch (e) {
       if (mounted) _snack('Couldn\'t build the file: $e');
     }
@@ -295,7 +291,7 @@ class _ReportCommentsScreenState extends State<ReportCommentsScreen> {
             decoration: const InputDecoration(labelText: 'Class', border: OutlineInputBorder()),
             items: [
               for (final TeacherClass c in classes)
-                DropdownMenuItem(value: c.id, child: Text('${c.name} · ${c.period}')),
+                DropdownMenuItem(value: c.id, child: Text(c.label)),
             ],
             onChanged: (v) => setState(() => _classId = v),
           ),

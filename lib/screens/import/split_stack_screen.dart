@@ -81,6 +81,7 @@ class _SplitStackScreenState extends State<SplitStackScreen> {
   void initState() {
     super.initState();
     Future.microtask(() async {
+      if (!mounted) return;
       final auth = context.read<AuthService>().currentUser;
       if (auth == null) return;
       try {

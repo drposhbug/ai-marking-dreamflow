@@ -268,6 +268,11 @@ ThemeData get lightTheme => ThemeData(
     outline: Color(0x33211E15),
   ),
   brightness: Brightness.light,
+  // Material 3 draws a progress bar's track in secondaryContainer, which
+  // ColorScheme.light/.dark fill with [secondary] — the same green as the
+  // bar. Every track read as full: the Plans screen said "0% used" over a
+  // solid green bar.
+  progressIndicatorTheme: ProgressIndicatorThemeData(color: AiMarkerColors.primary, linearTrackColor: const Color(0x1F211E15)),
   // Transparent so [DeskBackground] shows through on every route.
   scaffoldBackgroundColor: Colors.transparent,
   appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, elevation: 0, scrolledUnderElevation: 0, centerTitle: true),
@@ -334,6 +339,11 @@ ThemeData get darkTheme => ThemeData(
     outline: AiMarkerColors.darkOutline,
   ),
   brightness: Brightness.dark,
+  // Material 3 draws a progress bar's track in secondaryContainer, which
+  // ColorScheme.light/.dark fill with [secondary] — the same green as the
+  // bar. Every track read as full: the Plans screen said "0% used" over a
+  // solid green bar.
+  progressIndicatorTheme: ProgressIndicatorThemeData(color: AiMarkerColors.primary, linearTrackColor: Colors.white.withValues(alpha: 0.14)),
   scaffoldBackgroundColor: Colors.transparent,
   appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, elevation: 0, scrolledUnderElevation: 0, centerTitle: true),
   // A sheet spanning a 1440px monitor is a phone habit. The cap is wider than
