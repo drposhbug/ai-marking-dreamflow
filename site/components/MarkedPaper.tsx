@@ -6,7 +6,7 @@ import { useReducedMotionSafe } from './useMedia';
 
 /**
  * One whole marked paper, seen from above: a photocopied, three-hole-punched
- * algebra quiz. The student's working is in blue ballpoint on the printed
+ * algebra quiz. The student's working is in green pen on the printed
  * answer lines; everything the teacher did is in red pen - a tick, a wavy
  * line under the slip with the wrong digit struck out and the right one
  * written beside it, each mark ringed in the margin, the total ringed in the
@@ -32,20 +32,20 @@ export const QUESTIONS: Question[] = [
 
 export function MarkedPaper() {
   const reduced = useReducedMotionSafe();
-  const rise = (delay: number) =>
-    reduced
-      ? {}
-      : {
-          initial: { opacity: 0, y: 12 },
-          animate: { opacity: 1, y: 0 },
-          transition: { duration: 0.4, delay, ease: [0.4, 0, 0.2, 1] as const },
-        };
+  // Under reduced motion the parts still get an end state to go to, with no
+  // tween: the server has already drawn them at their starting frame (faded
+  // out), and a motion element with nothing to animate would stay there.
+  const rise = (delay: number) => ({
+    initial: { opacity: 0, y: 12 },
+    animate: { opacity: 1, y: 0 },
+    transition: reduced ? { duration: 0 } : { duration: 0.4, delay, ease: [0.4, 0, 0.2, 1] as const },
+  });
 
   return (
     <div
       className="sheet"
       role="img"
-      aria-label="Illustration of a marked algebra quiz. Four questions of handwritten working in blue pen are marked in red down the page: a tick on question one, and on question two the last line, eight x minus three, is underlined, the three crossed out and twelve written beside it. Each mark is circled in the margin, five, three and three quarters, four and three quarters, and four, out of five. Seventeen and a half out of twenty is circled in the corner, with a note: right method, show the substitution next time."
+      aria-label="Illustration of a marked algebra quiz. Four questions of handwritten working in green pen are marked in red down the page: a tick on question one, and on question two the last line, eight x minus three, is underlined, the three crossed out and twelve written beside it. Each mark is circled in the margin, five, three and three quarters, four and three quarters, and four, out of five. Seventeen and a half out of twenty is circled in the corner, with a note: right method, show the substitution next time."
     >
       <span className="sheet-hole" />
       <span className="sheet-hole" />
@@ -67,9 +67,9 @@ export function MarkedPaper() {
 
       <motion.div
         className="sheet-total"
-        initial={reduced ? undefined : { opacity: 0, scale: 0.92 }}
-        animate={reduced ? undefined : { opacity: 1, scale: 1 }}
-        transition={{ duration: 0.45, delay: 0.7, ease: [0.34, 1.3, 0.64, 1] }}
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={reduced ? { duration: 0 } : { duration: 0.45, delay: 0.7, ease: [0.34, 1.3, 0.64, 1] }}
       >
         <PenLoop seed={7} />
         <span className="sheet-total-n">17½</span>

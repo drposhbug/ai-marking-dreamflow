@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { motion, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from 'framer-motion';
 import { STAGES } from '../lib/content';
-import { FreeBody, Handwriting, PenLoop, Tick } from './Ink';
+import { FreeBody, PenLoop, Tick } from './Ink';
 import { QUESTIONS, SheetQuestion } from './MarkedPaper';
 import { useNarrow, useReducedMotionSafe } from './useMedia';
 
@@ -205,11 +205,63 @@ type VisProps = { local: MotionValue<number>; staticMode: boolean };
 
 function StageVisual({ id, local, staticMode }: VisProps & { id: string }) {
   if (id === 'scan') return <ScanVisual local={local} staticMode={staticMode} />;
-  // The split-stack illustration is hidden for now; the stage keeps its words.
-  if (id === 'split') return null;
+  if (id === 'split') return <SplitVisual local={local} staticMode={staticMode} />;
   if (id === 'mark') return <MarkVisual local={local} staticMode={staticMode} />;
   if (id === 'review') return <ReviewVisual local={local} staticMode={staticMode} />;
   return <ExportVisual local={local} staticMode={staticMode} />;
+}
+
+/* Three pupils' page ones of the same French quiz. The stack is one class,
+   so the pages match; the answers are each pupil's own. */
+const QUIZ_PAGES = [
+  ['Je suis allé au cinéma.', 'Nous avons vu le film.', 'C’était vraiment super.'],
+  ['Je suis allée au parc.', 'Avec ma sœur et Léa.', 'Il a fait très beau.'],
+  ['J’ai joué au foot.', 'Avec mon équipe.', 'Nous avons gagné !'],
+];
+const QUIZ_PROMPTS = ['Racontez votre samedi.', 'Avec qui ?', 'C’était comment ?'];
+
+/** Page one of the quiz as the uploaded copy has it: the name painted out,
+ *  the answers in the pupil's pen, the code and page number in the footer. */
+function QuizPage({
+  answers,
+  code,
+  redact,
+  ringFooter,
+}: {
+  answers: string[];
+  code: string;
+  redact?: MotionValue<number> | number;
+  ringFooter?: boolean;
+}) {
+  return (
+    <div className="sheet qpage">
+      <span className="sheet-hole" />
+      <span className="sheet-hole" />
+      <span className="sheet-hole" />
+      <p className="sheet-kicker">French 10 · Quiz 4</p>
+      <p className="qpage-title">Le passé composé</p>
+      <p className="qpage-name">
+        Nom
+        <span className="qpage-blank">
+          <motion.span className="qpage-redact" style={{ scaleX: redact ?? 1, transformOrigin: '0 50%' }} />
+        </span>
+      </p>
+      <ol className="qpage-qs">
+        {QUIZ_PROMPTS.map((prompt, i) => (
+          <li key={prompt}>
+            <span className="qpage-prompt">{prompt}</span>
+            <span className="bp qpage-line">{answers[i]}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="qpage-foot">
+        <span className={ringFooter ? 'qpage-ringed' : undefined}>
+          {ringFooter && <PenLoop seed={5} />}
+          {code} · Page 1 of 4
+        </span>
+      </p>
+    </div>
+  );
 }
 
 function ScanVisual({ local, staticMode }: VisProps) {
@@ -218,47 +270,52 @@ function ScanVisual({ local, staticMode }: VisProps) {
   return (
     <figure className="illo">
       <div
-        className="stack-sheets"
+        className="scan-stack"
         role="img"
-        aria-label="Stylised illustration of a scanned stack: three sheets offset behind one another, the top one with its name field painted out in black and two lines of handwriting below it."
+        aria-label="Illustration of a scanned stack of French quizzes: two sheets squared up behind the top one, whose name is painted out in solid black, with a note in red pen that the name never leaves your device."
       >
-        <span className="ghost" style={{ transform: 'rotate(2.2deg) translate(10px, 8px)' }} />
-        <span className="ghost" style={{ transform: 'rotate(-1.4deg) translate(-6px, 5px)' }} />
-        <div className="page">
-          <div className="pg-top">
-            <span className="field">Name</span>
-            <motion.span
-              className="redact"
-              style={{ scaleX: staticMode ? 1 : bar, transformOrigin: '0 50%' }}
-            />
-            <span className="tag-ok tag-push">stays on the device</span>
-          </div>
-          <ul className="qlist">
-            <li>
-              <span className="qn">Q1</span>
-              <Handwriting lines={['Je suis allé au cinéma.', 'Nous avons vu le film.']} seed={101} />
-              <span className="tag-ok">uploaded</span>
-            </li>
-            <li>
-              <span className="qn">Q2</span>
-              <Handwriting lines={['C’était vraiment super.']} seed={137} />
-              <span className="tag-ok">uploaded</span>
-            </li>
-            <li>
-              <span className="qn">Q3</span>
-              <Handwriting lines={['Mes amis ont aimé aussi,', 'surtout la fin du film.']} seed={173} />
-              <span className="tag-ok">uploaded</span>
-            </li>
-            <li>
-              <span className="qn">Q4</span>
-              <Handwriting lines={['Nous y retournerons samedi.']} seed={199} />
-              <span className="tag-ok">uploaded</span>
-            </li>
-          </ul>
-          <p className="pg-note">30 papers · one document feeder · one PDF.</p>
-        </div>
+        <span className="scan-under" />
+        <span className="scan-under" />
+        <QuizPage answers={QUIZ_PAGES[0]} code="mk-7F3A-01" redact={staticMode ? 1 : bar} />
+        <p className="pen scan-note">
+          <svg viewBox="0 0 90 50" aria-hidden="true" focusable="false">
+            <path d="M86 4 Q46 12 14 44 M8 30 L13 45 L28 41" />
+          </svg>
+          the name never leaves your device
+        </p>
+        <p className="pen scan-count">30 papers · one feeder · one PDF</p>
       </div>
       <figcaption>An illustration of redaction — not a screenshot, and read the limits below.</figcaption>
+    </figure>
+  );
+}
+
+function SplitVisual({ local, staticMode }: VisProps) {
+  return (
+    <figure className="illo">
+      <div
+        className="split-row"
+        role="img"
+        aria-label="Illustration of the scanned stack split back into separate papers: three pupils' first pages of the same quiz, each found by the code and page number printed in its footer, circled in red pen. Thirty of thirty papers found."
+      >
+        {QUIZ_PAGES.map((answers, i) => {
+          const appear = useTransform(local, [0.1 + i * 0.13, 0.38 + i * 0.13], [0, 1]);
+          const lift = useTransform(local, [0.1 + i * 0.13, 0.38 + i * 0.13], [14, 0]);
+          return (
+            <motion.div
+              key={answers[0]}
+              className="split-page"
+              style={{ opacity: staticMode ? 1 : appear, y: staticMode ? 0 : lift }}
+            >
+              <QuizPage answers={answers} code={`mk-7F3A-0${i + 1}`} ringFooter />
+            </motion.div>
+          );
+        })}
+        <p className="pen split-count">30 of 30 papers found</p>
+      </div>
+      <figcaption>
+        An illustration of a stack coming apart by the codes printed on each page — not a screenshot.
+      </figcaption>
     </figure>
   );
 }

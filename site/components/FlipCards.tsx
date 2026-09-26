@@ -41,13 +41,65 @@ export function FlipCards() {
         </div>
 
         {/* One whole paper first, then one question of it turned over. */}
-        <figure className="illo marking-paper">
-          <MarkedPaper />
-          <figcaption>
-            An illustration of one whole marked paper — half and quarter marks down the page, the
-            slip on Q2 underlined and corrected. Not a screenshot.
-          </figcaption>
-        </figure>
+        {/* The paper, and beside it a key to what the red pen on it means. */}
+        <div className="marking-lead">
+          <figure className="illo marking-paper">
+            <MarkedPaper />
+            <figcaption>
+              An illustration of one whole marked paper — half and quarter marks down the page, the
+              slip on Q2 underlined and corrected. Not a screenshot.
+            </figcaption>
+          </figure>
+
+          <aside className="pen-key" aria-labelledby="h-pen-key">
+            <h3 id="h-pen-key">Reading the red pen</h3>
+            <ul>
+              <li>
+                <span className="pen-key-mark" aria-hidden="true">
+                  <span className="pen pen-key-ring">
+                    <PenLoop seed={2} />
+                    3¾
+                  </span>
+                </span>
+                <p>
+                  <b>A mark for every question.</b> Half and quarter marks, the way you would give
+                  them, not a single score at the end.
+                </p>
+              </li>
+              <li>
+                <span className="pen-key-mark" aria-hidden="true">
+                  <span className="bp slip">8x − 3</span>
+                </span>
+                <p>
+                  <b>The line where it went wrong.</b> Underlined, so the student sees exactly where
+                  the working slipped.
+                </p>
+              </li>
+              <li>
+                <span className="pen-key-mark" aria-hidden="true">
+                  <span className="bp">
+                    <span className="xout">3</span>
+                  </span>
+                  <span className="pen sheet-fix">12</span>
+                </span>
+                <p>
+                  <b>The fix, written in.</b> The wrong value struck out and the right one beside it.
+                </p>
+              </li>
+              <li>
+                <span className="pen-key-mark" aria-hidden="true">
+                  <span className="pen pen-key-note">Show the substitution.</span>
+                </span>
+                <p>
+                  <b>One thing to do next time.</b> Feedback a student can act on, not just a grade.
+                </p>
+              </li>
+            </ul>
+            <p className="pen-key-foot">
+              Green is the student’s pen. Red is what comes back — and you can change any of it.
+            </p>
+          </aside>
+        </div>
 
         <figure className="illo">
           <div className="flip-grid">
