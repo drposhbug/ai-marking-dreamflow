@@ -226,13 +226,27 @@ export function SignIn() {
           </div>
 
           <div>
-            {/* A handoff, not a login: it GETs the app with the typed address as
-                ?email=, and UMarkless does the actual sign-in. This page is static
-                and has no server, so it must never ask for a password. */}
+            {/* A handoff, not a login: this page is static and has no server,
+                so it must never ask for a password. The Google button opens
+                the app with ?sso=google and the app starts Google sign-in at
+                once; the email form GETs the app with ?email= prefilled and
+                the app's own screen takes the password. */}
             <form className="page signin-form" method="get" action={APP_URL}>
               <div className="pg-top">
                 <span className="field">Sign in</span>
                 <span className="tag-ok tag-push">opens the app</span>
+              </div>
+              <a className="btn btn-google" href={`${APP_URL}?sso=google`}>
+                <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+                  <path fill="#4285F4" d="M44.5 24.5c0-1.6-.1-2.8-.4-4.1H24v7.8h11.5c-.2 1.9-1.5 4.8-4.3 6.7l6.6 5.1c4-3.7 6.7-9.1 6.7-15.5z" />
+                  <path fill="#34A853" d="M24 46c5.9 0 10.9-1.9 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.9 0-10.9-3.9-12.7-9.3l-7.1 5.5C7.8 40.9 15.3 46 24 46z" />
+                  <path fill="#FBBC05" d="M11.3 28.2c-.5-1.3-.7-2.8-.7-4.2s.2-2.9.7-4.2l-7.1-5.5C2.7 17.1 2 20.5 2 24s.7 6.9 2.1 9.7l7.2-5.5z" />
+                  <path fill="#EA4335" d="M24 9.5c3.3 0 6.3 1.1 8.6 3.3l6.4-6.3C35 2.6 30 .5 24 .5 15.3.5 7.8 5.6 4.1 13l7.1 5.5C13.1 13.4 18.1 9.5 24 9.5z" />
+                </svg>
+                Continue with Google
+              </a>
+              <div className="or-rule" aria-hidden="true">
+                <span>or with email</span>
               </div>
               <label className="field" htmlFor="signin-email">
                 Your email
@@ -255,7 +269,8 @@ export function SignIn() {
                 Create an account
               </a>
               <p className="pg-note">
-                UMarkless opens on its own sign-in screen and asks for your password there.
+                Either way, UMarkless opens on its own screen — Google&rsquo;s prompt, or the
+                password field. No password is ever typed on this page.
               </p>
             </form>
             <p className="note-small">
