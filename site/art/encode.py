@@ -1,34 +1,39 @@
-"""Turns the rendered frames of paper-stack.blend into what the site serves.
+"""Turns a scene's rendered frames into what the site serves.
 
-    blender -b --factory-startup --python site/art/encode.py
+    blender -b --factory-startup --python site/art/encode.py -- marking-scan
 
 Rendering the 3D scene is the slow part, so it happens once, to PNG frames
-(`blender -b site/art/paper-stack.blend -a`). This script only encodes those
-frames, so re-encoding at a different quality never re-renders a sheet.
+(`blender -b site/art/marking-scan.blend -a`, which writes them to
+.render/marking-scan-frames/). This script only encodes those frames, so
+re-encoding at a different quality never re-renders anything.
 
-Writes into site/public/art/:
-    paper-stack.webm      VP9, what nearly every browser plays
-    paper-stack.mp4       H.264, for the ones that will not play VP9
-    paper-stack-start.webp  the video's poster: its first frame exactly, so
-                            nothing jumps when playback begins
-    paper-stack-end.webp    the settled last frame, shown instead of the
-                            video to anyone who has asked for reduced motion
+Writes into site/public/art/, for a scene called NAME:
+    NAME.webm        VP9, what nearly every browser plays
+    NAME.mp4         H.264, for the ones that will not play VP9
+    NAME-start.webp  the video's poster: its first frame exactly, so nothing
+                     jumps when playback begins
+    NAME-end.webp    the settled last frame, shown instead of the video to
+                     anyone who has asked for reduced motion
 """
 import glob
 import os
 import shutil
+import sys
 
 import bpy
 
+ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+NAME = ARGS[0] if ARGS else 'marking-scan'
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, '..', '..'))
-FRAMES = os.path.join(REPO, '.render', 'frames')
+FRAMES = os.path.join(REPO, '.render', f'{NAME}-frames')
 OUT = os.path.join(REPO, 'site', 'public', 'art')
 os.makedirs(OUT, exist_ok=True)
 
 files = sorted(glob.glob(os.path.join(FRAMES, 'f_*.png')))
 if not files:
-    raise SystemExit(f'no frames in {FRAMES} - render paper-stack.blend first')
+    raise SystemExit(f'no frames in {FRAMES} - render site/art/{NAME}.blend first')
 
 scene = bpy.context.scene
 scene.render.resolution_x = 1400
@@ -88,7 +93,7 @@ def still(src, name, quality=86):
     print(f'wrote {dest} ({os.path.getsize(dest) // 1024} KB)')
 
 
-encode('WEBM', 'WEBM', 'paper-stack.webm')
-encode('MPEG4', 'H264', 'paper-stack.mp4')
-still(files[0], 'paper-stack-start.webp')
-still(files[-1], 'paper-stack-end.webp')
+encode('WEBM', 'WEBM', f'{NAME}.webm')
+encode('MPEG4', 'H264', f'{NAME}.mp4')
+still(files[0], f'{NAME}-start.webp')
+still(files[-1], f'{NAME}-end.webp')
