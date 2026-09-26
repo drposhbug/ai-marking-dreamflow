@@ -232,9 +232,19 @@ export function SignIn() {
                 once; the email form GETs the app with ?email= prefilled and
                 the app's own screen takes the password. */}
             <form className="page signin-form" method="get" action={APP_URL}>
-              <div className="pg-top">
-                <span className="field">Sign in</span>
-                <span className="tag-ok tag-push">opens the app</span>
+              {/* The header every sign-in form in the world wears: the mark,
+                  "Sign in to", and one line of what happens next. It looked
+                  like a paper card that happened to hold an email box; a
+                  teacher should know she is at the front door before she
+                  reads a word of it. */}
+              <div className="signin-head">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="icon.png" alt="UMarkless" width={44} height={44} />
+                <h3>Sign in to UMarkless</h3>
+                <p>
+                  Opens the app with your account ready — passwords are typed there, never on this
+                  page.
+                </p>
               </div>
               <a className="btn btn-google" href={`${APP_URL}?sso=google`}>
                 <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
@@ -268,10 +278,6 @@ export function SignIn() {
               <a className="btn btn-ghost" href={APP_URL}>
                 Create an account
               </a>
-              <p className="pg-note">
-                Either way, UMarkless opens on its own screen — Google&rsquo;s prompt, or the
-                password field. No password is ever typed on this page.
-              </p>
             </form>
             <p className="note-small">
               In a browser the name blackout runs here on your own machine, but it reads the printed

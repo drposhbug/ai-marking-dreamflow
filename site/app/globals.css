@@ -428,6 +428,11 @@ figure.illo figcaption, figure.shot figcaption {
   padding: clamp(1rem, .7rem + .6vw, 1.9rem) clamp(1.1rem, .75rem + .7vw, 2.1rem)
            clamp(1.2rem, .8rem + .7vw, 2.1rem);
 }
+/* The pile leans as one thing. The under-sheet used to rotate the OTHER
+   way (+2.2 against the card's -1.1), so the stack read as dipping
+   down-right while the pen climbed up-right — two stories on one desk.
+   Now card, under-sheet and handwriting all lean the same way, the
+   under-sheet a touch further, like a sheet squared up not-quite. */
 .page-tilt { transform: rotate(-1.1deg); }
 .page-tilt::before {
   content: "";
@@ -435,7 +440,7 @@ figure.illo figcaption, figure.shot figcaption {
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--r);
-  transform: rotate(2.2deg) translate(9px, 6px);
+  transform: rotate(-2.9deg) translate(8px, 7px);
   z-index: -1;
 }
 
@@ -1263,7 +1268,25 @@ figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8v
   #signin .claims p { max-width: none; }
 }
 
-.signin-form { display: grid; gap: .55rem; align-content: start; width: 100%; max-width: 34rem; margin-inline-start: auto; }
+/* Unmistakably a sign-in: the mark, "Sign in to", a lifted card. */
+.signin-form {
+  display: grid; gap: .55rem; align-content: start;
+  width: 100%; max-width: 34rem; margin-inline-start: auto;
+  box-shadow: var(--lift-2);
+}
+.signin-head {
+  display: grid; justify-items: center; gap: .4rem;
+  text-align: center;
+  padding-bottom: 1rem; margin-bottom: .4rem;
+  border-bottom: 1px solid var(--feint);
+}
+.signin-head img { width: 44px; height: 44px; border-radius: 10px; }
+.signin-head h3 {
+  font: 700 1.45rem/1.15 var(--display);
+  letter-spacing: -.015em; color: var(--ink);
+  margin: 0;
+}
+.signin-head p { margin: 0; max-width: 24rem; font-size: .82rem; line-height: 1.45; color: var(--ink-muted); }
 /* The formal front door. The G wears Google's own colours because a sign-in
    button is the one place the familiar mark IS the meaning; everything else
    about it stays in the site's materials — paper, hairline, ink. */
