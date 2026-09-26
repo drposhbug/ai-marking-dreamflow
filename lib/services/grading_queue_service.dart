@@ -164,6 +164,14 @@ class GradingQueueService extends ChangeNotifier {
   /// Set by the UI layer, which is the only place that can show a dialog.
   Future<bool> Function(GradingJob pilot, int remaining)? confirmFleet;
 
+  /// Told when a single paper, marked without a key, has taught one. The
+  /// setup screen selects it for the next paper, so a teacher marking one
+  /// paper at a time gets the class-set behaviour: every paper after the
+  /// first is marked against the same answers instead of the marker working
+  /// them out again — the difference between a borderline answer landing
+  /// the same way on every paper and landing either way.
+  void Function(String keyId, String keyName)? onKeyLearned;
+
   /// Papers waiting on the teacher's OK, in the order they were scanned.
   List<GradingJob> get heldJobs => _jobs.where((j) => j.status == GradingJobStatus.held).toList();
 
@@ -487,10 +495,14 @@ class GradingQueueService extends ChangeNotifier {
             : '${job.label} is marked (${res.primaryDisplay}) — open it from the Marking tray.$flagNote')),
       );
       if (job.notifyLearnedKey && res.learnedKeyId != null) {
+        final picked = onKeyLearned != null;
+        onKeyLearned?.call(res.learnedKeyId!, res.learnedKeyName ?? 'Learned key');
         messengerKey?.currentState?.showSnackBar(
           SnackBar(
-            duration: const Duration(seconds: 6),
-            content: Text('Answer key learned from this paper and saved ("${res.learnedKeyName}") — pick it for the rest of the class to mark cheaper and more consistently.'),
+            duration: const Duration(seconds: 8),
+            content: Text(picked
+                ? 'Answer key learned from this paper ("${res.learnedKeyName}") and picked for your next paper, so the rest of the class is marked the same way. Scanning a different test? Remove it on the setup screen.'
+                : 'Answer key learned from this paper and saved ("${res.learnedKeyName}") — pick it for the rest of the class to mark cheaper and more consistently.'),
           ),
         );
       }
