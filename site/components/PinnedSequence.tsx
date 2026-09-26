@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { motion, useMotionValueEvent, useScroll, useTransform, type MotionValue } from 'framer-motion';
+import { motion, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from 'framer-motion';
 import { STAGES } from '../lib/content';
 import { Handwriting, Tick } from './Ink';
 import { useNarrow, useReducedMotionSafe } from './useMedia';
@@ -50,25 +50,34 @@ import { useNarrow, useReducedMotionSafe } from './useMedia';
    ========================================================================== */
 
 const N = STAGES.length;
-/** Half the cross-fade window, in units of overall progress. */
-const W = 0.16 / N;
 
+/**
+ * A stage is IN or it is OUT, and the fade between the two runs on time,
+ * not on scroll distance.
+ *
+ * It used to scrub: opacity followed the scroll through a long crossfade
+ * window, which meant stopping mid-window parked the screen at half a
+ * stage — two ghosts, neither readable, "stuck on a fade". Now the scroll
+ * only decides WHICH stage is on, and a quick spring plays the fade out to
+ * completion by itself. The spans are exclusive — half-open, so a boundary
+ * belongs to exactly one stage — because an overlap would let a parked
+ * scroll rest with two stages both fully lit on top of each other, which
+ * is the same bug wearing more opacity. Whatever the scroll position,
+ * the screen settles to one whole stage.
+ */
 function useStageMotion(scrollYProgress: MotionValue<number>, i: number) {
   const a = i / N;
   const b = (i + 1) / N;
   const first = i === 0;
   const last = i === N - 1;
 
-  const opacity = useTransform(
-    scrollYProgress,
-    [a - W, a + W, b - W, b + W],
-    [first ? 1 : 0, 1, 1, last ? 1 : 0],
-  );
-  const y = useTransform(
-    scrollYProgress,
-    [a - W, a + W, b - W, b + W],
-    [first ? 0 : 22, 0, 0, last ? 0 : -22],
-  );
+  const on = useTransform(scrollYProgress, (v): number => {
+    if (first && v < b) return 1;
+    if (last && v >= a) return 1;
+    return v >= a && v < b ? 1 : 0;
+  });
+  const opacity = useSpring(on, { stiffness: 190, damping: 26, restDelta: 0.004 });
+  const y = useTransform(opacity, [0, 1], [22, 0]);
   /** 0 -> 1 across this stage alone, for animation inside a visual. */
   const local = useTransform(scrollYProgress, [a, b], [0, 1]);
 

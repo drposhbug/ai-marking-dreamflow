@@ -162,7 +162,7 @@ export type FlipCard = {
   tone: 'cut' | 'good' | 'ask';
 };
 
-/* Six cards, six subjects, because a marking assistant that only ever shows
+/* Four cards, four subjects, because a marking assistant that only ever shows
    algebra looks like a maths tool. Every card's marking is genuinely right
    in its own discipline — the French card cites the actual rule — since a
    teacher of that subject will read exactly that card hardest. */
@@ -179,17 +179,6 @@ export const FLIP_CARDS: FlipCard[] = [
     tone: 'cut',
   },
   {
-    id: 'q1',
-    subject: 'English',
-    question: 'Q1 · What does the fog in the opening suggest?',
-    answer: ['The fog shows that no one can see', 'what is really going on, and it', 'follows the lawyers around.'],
-    mark: '5',
-    outOf: '/5',
-    reason: 'Reads the fog as concealment and ties it to a named group in the text. Full marks.',
-    feedback: 'Quote four words of it next time and the point lands harder.',
-    tone: 'good',
-  },
-  {
     id: 'q3',
     subject: 'French',
     question: 'Q3 · Mettez au passé composé : « Je vais au cinéma. »',
@@ -199,18 +188,6 @@ export const FLIP_CARDS: FlipCard[] = [
     reason:
       'Right tense, wrong auxiliary: « aller » takes être, and the participle agrees — « je suis allé », or « allée ».',
     feedback: 'Aller is a VANDERTRAMP verb. Say the sentence once with « suis » and it will stick.',
-    tone: 'cut',
-  },
-  {
-    id: 'q4',
-    subject: 'Science',
-    question: 'Q4 · Why does the reaction slow down over time?',
-    answer: ['Because there is less stuff', 'left to react so it goes slower'],
-    mark: '1½',
-    outOf: '/3',
-    reason:
-      'The idea is right but untermed — no mention of concentration, of collisions, or of the reactant being used up.',
-    feedback: 'Name the quantity that changes, then say what it does to collisions.',
     tone: 'cut',
   },
   {
