@@ -14,6 +14,8 @@ dependencies:
   # bundle contains no Passkeys reference, so no JS shim is needed to boot.
   supabase_flutter: ^2.8.0
   http: ^1.2.0
+  # Browser APIs for the *_web.dart files (dart:html is deprecated).
+  web: ^1.1.1
   pdfx: ^2.6.0
   # On-device PDF authoring for pre-coded test copies. Generation is local:
   # no API cost, and it removes the credits a mis-split stack would burn.

@@ -462,7 +462,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             const SizedBox(height: 12),
             if (classes.isNotEmpty) ...[
               DropdownButtonFormField<String?>(
-                value: _classId,
+                // Keyed on the value so a change from outside rebuilds the field;
+                // initialValue alone is only read once.
+                key: ValueKey<Object?>(_classId),
+                initialValue: _classId,
                 items: [
                   const DropdownMenuItem<String?>(value: null, child: Text('No class — general')),
                   for (final TeacherClass c in classes)

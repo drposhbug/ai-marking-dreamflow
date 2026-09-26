@@ -544,7 +544,10 @@ class _EditClassSheetState extends State<_EditClassSheet> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _period,
+                      // Keyed on the value so a change from outside rebuilds the field;
+                      // initialValue alone is only read once.
+                      key: ValueKey<Object?>(_period),
+                      initialValue: _period,
                       items: [for (final p in periods) DropdownMenuItem(value: p, child: Text(p))],
                       onChanged: (v) => setState(() => _period = v ?? _period),
                       decoration: const InputDecoration(labelText: 'Period'),
@@ -553,7 +556,10 @@ class _EditClassSheetState extends State<_EditClassSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<int?>(
-                      value: _gradeLevel,
+                      // Keyed on the value so a change from outside rebuilds the field;
+                      // initialValue alone is only read once.
+                      key: ValueKey<Object?>(_gradeLevel),
+                      initialValue: _gradeLevel,
                       items: [
                         const DropdownMenuItem<int?>(value: null, child: Text('Not set')),
                         for (var g = 1; g <= 13; g++) DropdownMenuItem<int?>(value: g, child: Text('Grade $g')),

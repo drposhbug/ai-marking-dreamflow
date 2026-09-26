@@ -111,7 +111,12 @@ class BottomNavShell extends StatelessWidget {
             label: 'Navigation',
             child: _Sidebar(currentIndex: shell.currentIndex, onDestination: _go),
           ),
-          Expanded(child: shell),
+          // The screen in its own semantics boundary. Every page route
+          // carries a modal barrier, and a barrier blocks the semantics of
+          // everything painted before it up to the nearest boundary - which,
+          // without this, was the sidebar: screen readers saw the page and
+          // no navigation at all.
+          Expanded(child: Semantics(container: true, explicitChildNodes: true, child: shell)),
         ],
       ),
     );

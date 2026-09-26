@@ -4,8 +4,10 @@ import 'dart:ui' show Rect;
 
 // The same conditional-import shape browser_intake_web.dart beside it
 // already uses: this file only ever compiles for the browser.
-// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
-import 'dart:html' as html;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
+
+import 'package:web/web.dart' as web;
 
 import 'package:flutter/foundation.dart';
 import 'package:marking_prokect_v2/services/recognized_text.dart';
@@ -67,13 +69,13 @@ class PageTextReader {
   static Future<bool> _load() async {
     _preparing.value = true;
     try {
-      final script = html.ScriptElement()..src = 'tesseract/markless_ocr.js';
+      final script = web.HTMLScriptElement()..src = 'tesseract/markless_ocr.js';
       final ready = script.onLoad.first;
-      final failed = script.onError.first.then<html.Event>(
+      final failed = script.onError.first.then<web.Event>(
         (_) => throw StateError('tesseract/markless_ocr.js did not load'),
       );
-      html.document.head!.append(script);
-      await Future.any(<Future<html.Event>>[ready, failed]).timeout(const Duration(seconds: 30));
+      web.document.head!.append(script);
+      await Future.any(<Future<web.Event>>[ready, failed]).timeout(const Duration(seconds: 30));
 
       final reply = await _ask(const {'op': 'load'}, const Duration(minutes: 3));
       if (reply['ok'] != true) throw StateError('the page reader did not start: ${reply['error']}');
@@ -111,18 +113,23 @@ class PageTextReader {
   static Future<Map<Object?, Object?>> _ask(Map<String, Object?> request, Duration timeout) {
     final id = 'ocr-${_nextId++}';
     final done = Completer<Map<Object?, Object?>>();
-    late StreamSubscription<html.MessageEvent> sub;
-    sub = html.window.onMessage.listen((e) {
-      final data = e.data;
+    late StreamSubscription<web.MessageEvent> sub;
+    sub = web.window.onMessage.listen((e) {
+      final data = e.data.dartify();
       if (data is! Map) return;
       if (data['channel'] != _channel || data['dir'] != 'reply' || data['id'] != id) return;
       sub.cancel();
       if (!done.isCompleted) done.complete(data);
     });
-    html.window.postMessage(
-      <String, Object?>{...request, 'channel': _channel, 'dir': 'ask', 'id': id},
-      html.window.location.origin,
-    );
+    // Built field by field rather than jsify()'d whole: the page bytes must
+    // arrive as a real Uint8Array, which is what the reader's
+    // `new Blob([msg.bytes])` needs.
+    final message = JSObject();
+    for (final entry in <String, Object?>{...request, 'channel': _channel, 'dir': 'ask', 'id': id}.entries) {
+      final v = entry.value;
+      message.setProperty(entry.key.toJS, v is Uint8List ? v.toJS : v.jsify());
+    }
+    web.window.postMessage(message, web.window.location.origin.toJS);
     return done.future.timeout(timeout, onTimeout: () {
       sub.cancel();
       throw TimeoutException('the page reader did not answer', timeout);

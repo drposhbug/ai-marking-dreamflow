@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 // The same conditional-import shape web_image_picker_web.dart beside it
 // already uses: this file only ever compiles for the browser, and a second
 // style here would be one more thing to keep in step for no gain.
-// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
-import 'dart:html' as html;
+import 'dart:js_interop';
+
+import 'package:web/web.dart' as web;
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:marking_prokect_v2/services/dropped_intake.dart';
@@ -45,43 +45,42 @@ BrowserIntake? startBrowserIntake({
     onHover(hovering);
   }
 
-  bool carriesFiles(html.DataTransfer? dt) {
-    final types = dt?.types;
-    if (types == null) return false;
+  bool carriesFiles(web.DataTransfer? dt) {
+    if (dt == null) return false;
     // Dragging selected text or a link across the window must not put the
     // page into "drop your scans here" — it promises something that would
     // not work.
-    return types.contains('Files');
+    return dt.types.toDart.any((t) => t.toDart == 'Files');
   }
 
-  final subs = <StreamSubscription<html.Event>>[];
+  final subs = <StreamSubscription<web.Event>>[];
 
-  subs.add(html.document.onDragEnter.listen((e) {
-    if (!carriesFiles(e.dataTransfer)) return;
+  subs.add(web.EventStreamProviders.dragEnterEvent.forTarget(web.document).listen((e) {
+    if (!carriesFiles((e as web.DragEvent).dataTransfer)) return;
     e.preventDefault();
     depth++;
     if (depth == 1) onHover(true);
   }));
 
-  subs.add(html.document.onDragOver.listen((e) {
-    if (!carriesFiles(e.dataTransfer)) return;
+  subs.add(web.EventStreamProviders.dragOverEvent.forTarget(web.document).listen((e) {
+    if (!carriesFiles((e as web.DragEvent).dataTransfer)) return;
     // Without this the browser refuses the drop and then navigates away to
     // the dropped file, losing whatever the teacher was in the middle of.
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+    e.dataTransfer?.dropEffect = 'copy';
   }));
 
-  subs.add(html.document.onDragLeave.listen((e) {
+  subs.add(web.EventStreamProviders.dragLeaveEvent.forTarget(web.document).listen((e) {
     if (depth == 0) return;
     depth--;
     if (depth == 0) onHover(false);
   }));
 
-  subs.add(html.document.onDrop.listen((e) {
+  subs.add(web.EventStreamProviders.dropEvent.forTarget(web.document).listen((e) {
     e.preventDefault();
     setHover(false);
-    final files = e.dataTransfer.files;
-    if (files == null || files.isEmpty) return;
+    final files = _listOf((e as web.DragEvent).dataTransfer?.files);
+    if (files.isEmpty) return;
     unawaited(_readAll(files, pasted: false).then((read) {
       if (read.isNotEmpty) onDropped(read);
     }));
@@ -89,11 +88,11 @@ BrowserIntake? startBrowserIntake({
 
   // The drag can also end outside the window entirely (escape, or dropped on
   // the desktop), which fires neither leave nor drop reliably.
-  subs.add(html.window.onDragEnd.listen((_) => setHover(false)));
-  subs.add(html.window.onBlur.listen((_) => setHover(false)));
+  subs.add(web.EventStreamProviders.dragEndEvent.forTarget(web.window).listen((_) => setHover(false)));
+  subs.add(web.EventStreamProviders.blurEvent.forTarget(web.window).listen((_) => setHover(false)));
 
-  void onPaste(html.Event event) {
-    final data = event is html.ClipboardEvent ? event.clipboardData : null;
+  void onPaste(web.Event event) {
+    final data = (event as web.ClipboardEvent).clipboardData;
     if (data == null) return;
     final files = _clipboardFiles(data);
     // Pasting text — a student's name into the search box — must fall
@@ -106,25 +105,30 @@ BrowserIntake? startBrowserIntake({
   }
 
   // Capture phase: Flutter puts a hidden input under the focused text field
-  // and a paste aimed at the page can land there first.
-  html.window.addEventListener('paste', onPaste, true);
+  // and a paste aimed at the page can land there first. One JS function, so
+  // the same one can be removed again.
+  final pasteListener = onPaste.toJS;
+  web.window.addEventListener('paste', pasteListener, true.toJS);
 
   return BrowserIntake._([
     for (final s in subs) s.cancel,
-    () => html.window.removeEventListener('paste', onPaste, true),
+    () => web.window.removeEventListener('paste', pasteListener, true.toJS),
   ]);
 }
 
+List<web.File> _listOf(web.FileList? list) => [
+      for (var i = 0; i < (list?.length ?? 0); i++)
+        if (list!.item(i) case final web.File f) f,
+    ];
+
 /// A pasted image sometimes arrives as a file and sometimes only as a
 /// clipboard item, depending on the browser and on where it was copied from.
-List<html.File> _clipboardFiles(html.DataTransfer data) {
-  final direct = data.files;
-  if (direct != null && direct.isNotEmpty) return direct;
+List<web.File> _clipboardFiles(web.DataTransfer data) {
+  final direct = _listOf(data.files);
+  if (direct.isNotEmpty) return direct;
   final items = data.items;
-  final count = items?.length ?? 0;
-  if (items == null || count == 0) return const [];
-  final out = <html.File>[];
-  for (var i = 0; i < count; i++) {
+  final out = <web.File>[];
+  for (var i = 0; i < items.length; i++) {
     final item = items[i];
     if (item.kind != 'file') continue;
     final file = item.getAsFile();
@@ -133,7 +137,7 @@ List<html.File> _clipboardFiles(html.DataTransfer data) {
   return out;
 }
 
-Future<List<DroppedFile>> _readAll(List<html.File> files, {required bool pasted}) async {
+Future<List<DroppedFile>> _readAll(List<web.File> files, {required bool pasted}) async {
   final out = <DroppedFile>[];
   for (final file in files) {
     final read = await _readOne(file, pasted: pasted);
@@ -144,46 +148,18 @@ Future<List<DroppedFile>> _readAll(List<html.File> files, {required bool pasted}
   return out;
 }
 
-Future<DroppedFile?> _readOne(html.File file, {required bool pasted}) {
-  final done = Completer<DroppedFile?>();
-  final reader = html.FileReader();
-  final mime = file.type;
-
-  void finish(DroppedFile? value) {
-    if (!done.isCompleted) done.complete(value);
-  }
-
-  reader.onError.listen((_) {
-    debugPrint('Could not read dropped file "${file.name}"');
-    finish(null);
-  });
-  reader.onLoadEnd.listen((_) {
-    // readAsArrayBuffer hands back a ByteBuffer on some Dart web SDKs and an
-    // already-wrapped Uint8List on others. Insisting on one of them made
-    // every dropped or pasted scan vanish without a word.
-    final result = reader.result;
-    final bytes = switch (result) {
-      final ByteBuffer b => Uint8List.view(b),
-      final Uint8List b => b,
-      final List<int> b => Uint8List.fromList(b),
-      _ => null,
-    };
-    if (bytes == null) {
-      debugPrint('Unexpected FileReader result type: ${result.runtimeType}');
-      finish(null);
-      return;
-    }
+Future<DroppedFile?> _readOne(web.File file, {required bool pasted}) async {
+  try {
+    // Blob.arrayBuffer() is a promise of the whole file: one result type in
+    // every browser, where FileReader's differed between Dart web SDKs and
+    // made dropped or pasted scans vanish without a word.
+    final bytes = (await file.arrayBuffer().toDart).toDart.asUint8List();
     // Every browser calls a pasted screenshot "image.png"; named for the
     // moment it arrived, it can be told apart in a list of marks.
-    final name = pasted ? pastedFileName(mime, DateTime.now()) : file.name;
-    finish(DroppedFile(name: name, mime: mime, bytes: bytes));
-  });
-
-  try {
-    reader.readAsArrayBuffer(file);
+    final name = pasted ? pastedFileName(file.type, DateTime.now()) : file.name;
+    return DroppedFile(name: name, mime: file.type, bytes: bytes);
   } catch (e) {
     debugPrint('Could not read dropped file "${file.name}": $e');
-    finish(null);
+    return null;
   }
-  return done.future;
 }
