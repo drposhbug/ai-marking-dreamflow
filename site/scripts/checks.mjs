@@ -263,11 +263,13 @@ const ok = (name, pass, detail = '') => {
     };
   });
   ok('reduced motion: the sequence is not pinned', r.stickyPosition === 'static', r.stickyPosition);
-  // Six, not five: the stages carry real handwritten working now, which is
-  // taller than the squiggles it replaced. What this still catches is the
-  // failure it exists for - a pinned track keeping its scroll-length height
-  // (tens of viewports) after reduced motion unpinned it.
-  ok('reduced motion: the track is no taller than its content', r.trackHeight < r.viewport * 6,
+  // Eight, not six: every stage now draws a whole sheet of paper - a stacked
+  // quiz, three split pages, the marked quiz, the review page, the printout -
+  // which stand taller than the list cards they replaced (about 6.3 viewports
+  // at 1440x900). What this still catches is the failure it exists for - a
+  // pinned track keeping its scroll-length height (tens of viewports) after
+  // reduced motion unpinned it.
+  ok('reduced motion: the track is no taller than its content', r.trackHeight < r.viewport * 8,
     `${r.trackHeight}px`);
   ok('reduced motion: every stage is fully visible', r.stageOpacities.every((o) => o === 1),
     r.stageOpacities.join(','));

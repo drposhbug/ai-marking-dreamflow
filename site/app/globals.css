@@ -398,7 +398,7 @@ figure.illo figcaption, figure.shot figcaption {
   max-width: 62ch;
 }
 
-.page, .stack-sheets, .leaves {
+.page, .leaves {
   --bg:        #fffef8;
   --surface:   #fcfaf1;
   --ink:       #211e15;
@@ -835,18 +835,6 @@ figure.illo figcaption, figure.shot figcaption {
 }
 
 /* the stage visuals themselves */
-.stack-sheets { position: relative; }
-.stack-sheets .page { position: relative; }
-.stack-sheets .ghost {
-  position: absolute; left: 0; right: 0; top: 0; bottom: 0;
-  background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r);
-  z-index: -1;
-}
-.split-grid {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(.5rem, 1vw, 1rem);
-}
-.split-grid .page { padding: .85rem .9rem .95rem; }
 .code {
   font: 700 .68rem/1 var(--mono);
   letter-spacing: .04em; color: var(--ink-2);
@@ -866,12 +854,32 @@ figure.illo figcaption, figure.shot figcaption {
 
 /* `figure.illo` above is more specific than a bare class, so the spacing here
    has to name the element too or the margin is silently dropped. */
-figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8vw, 5rem); }
+/* The paper and its key sit side by side on a wide screen, stacked on a narrow one. */
+.marking-lead {
+  display: grid; gap: clamp(2rem, 1rem + 3vw, 4.5rem); align-items: center;
+  margin: 0 0 clamp(2.5rem, 1.2rem + 2.8vw, 5rem);
+}
+@media (min-width: 62rem) { .marking-lead { grid-template-columns: minmax(0, 46rem) minmax(16rem, 26rem); } }
+figure.marking-paper { max-width: 46rem; margin: 0; }
+.pen-key h3 { margin: 0; font: 600 clamp(1.3rem, 1rem + .6vw, 1.7rem)/1.2 var(--display); color: var(--ink); }
+.pen-key ul { list-style: none; margin: 1.4rem 0 0; padding: 0; display: grid; gap: 1.2rem; }
+.pen-key li { display: grid; grid-template-columns: 6.2rem minmax(0, 1fr); gap: 1rem; align-items: center; }
+.pen-key li p { margin: 0; font-size: .95rem; line-height: 1.5; color: var(--ink-2, var(--ink)); }
+.pen-key li b { color: var(--ink); font-weight: 600; }
+.pen-key-mark {
+  display: flex; align-items: center; justify-content: center; min-height: 3.6rem;
+  background: linear-gradient(160deg, var(--paper-a), var(--paper-b));
+  box-shadow: var(--paper-shadow); border-radius: 1px;
+  font-size: 1.2rem; white-space: nowrap;
+}
+.pen-key-ring { position: relative; display: inline-block; padding: 0 .3em; font-size: 1.5rem; line-height: 1; }
+.pen-key-note { font-size: 1rem; line-height: 1.1; white-space: normal; text-align: center; padding: 0 .4rem; }
+.pen-key-foot { margin: 1.5rem 0 0; font-size: .9rem; line-height: 1.5; color: var(--muted); }
 
 /* --- the two hands, and the paper they write on ---------------------------
    Blue ballpoint for the student, red pen for the teacher. Paper and inks
    are fixed colours in both themes: it is a sheet on a desk, not UI. */
-.sheet, .icard, .printout {
+.sheet, .icard, .printout, .pen-key, .scan-stack, .split-row {
   --paper-a:   #fffdf7;
   --paper-b:   #f7f2e4;
   --print:     #2b2a26;
@@ -1180,6 +1188,55 @@ figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8v
 .printout-table .pen-tick { width: 1.05rem; height: 1.05rem; margin-left: .2rem; }
 .printout-foot { padding-top: .6rem; border-top: 1px solid rgba(43, 42, 38, .35); margin-top: .2rem; }
 .printout-note { margin: 1.4rem 0 0 auto; width: fit-content; font-size: 1.5rem; line-height: 1.1; transform: rotate(-1.5deg); }
+
+/* one page of the French quiz, as the scanned copy has it */
+.qpage { padding: 1.8em 1.8em 1.6em 3.6em; transform: none; }
+.qpage .sheet-hole { left: 1.1em; width: 1.2em; height: 1.2em; }
+.qpage-title { margin: .45em 0 0; font: 600 1.4em/1.2 var(--display); color: var(--print); }
+.qpage-name { display: flex; align-items: flex-end; gap: .5em; margin: 1em 0 0; font: 400 .85em/1 var(--sans); color: var(--print-2); }
+.qpage-blank { display: inline-block; width: 12em; height: 1.25em; border-bottom: 1px solid rgba(43, 42, 38, .5); }
+.qpage-redact { display: block; height: 100%; background: #141414; }
+.qpage-qs { list-style: none; margin: 1.5em 0 0; padding: 0; display: grid; gap: 1.2em; counter-reset: q; }
+.qpage-qs li { counter-increment: q; display: grid; gap: .35em; }
+.qpage-prompt { font: 400 .85em/1.3 var(--sans); color: var(--print); }
+.qpage-prompt::before { content: counter(q) ".  "; }
+.qpage-line { display: block; padding: 0 0 .1em .9em; border-bottom: 1px solid var(--answer-rule); font-size: 1.3em; line-height: 1.5; white-space: nowrap; overflow: hidden; }
+.qpage-foot { margin: 2em 0 0; font: 400 .72em/1 var(--mono); color: var(--print-2); white-space: nowrap; }
+.qpage-ringed { position: relative; display: inline-block; padding: 1em 1.5em; }
+.qpage-ringed .pen-loop { stroke-width: 1.8; }
+
+/* Scan: the stack squared up, the top page's name painted out */
+.scan-stack { position: relative; padding: 0 0 3rem; }
+.scan-stack .qpage { position: relative; z-index: 1; max-width: 30rem; font-size: clamp(.8rem, .65rem + .45vw, 1rem); }
+.scan-under {
+  position: absolute; top: 0; left: 0; width: min(100%, 30rem); height: calc(100% - 3rem);
+  background: linear-gradient(160deg, var(--paper-a, #fffdf7), var(--paper-b, #f7f2e4));
+  box-shadow: 0 1px 2px rgba(33, 28, 20, .1), 0 10px 20px -12px rgba(33, 28, 20, .3);
+}
+.scan-under:nth-child(1) { transform: rotate(2deg) translate(10px, 6px); }
+.scan-under:nth-child(2) { transform: rotate(-1.3deg) translate(-4px, 4px); }
+.scan-note {
+  position: absolute; z-index: 2; top: 1.4rem; left: min(calc(100% - 12rem), 31.5rem);
+  width: 12rem; margin: 0; font-size: 1.3rem; line-height: 1.05; transform: rotate(-3deg);
+}
+.scan-note svg { position: absolute; left: -4.2rem; top: .3rem; width: 4rem; fill: none; stroke: var(--red-pen); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.scan-count, .split-count { margin: .9rem 0 0 auto; width: fit-content; font-size: 1.35rem; transform: rotate(-1deg); }
+.scan-stack .scan-count { position: absolute; right: 0; bottom: .4rem; margin: 0; }
+
+/* Split: three pupils' page ones, found by their footers */
+.split-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.split-page .qpage { font-size: clamp(.5rem, .3rem + .45vw, .72rem); padding-left: 3em; padding-right: 1.2em; }
+.split-page .qpage-foot { margin-left: -1.6em; font-size: .64em; }
+.split-page:nth-child(1) .qpage { transform: rotate(-.8deg); }
+.split-page:nth-child(2) .qpage { transform: rotate(.5deg) translateY(.6rem); }
+.split-page:nth-child(3) .qpage { transform: rotate(-.3deg) translateY(.2rem); }
+.split-count { grid-column: 1 / -1; }
+@media (max-width: 46rem) {
+  .scan-note { position: relative; top: auto; left: auto; margin: .8rem 0 0 auto; }
+  .scan-note svg { display: none; }
+  .split-row { grid-template-columns: minmax(0, 1fr); max-width: 22rem; }
+  .split-page .qpage { font-size: .8rem; transform: none; }
+}
 
 @media (max-width: 46rem) {
   .review-sticky { position: relative; top: auto; right: auto; margin: 0 0 1em auto; }
@@ -1693,11 +1750,7 @@ figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8v
   .s--hero::before { display: none; }
   .page-tilt { transform: none; }
   .page-tilt::before { display: none; }
-  /* The offset sheets behind the stack are rotated by inline style, and on a
-     phone that rotation reaches past the right edge of the screen. */
-  .stack-sheets .ghost { transform: none !important; }
   .total { transform: none; }
-  .split-grid { grid-template-columns: 1fr; }
   .beliefs-in { grid-template-columns: 2.6rem minmax(0, 1fr); }
   .tabs { gap: 0 1.2rem; }
   .tabs button { padding: .8rem .1rem; font-size: .9rem; }
