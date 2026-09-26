@@ -112,3 +112,27 @@ export function Tick({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/** The physics answer, drawn the way a student draws it in pen: a block
+ *  on the floor and four forces leaving its edges - normal up, weight down,
+ *  the push to the right, friction to the left. */
+export function FreeBody({ className }: { className?: string }) {
+  return (
+    <svg className={`fbd${className ? ` ${className}` : ''}`} viewBox="0 0 270 220" aria-hidden="true" focusable="false">
+      <g fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M90 80 L180 81 L179 142 L91 141 Z" />
+        <path d="M24 143 L250 145" strokeWidth="1.6" />
+        <path d="M135 78 L136 18 M128 28 L136 17 L144 29" />
+        <path d="M135 144 L134 204 M127 194 L134 205 L141 195" />
+        <path d="M181 111 L251 110 M241 103 L252 110 L242 118" />
+        <path d="M89 113 L31 114 M41 106 L30 114 L40 121" />
+      </g>
+      <g className="fbd-label">
+        <text x="146" y="30">N</text>
+        <text x="143" y="210">mg</text>
+        <text x="236" y="98">F</text>
+        <text x="34" y="100">f</text>
+      </g>
+    </svg>
+  );
+}

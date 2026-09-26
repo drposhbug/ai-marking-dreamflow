@@ -871,15 +871,13 @@ figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8v
 /* --- the two hands, and the paper they write on ---------------------------
    Blue ballpoint for the student, red pen for the teacher. Paper and inks
    are fixed colours in both themes: it is a sheet on a desk, not UI. */
-.sheet, .icard {
+.sheet, .icard, .printout {
   --paper-a:   #fffdf7;
   --paper-b:   #f7f2e4;
   --print:     #2b2a26;
   --print-2:   #6d6a60;
   --answer-rule: rgba(143, 138, 124, .5);
-  --index-rule:  rgba(169, 193, 222, .75);
-  --index-top:   rgba(224, 113, 106, .85);
-  --ballpoint: #23358f;
+  --ballpoint: #1d6a44;
   --red-pen:   #c0281e;
   --stamp-ink: rgba(107, 63, 160, .8);
   --paper-shadow: 0 1px 2px rgba(33, 28, 20, .1), 0 18px 34px -14px rgba(33, 28, 20, .28);
@@ -1034,39 +1032,52 @@ figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8v
 }
 .flip-face--back { transform: rotateY(180deg); }
 
-/* An index card. Each face is one side of it: ruled on the front, blank on
-   the back. */
+/* A piece cut from a printed test. Each face is one side of it: the
+   question and the answer on the front, the marking on the back. */
 .icard {
-  --rule-gap: 1.95rem;
   position: relative; flex: 1;
   display: flex; flex-direction: column;
   min-height: 23rem;
   padding: 1rem 1.1rem 1.2rem;
-  background: #fffefa;
-  border-radius: 3px;
+  background: linear-gradient(160deg, var(--paper-a), var(--paper-b));
+  border-radius: 1px;
   box-shadow: var(--paper-shadow);
 }
-.icard--ruled { padding: 0; }
-.icard-head { padding: 1rem 1.1rem .7rem; border-bottom: 1.5px solid var(--index-top); }
 .flip-sub {
   font: 600 .66rem/1 var(--sans);
   letter-spacing: .14em; text-transform: uppercase; color: var(--print-2);
 }
-/* The question is printed, like a slip glued above the red line. */
-.flip-q { margin: .5rem 0 0; font: 400 .88rem/1.35 var(--sans); color: var(--print); }
-/* The answer sits on the card's blue rules: one line of text per rule. */
-.icard-lines {
-  flex: 1; display: flex; flex-direction: column;
-  padding: .55rem 1.1rem 2.6rem 1.3rem;
-  background:
-    repeating-linear-gradient(to bottom,
-      transparent 0 calc(var(--rule-gap) - 1px),
-      var(--index-rule) calc(var(--rule-gap) - 1px) var(--rule-gap))
-    0 .55rem / 100% calc(100% - .55rem) no-repeat;
+/* the test's running header, printed across the top of the page */
+.tpiece-test {
+  margin: 0; padding-bottom: .55rem; border-bottom: 1px solid rgba(43, 42, 38, .3);
+  font: 600 .6rem/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--print-2);
 }
-.icard-lines .bp { display: block; font-size: 1.22rem; line-height: var(--rule-gap); transform: translateY(.3rem); }
-.icard-lines .bp.slip { text-underline-offset: .18em; }
-.fbd { display: block; width: 100%; max-width: 17rem; margin: .8rem auto 0; stroke: var(--ballpoint); }
+.tpiece-q {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 .45rem; align-items: start;
+  margin-top: .8rem; font: 400 .86rem/1.38 var(--sans); color: var(--print);
+}
+.tpiece-n { font-weight: 600; }
+.tpiece-prompt { margin: 0; }
+.tpiece-given { display: block; margin-top: .55rem; font: 600 1rem/1.3 var(--display); }
+.tpiece-marks { font-size: .72rem; line-height: 1.9; color: var(--print-2); white-space: nowrap; }
+/* printed answer lines under the question, the student's pen on them */
+.tpiece-lines {
+  --line-gap: 1.95rem;
+  flex: 1; display: flex; flex-direction: column;
+  margin: .7rem 0 2.2rem 1.1rem; padding-top: .1rem;
+  background: repeating-linear-gradient(to bottom,
+      transparent 0 calc(var(--line-gap) - 1px),
+      var(--answer-rule) calc(var(--line-gap) - 1px) var(--line-gap))
+    0 0 / 100% calc(var(--line-gap) * 5) no-repeat;
+}
+.tpiece-lines .bp { display: block; font-size: 1.15rem; line-height: var(--line-gap); transform: translateY(.28rem); padding-left: .2rem; }
+.tpiece-lines .bp.slip { text-underline-offset: .16em; }
+.tpiece-box {
+  margin: .8rem 0 2.2rem 1.1rem; padding: .3rem .4rem .5rem;
+  border: 1px solid rgba(43, 42, 38, .35);
+}
+.tpiece-hint { display: block; margin-top: .3rem; font: 400 .7rem/1.3 var(--sans); color: var(--print-2); }
+.fbd { display: block; width: 100%; max-width: 17rem; margin: .2rem auto 0; stroke: var(--ballpoint); }
 .fbd-label { fill: var(--ballpoint); stroke: none; font: 400 20px var(--font-ballpoint), cursive; }
 .flip-hint {
   position: absolute; right: 1rem; bottom: .6rem; margin: 0;
@@ -1109,6 +1120,71 @@ figure.marking-paper { max-width: 58rem; margin: 0 0 clamp(2.5rem, 1.2rem + 2.8v
   font: 700 1.05rem/1.2 var(--sans); letter-spacing: .12em; text-transform: uppercase; text-align: center;
   color: var(--stamp-ink);
   transform: rotate(-4deg);
+}
+
+/* --- the sequence's papers ------------------------------------------------ */
+.sheet--flat { transform: none; }
+.sheet .stamp { margin: 0; padding: .55rem 1.1rem; font-size: .85em; }
+.fbd--sheet { max-width: 15rem; margin: .6rem 0 0 1.6em; }
+
+/* the teacher's override: the old mark struck through, the new one ringed */
+.sheet--review .sheet-qs li { grid-template-columns: minmax(0, 1fr) 11em; }
+.review-mark { flex-wrap: wrap; align-items: center; gap: .3em .9em; }
+.review-old { position: relative; font-size: 1.9em; line-height: 1; opacity: .9; }
+.review-old::after {
+  content: ""; position: absolute; left: -.1em; right: -.1em; top: 50%;
+  height: 2.5px; background: var(--red-pen); border-radius: 2px; transform: rotate(-24deg);
+}
+.review-new { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 1em; }
+.review-initials { flex-basis: 100%; margin-top: .35em; font-size: 1.15em; font-weight: 500; white-space: nowrap; }
+.review-sticky {
+  position: absolute; top: -.8em; right: 1.4em; z-index: 1;
+  width: 11.5em; margin: 0; padding: 1.1em .9em .9em;
+  font-size: .95em; transform: rotate(2deg);
+}
+.sheet > .sheet-kicker + .sheet-qs { margin-top: 1em; }
+
+/* the Ontario achievement chart printed at the foot, filled in by hand */
+.rubric { margin-top: .6em; }
+.rubric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5em; margin-top: .6em; }
+.rubric-cell {
+  display: flex; flex-direction: column; gap: .35em; margin: 0; padding: .5em .6em .45em;
+  border: 1px solid rgba(43, 42, 38, .45);
+  font: 400 .78em/1.2 var(--sans); color: var(--print-2);
+}
+.rubric-cell span:last-child { color: var(--print); font-size: 1.1em; }
+.rubric-cell b { font-size: 1.8em; line-height: 1; margin-right: .1em; }
+
+/* the class set, printed out and paper-clipped */
+.printout {
+  position: relative;
+  padding: 2.2rem clamp(1.2rem, .8rem + 2vw, 2.6rem) 2rem;
+  background: #fdfdfa;
+  border-radius: 1px;
+  box-shadow: var(--paper-shadow);
+  font-family: var(--mono); color: var(--print);
+}
+.printout-clip {
+  position: absolute; top: -.9rem; left: .6rem; width: 1.6rem; height: auto;
+  fill: none; stroke: #8d8f94; stroke-width: 3; stroke-linecap: round;
+  transform: rotate(-8deg);
+}
+.printout-file { margin: 0; font-weight: 700; font-size: .95rem; }
+.printout-meta { margin: .35rem 0 0; font-size: .75rem; color: var(--print-2); }
+.printout-table { width: 100%; margin-top: 1.4rem; border-collapse: collapse; font-size: .9rem; }
+.printout-table th { padding: 0 .4rem .5rem; text-align: left; font-weight: 700; border-bottom: 1.2px solid rgba(43, 42, 38, .7); }
+.printout-table td { padding: .6rem .4rem; }
+.printout-table tbody tr:nth-child(even) { background: rgba(0, 0, 0, .025); }
+.printout-table th:nth-child(3), .printout-table td:nth-child(3) { text-align: right; }
+.printout-table th:last-child, .printout-table td:last-child { width: 2rem; padding-right: 0; }
+.printout-table .pen-tick { width: 1.05rem; height: 1.05rem; margin-left: .2rem; }
+.printout-foot { padding-top: .6rem; border-top: 1px solid rgba(43, 42, 38, .35); margin-top: .2rem; }
+.printout-note { margin: 1.4rem 0 0 auto; width: fit-content; font-size: 1.5rem; line-height: 1.1; transform: rotate(-1.5deg); }
+
+@media (max-width: 46rem) {
+  .review-sticky { position: relative; top: auto; right: auto; margin: 0 0 1em auto; }
+  .rubric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbd--sheet { margin-left: 0; }
 }
 
 /* ==========================================================================
