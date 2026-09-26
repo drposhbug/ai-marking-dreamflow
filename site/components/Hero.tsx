@@ -4,8 +4,8 @@ import { HeroRender } from './HeroRender';
 /**
  * The cover page of the exam booklet: warm paper edge to edge, a faint red
  * margin rule down the left, the title centred in the schoolbook serif, and
- * under it the product doing its one job: a phone scans a student's quiz and
- * comes back with it marked.
+ * under it what the product leaves behind: a marked class set being flipped
+ * through, page by page, onto a done pile.
  *
  * That visual is a render, not a screenshot, and is captioned as one — it is
  * a `figure.illo`, so the build's honesty check holds it to that. It replaced

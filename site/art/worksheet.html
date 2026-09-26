@@ -279,108 +279,104 @@
 <template id="sheet">
   <div class="sheet">
     <div class="head">
-      <div class="field name">Name <span class="blank"><span class="hand">Ana Lopez</span></span></div>
-      <div class="field">Class <span class="blank"><span class="hand">9B</span></span></div>
-      <div class="field">Date <span class="blank"><span class="hand">12/5</span></span></div>
+      <div class="field name">Name <span class="blank"><span class="hand"></span></span></div>
+      <div class="field">Class <span class="blank"><span class="hand"></span></span></div>
+      <div class="field">Date <span class="blank"><span class="hand"></span></span></div>
     </div>
 
     <div class="title">
       <h1>Algebra — Quiz 3</h1>
-      <!-- The score goes where a teacher writes it: in the Total box, ringed.
-           It used to float free at the top right and sat on top of the
-           printed "Total / 20" and on question 1's "[4]". -->
-      <div class="total">Total <span class="blank"><span class="pen score">17</span></span>/ 20</div>
+      <!-- The score goes where a teacher writes it: in the Total box, ringed. -->
+      <div class="total">Total <span class="blank"><span class="pen score"></span></span>/ 20</div>
     </div>
 
-    <div class="q">
-      <div class="prompt"><b>1.</b><span>Solve 3x + 5 = 20</span><span class="marks">[4]</span></div>
-      <div class="work">
-        <div class="line"><span class="hand">3x = 15</span></div>
-        <div class="line"><span class="hand">x = 5</span></div>
-      </div>
-      <div class="tick"></div>
-    </div>
-
-    <div class="q">
-      <div class="prompt"><b>2.</b><span>Expand 4(2x − 3)</span><span class="marks">[4]</span></div>
-      <div class="work">
-        <div class="line"><span class="hand">8x - 3</span><span class="pen note" style="left:470px; bottom:6px;">4 × −3 = −12</span></div>
-      </div>
-      <div class="cross"></div>
-      <div class="pen note" style="right:150px; top:78px;">1</div>
-    </div>
-
-    <div class="q">
-      <div class="prompt"><b>3.</b><span>Factorise x<sup>2</sup> + 5x + 6</span><span class="marks">[4]</span></div>
-      <div class="work">
-        <div class="line"><span class="hand">(x + 2)(x + 3)</span></div>
-      </div>
-      <div class="tick"></div>
-    </div>
-
-    <div class="q">
-      <div class="prompt"><b>4.</b><span>Solve 2(x − 1) = x + 7</span><span class="marks">[4]</span></div>
-      <div class="work">
-        <div class="line"><span class="hand">2x - 2 = x + 7</span></div>
-        <div class="line"><span class="hand">x = 9</span></div>
-      </div>
-      <div class="tick"></div>
-    </div>
-
-    <div class="q">
-      <div class="prompt"><b>5.</b><span>Simplify 6x<sup>2</sup> ÷ 3x</span><span class="marks">[4]</span></div>
-      <div class="work">
-        <div class="line"><span class="hand">2x</span></div>
-      </div>
-      <div class="tick"></div>
-    </div>
-
-    <!-- The Q2 slip is not a sign error: the -3 was never multiplied by 4.
-         The comment names the actual mistake, as the product promises to. -->
-    <div class="pen note" style="left:150px; bottom:150px;">Lovely factorising. Multiply both terms in the bracket.</div>
+    <div class="qs"></div>
   </div>
 </template>
 
 <div id="out"></div>
 
 <script>
-  const layer = new URLSearchParams(location.search).get('layer') || 'paper';
-  const out = document.getElementById('out');
-  const sheet = () => document.getElementById('sheet').content.firstElementChild.cloneNode(true);
+  // Three students, so a flipped-through pile reads as a class set rather
+  // than one paper cloned. Every script is real algebra and every mark is
+  // right: the wrong answers are the slips students actually make, and each
+  // comment names the mistake instead of gesturing at it.
+  const QUESTIONS = [
+    { prompt: 'Solve 3x + 5 = 20', marks: 4 },
+    { prompt: 'Expand 4(2x − 3)', marks: 4 },
+    { prompt: 'Factorise x<sup>2</sup> + 5x + 6', marks: 4 },
+    { prompt: 'Solve 2(x − 1) = x + 7', marks: 4 },
+    { prompt: 'Simplify 6x<sup>2</sup> ÷ 3x', marks: 4 },
+  ];
+  const VARIANTS = {
+    // Ana never multiplied the −3, so 8x − 3. One method mark.
+    1: { name: 'Ana Lopez', klass: '9B', date: '12/5', score: '17',
+         note: 'Lovely factorising. Multiply both terms in the bracket.',
+         qs: [
+           { lines: ['3x = 15', 'x = 5'], mark: 'tick' },
+           { lines: ['8x - 3'], mark: 'cross', award: '1', inline: '4 × −3 = −12', at: 0, left: 470 },
+           { lines: ['(x + 2)(x + 3)'], mark: 'tick' },
+           { lines: ['2x - 2 = x + 7', 'x = 9'], mark: 'tick' },
+           { lines: ['2x'], mark: 'tick' },
+         ] },
+    2: { name: 'Sam Carter', klass: '9B', date: '12/5', score: '20',
+         note: 'Perfect — well done.',
+         qs: [
+           { lines: ['3x = 15', 'x = 5'], mark: 'tick' },
+           { lines: ['8x - 12'], mark: 'tick' },
+           { lines: ['(x + 2)(x + 3)'], mark: 'tick' },
+           { lines: ['2x - 2 = x + 7', 'x = 9'], mark: 'tick' },
+           { lines: ['2x'], mark: 'tick' },
+         ] },
+    // Priya took the −2 across without changing its sign: 7 − 2, not 7 + 2.
+    3: { name: 'Priya Shah', klass: '9B', date: '12/5', score: '16',
+         note: 'Careful moving terms across: −2 becomes +2.',
+         qs: [
+           { lines: ['3x = 15', 'x = 5'], mark: 'tick' },
+           { lines: ['8x - 12'], mark: 'tick' },
+           { lines: ['(x + 2)(x + 3)'], mark: 'tick' },
+           { lines: ['2x - 2 = x + 7', 'x = 5'], mark: 'cross', inline: '7 + 2, not 7 − 2', at: 1, left: 340 },
+           { lines: ['2x'], mark: 'tick' },
+         ] },
+  };
 
-  if (layer === 'paper') {
-    const s = sheet();
-    s.classList.add('unmarked');
-    out.appendChild(s);
-  } else if (layer === 'scan') {
-    const p = document.createElement('div');
-    p.className = 'phone scan';
-    p.innerHTML = `<div class="status"><span>9:41</span><span class="bat"></span></div>
-      <div class="frame"><div class="edge"></div>
-        <div class="bracket b1"></div><div class="bracket b2"></div>
-        <div class="bracket b3"></div><div class="bracket b4"></div></div>
-      <div class="hint"><i></i>Page found — hold steady</div>
-      <div class="controls"></div>
-      <div class="shutter"></div>`;
-    const v = sheet();
-    v.classList.add('unmarked', 'view');
-    // The sheet goes under its own detected edge, so the outline is drawn on
-    // top of the paper, not hidden beneath it.
-    p.querySelector('.frame').prepend(v);
-    out.appendChild(p);
-  } else if (layer === 'marked') {
-    const p = document.createElement('div');
-    p.className = 'phone marked';
-    p.innerHTML = `<div class="status"><span>9:42</span><span class="bat"></span></div>
-      <div class="bar"><span class="back">‹</span><span>UMarkless</span></div>
-      <div class="card"><div><div class="who">Paper 1 of 30</div><div class="who">Algebra — Quiz 3</div></div>
-        <div class="num">17<small> / 20</small></div></div>
-      <div class="chip"><i></i>Name hidden before upload</div>`;
-    const pg = sheet();
-    pg.classList.add('redacted', 'page');
-    p.appendChild(pg);
-    out.appendChild(p);
-  }
+  const params = new URLSearchParams(location.search);
+  const variant = VARIANTS[params.get('v') || '1'];
+  const out = document.getElementById('out');
+  const s = document.getElementById('sheet').content.firstElementChild.cloneNode(true);
+
+  const hands = s.querySelectorAll('.head .hand');
+  hands[0].textContent = variant.name;
+  hands[1].textContent = variant.klass;
+  hands[2].textContent = variant.date;
+  s.querySelector('.score').textContent = variant.score;
+
+  const qs = s.querySelector('.qs');
+  variant.qs.forEach((q, i) => {
+    const el = document.createElement('div');
+    el.className = 'q';
+    el.innerHTML = `<div class="prompt"><b>${i + 1}.</b><span>${QUESTIONS[i].prompt}</span>` +
+      `<span class="marks">[${QUESTIONS[i].marks}]</span></div><div class="work"></div>`;
+    const work = el.querySelector('.work');
+    q.lines.forEach((text, li) => {
+      const line = document.createElement('div');
+      line.className = 'line';
+      line.innerHTML = `<span class="hand">${text}</span>`;
+      if (q.inline && q.at === li) {
+        line.innerHTML += `<span class="pen note" style="left:${q.left}px; bottom:6px;">${q.inline}</span>`;
+      }
+      work.appendChild(line);
+    });
+    el.insertAdjacentHTML('beforeend', `<div class="${q.mark}"></div>`);
+    if (q.award) {
+      el.insertAdjacentHTML('beforeend', `<div class="pen note" style="right:150px; top:78px;">${q.award}</div>`);
+    }
+    qs.appendChild(el);
+  });
+
+  s.insertAdjacentHTML('beforeend',
+    `<div class="pen note" style="left:150px; bottom:150px;">${variant.note}</div>`);
+  out.appendChild(s);
   document.fonts.ready.then(() => document.body.setAttribute('data-ready', '1'));
 </script>
 </body>
