@@ -128,7 +128,7 @@ npx supabase secrets set STRIPE_SECRET_KEY=sk_test_xxx
 # The web app's own origin, NO trailing path. Return URLs are built from
 # this and never from anything the client sends, so this endpoint cannot be
 # turned into an open redirect.
-npx supabase secrets set STRIPE_RETURN_ORIGIN=https://app.umarkless.com
+npx supabase secrets set STRIPE_RETURN_ORIGIN=https://umarkless.com
 
 # One recurring price per tier, created in the Stripe dashboard.
 # These MUST match lib/screens/plans/plans_screen.dart and PLAN_CAPS.
