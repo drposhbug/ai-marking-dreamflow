@@ -461,7 +461,11 @@ figure.illo figcaption, figure.shot figcaption {
   font: italic 700 1.45rem/1 var(--display);
   font-size: clamp(1.5rem, .95rem + 1.05vw, 2.8rem);
   letter-spacing: -.02em; color: var(--pen-bright);
-  transform: rotate(-3.5deg); transform-origin: right bottom;
+  /* Slanted the way a hand writes a total, and stood clear of the header
+     line above it - flush against the card's top edge the ring read as
+     clipped. The whole stamp slants, /20 included: it is one span. */
+  margin-top: .42em;
+  transform: rotate(-5.5deg); transform-origin: right bottom;
   white-space: nowrap;
 }
 .total i { font-style: italic; font-size: .72em; font-weight: 600; opacity: .85; }

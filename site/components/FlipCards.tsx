@@ -98,7 +98,7 @@ function Card({ card, index }: { card: FlipCard; index: number }) {
   useMotionValueEvent(raw, 'change', (v) => {
     if (v > latched.get()) latched.set(v);
   });
-  const rotateY = useSpring(latched, { stiffness: 48, damping: 38, mass: 1, restDelta: 0.01 });
+  const rotateY = useSpring(latched, { stiffness: 60, damping: 26, mass: 1, restDelta: 0.01 });
 
   return (
     <div className="flip" ref={ref}>
