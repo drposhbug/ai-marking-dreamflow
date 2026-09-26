@@ -16,12 +16,14 @@ import { useReducedMotionSafe } from './useMedia';
  * cards"). It is an illustration, and its caption says so.
  */
 
-type Line = { text: string; tick?: boolean; slip?: { wrong: string; right: string } };
+export type Line = { text: string; tick?: boolean; slip?: { wrong: string; right: string } };
 
 /* 5 + 3¾ + 4¾ + 4 = 17½, the total ringed in the corner. Any change here has
    to keep that arithmetic true. The working is real algebra; Q2's last line
    is the slip the note at the foot calls out: 4 × −3 is −12, not −3. */
-const QUESTIONS: { prompt: string; lines: Line[]; mark: string }[] = [
+export type Question = { prompt: string; lines: Line[]; mark: string };
+
+export const QUESTIONS: Question[] = [
   { prompt: 'Solve 3x + 5 = 20', lines: [{ text: '3x + 5 = 20' }, { text: '3x = 15  so  x = 5', tick: true }], mark: '5' },
   { prompt: 'Expand 4(2x − 3)', lines: [{ text: '4(2x − 3)' }, { text: '= 8x − ', slip: { wrong: '3', right: '12' } }], mark: '3¾' },
   { prompt: 'Factor x² + 5x + 6', lines: [{ text: 'x² + 5x + 6' }, { text: '= (x + 2)(x + 3)' }], mark: '4¾' },
@@ -77,30 +79,7 @@ export function MarkedPaper() {
       <ol className="sheet-qs">
         {QUESTIONS.map((q, i) => (
           <motion.li key={q.prompt} {...rise(0.15 + i * 0.09)}>
-            <div className="sheet-q">
-              <p className="sheet-prompt">
-                <span>
-                  {i + 1}.&nbsp;&nbsp;{q.prompt}
-                </span>
-                <span className="sheet-pts">(5 marks)</span>
-              </p>
-              {q.lines.map((line) => (
-                <p key={line.text} className="sheet-line">
-                  {line.slip ? (
-                    <>
-                      <span className="bp slip">
-                        {line.text}
-                        <span className="xout">{line.slip.wrong}</span>
-                      </span>
-                      <span className="pen sheet-fix">{line.slip.right}</span>
-                    </>
-                  ) : (
-                    <span className="bp">{line.text}</span>
-                  )}
-                  {line.tick && <Tick className="pen-tick" />}
-                </p>
-              ))}
-            </div>
+            <SheetQuestion n={i + 1} q={q} />
             <div className="sheet-mark">
               <span className="sheet-mark-n">
                 <PenLoop seed={i + 1} />
@@ -117,6 +96,37 @@ export function MarkedPaper() {
         <br />
         Show the substitution next time.
       </motion.p>
+    </div>
+  );
+}
+
+/** One printed question and the student's working under it, on the printed
+ *  answer lines - with the red pen's tick, underline and correction. */
+export function SheetQuestion({ n, q }: { n: number; q: Question }) {
+  return (
+    <div className="sheet-q">
+      <p className="sheet-prompt">
+        <span>
+          {n}.&nbsp;&nbsp;{q.prompt}
+        </span>
+        <span className="sheet-pts">(5 marks)</span>
+      </p>
+      {q.lines.map((line) => (
+        <p key={line.text} className="sheet-line">
+          {line.slip ? (
+            <>
+              <span className="bp slip">
+                {line.text}
+                <span className="xout">{line.slip.wrong}</span>
+              </span>
+              <span className="pen sheet-fix">{line.slip.right}</span>
+            </>
+          ) : (
+            <span className="bp">{line.text}</span>
+          )}
+          {line.tick && <Tick className="pen-tick" />}
+        </p>
+      ))}
     </div>
   );
 }

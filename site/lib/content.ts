@@ -153,7 +153,13 @@ export const STAGES: Stage[] = [
 export type FlipCard = {
   id: string;
   subject: string;
-  question: string;
+  /** The test the question was cut from, as its running header reads. */
+  test: string;
+  number: string;
+  prompt: string;
+  /** The expression or sentence the question sets, on its own line. */
+  given?: string;
+  marks: string;
   answer: string[];
   mark: string;
   outOf: string;
@@ -174,7 +180,11 @@ export const FLIP_CARDS: FlipCard[] = [
   {
     id: 'q2',
     subject: 'Maths',
-    question: 'Q2 · Solve 3x + 7 = 25',
+    test: 'Grade 9 Math · Unit 3 Test',
+    number: '2.',
+    prompt: 'Solve for x. Show your work.',
+    given: '3x + 7 = 25',
+    marks: '[5 marks]',
     answer: ['3x + 7 = 25', '3x = 32', 'x = 10.67'],
     mark: '3¾',
     outOf: '/5',
@@ -186,7 +196,11 @@ export const FLIP_CARDS: FlipCard[] = [
   {
     id: 'q3',
     subject: 'French',
-    question: 'Q3 · Mettez au passé composé : « Je vais au cinéma. »',
+    test: 'French 10 · Quiz 4',
+    number: '3.',
+    prompt: 'Mettez la phrase au passé composé :',
+    given: 'Je vais au cinéma.',
+    marks: '[4 points]',
     answer: ['J’ai allé au cinéma.'],
     mark: '2½',
     outOf: '/4',
@@ -198,7 +212,10 @@ export const FLIP_CARDS: FlipCard[] = [
   {
     id: 'q5',
     subject: 'History',
-    question: 'Q5 · Give one cause of the 1929 crash and explain it',
+    test: 'History 10 · The 1920s',
+    number: '5.',
+    prompt: 'Give one cause of the 1929 stock market crash and explain how it contributed.',
+    marks: '[4 marks]',
     answer: ['People borrowed money to buy shares, so when prices fell they had to sell, and selling pushed prices down further.'],
     mark: '4',
     outOf: '/4',
@@ -209,7 +226,10 @@ export const FLIP_CARDS: FlipCard[] = [
   {
     id: 'q7',
     subject: 'Physics',
-    question: 'Q7 · Sketch the forces on the block',
+    test: 'Physics 11 · Forces',
+    number: '7.',
+    prompt: 'Draw a free-body diagram for the block being pushed to the right.',
+    marks: '[3 marks]',
     answer: ['[ hand-drawn free-body diagram ]'],
     mark: 'Asks you',
     outOf: '',

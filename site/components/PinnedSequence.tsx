@@ -3,7 +3,8 @@
 import { useRef, useState } from 'react';
 import { motion, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from 'framer-motion';
 import { STAGES } from '../lib/content';
-import { Handwriting, Tick } from './Ink';
+import { FreeBody, Handwriting, PenLoop, Tick } from './Ink';
+import { QUESTIONS, SheetQuestion } from './MarkedPaper';
 import { useNarrow, useReducedMotionSafe } from './useMedia';
 
 /* ==========================================================================
@@ -204,7 +205,8 @@ type VisProps = { local: MotionValue<number>; staticMode: boolean };
 
 function StageVisual({ id, local, staticMode }: VisProps & { id: string }) {
   if (id === 'scan') return <ScanVisual local={local} staticMode={staticMode} />;
-  if (id === 'split') return <SplitVisual local={local} staticMode={staticMode} />;
+  // The split-stack illustration is hidden for now; the stage keeps its words.
+  if (id === 'split') return null;
   if (id === 'mark') return <MarkVisual local={local} staticMode={staticMode} />;
   if (id === 'review') return <ReviewVisual local={local} staticMode={staticMode} />;
   return <ExportVisual local={local} staticMode={staticMode} />;
@@ -261,149 +263,141 @@ function ScanVisual({ local, staticMode }: VisProps) {
   );
 }
 
-function SplitVisual({ local, staticMode }: VisProps) {
-  const codes = ['mk-7F3A-01', 'mk-7F3A-02', 'mk-7F3A-03'];
-  return (
-    <figure className="illo">
-      <div
-        className="split-grid"
-        role="img"
-        aria-label="Stylised illustration of a scanned stack split back into three separate papers, each labelled with its own printed code."
-      >
-        {codes.map((code, i) => {
-          const appear = useTransform(local, [0.1 + i * 0.13, 0.38 + i * 0.13], [0, 1]);
-          const lift = useTransform(local, [0.1 + i * 0.13, 0.38 + i * 0.13], [14, 0]);
-          return (
-            <motion.div
-              key={code}
-              className="page"
-              style={{ opacity: staticMode ? 1 : appear, y: staticMode ? 0 : lift }}
-            >
-              <span className="code">{code}</span>
-              {/* Three papers, three classes: a stack is where different
-                  subjects genuinely sit together on one desk, so it is the
-                  one illustration that should NOT be all algebra. */}
-              <ul className="qlist" style={{ marginTop: '.7rem' }}>
-                {[
-                  ['3x = 15, so x = 5', '4(2x − 3) = 8x − 12', '2x − 2 = x + 7'],
-                  ['The fog hides the truth', 'from everyone in the case,', 'and follows the lawyers.'],
-                  ['Je suis allé au cinéma.', 'Nous avons vu le film,', 'c’était vraiment super.'],
-                ][i % 3].map((line, li, arr) => (
-                  <li key={line} style={li === arr.length - 1 ? { borderBottom: 0 } : undefined}>
-                    <Handwriting lines={[line]} seed={211 + i * 53 + li} />
-                  </li>
-                ))}
-              </ul>
-              <p className="pg-note" style={{ fontSize: '.72rem' }}>page 1 of 4</p>
-            </motion.div>
-          );
-        })}
-      </div>
-      <figcaption>
-        An illustration of a stack reassembling by its printed codes — not a screenshot. 30 of 30
-        papers found.
-      </figcaption>
-    </figure>
-  );
-}
-
-/* One paper, so one subject — the same algebra quiz the marked-paper card
-   shows, because this storyboard IS that paper being marked. The subject
-   variety lives where there are several papers: the stamped stack and the
-   redaction card each carry a different class's work. */
-const MARK_ROWS = [
-  { q: 'Q1', lines: ['3x + 5 = 20', '3x = 15, so x = 5'], mark: '5', tone: 'good' as const, seed: 311 },
-  { q: 'Q2', lines: ['4(2x − 3)', '= 8x − 3'], mark: '3¾', tone: 'cut' as const, seed: 337, slip: 1 },
-  { q: 'Q3', lines: ['x² + 5x + 6', '= (x + 2)(x + 3)'], mark: '4¾', tone: 'cut' as const, seed: 373 },
-  { q: 'Q4', lines: ['2(x − 1) = x + 7', 'x = 9'], mark: '4', tone: 'cut' as const, seed: 397 },
-];
-
+/* Paper 01 coming back: the same quiz sheet the marked-paper illustration
+   shows, because this storyboard IS that paper being marked. The marks land
+   one question at a time as the stage plays, then the total. */
 function MarkVisual({ local, staticMode }: VisProps) {
   const total = useTransform(local, [0.72, 0.92], [0, 1]);
-  const totalRotate = useTransform(local, [0.72, 0.92], [-14, -3.5]);
   return (
     <figure className="illo">
       <div
-        className="page"
+        className="sheet sheet--flat"
         role="img"
-        aria-label="Stylised illustration of a paper being marked question by question, ending with a total of seventeen and a half out of twenty written in red."
+        aria-label="Illustration of a quiz being marked question by question in red pen: five, three and three quarters, four and three quarters and four, each circled, ending with seventeen and a half out of twenty circled at the top."
       >
-        <div className="pg-top">
-          <span className="field">Paper 01</span>
-          <span className="redact" />
-          <motion.span
-            className="total"
-            style={{ opacity: staticMode ? 1 : total, rotate: staticMode ? -3.5 : totalRotate }}
-          >
-            17½<i>/20</i>
-          </motion.span>
+        <span className="sheet-hole" />
+        <span className="sheet-hole" />
+        <span className="sheet-hole" />
+        <div className="sheet-head">
+          <p className="sheet-kicker">Unit 3 quiz</p>
+          <p className="sheet-title">Linear equations &amp; factoring</p>
         </div>
-        <ul className="qlist">
-          {MARK_ROWS.map((row, i) => {
+        <motion.div className="sheet-total" style={{ opacity: staticMode ? 1 : total }}>
+          <PenLoop seed={7} />
+          <span className="sheet-total-n">17½</span>
+          <span className="sheet-total-d">20</span>
+        </motion.div>
+        <ol className="sheet-qs">
+          {QUESTIONS.map((q, i) => {
             const at = 0.12 + i * 0.15;
             const show = useTransform(local, [at, at + 0.12], [0, 1]);
             const slide = useTransform(local, [at, at + 0.12], [10, 0]);
             return (
-              <li key={row.q}>
-                <span className="qn">{row.q}</span>
-                <Handwriting lines={row.lines} seed={row.seed} slip={row.slip} />
-                <motion.span
-                  className={`mk ${row.tone}`}
+              <li key={q.prompt}>
+                <SheetQuestion n={i + 1} q={q} />
+                <motion.div
+                  className="sheet-mark"
                   style={{ opacity: staticMode ? 1 : show, x: staticMode ? 0 : slide }}
                 >
-                  {row.tone === 'good' && <Tick />}
-                  {row.mark}
-                </motion.span>
+                  <span className="sheet-mark-n">
+                    <PenLoop seed={i + 1} />
+                    {q.mark}
+                  </span>
+                  <span className="sheet-mark-of">/5</span>
+                </motion.div>
               </li>
             );
           })}
-        </ul>
-        <p className="pg-note">Q2 — right method, arithmetic slip in the last line.</p>
+        </ol>
+        <p className="pen sheet-note">Q2 — right method, arithmetic slip in the last line.</p>
       </div>
       <figcaption>An illustration of what comes back, not a screenshot.</figcaption>
     </figure>
   );
 }
 
+/* The teacher's pass over the same paper: the suggested 3¾ struck through
+   and 4 written beside it, initialled, with the change noted on a sticky
+   note; a drawn answer stamped for the teacher; the achievement chart at the
+   foot filled in by hand. */
+const KTCA = [
+  ['Knowledge', '8', '10'],
+  ['Thinking', '6½', '8'],
+  ['Communication', '5', '6'],
+  ['Application', '4', '5'],
+];
+
 function ReviewVisual({ local, staticMode }: VisProps) {
   const override = useTransform(local, [0.25, 0.55], [0, 1]);
   return (
     <figure className="illo">
       <div
-        className="page"
+        className="sheet sheet--flat sheet--review"
         role="img"
-        aria-label="Stylised illustration of a review screen: a mark of three and three quarters struck through and replaced with four by the teacher, and a hand-drawn diagram flagged as requiring teacher marking."
+        aria-label="Illustration of a teacher's review: on question two the suggested three and three quarters is crossed out and four written beside it, initialled, with a sticky note reading override recorded. A hand-drawn force diagram on question seven is stamped teacher to mark. An Ontario achievement chart at the foot reads knowledge 8 of 10, thinking 6 and a half of 8, communication 5 of 6, application 4 of 5."
       >
-        <div className="pg-top">
-          <span className="field">Review</span>
-          <span className="tag-ok tag-push">override recorded</span>
-        </div>
-        <ul className="qlist">
+        <span className="sheet-hole" />
+        <span className="sheet-hole" />
+        <span className="sheet-hole" />
+        <motion.p className="sticky review-sticky" style={{ opacity: staticMode ? 1 : override }}>
+          Override recorded:
+          <br />
+          Q2&nbsp;&nbsp;3¾ → 4
+        </motion.p>
+        <p className="sheet-kicker">Unit 3 quiz</p>
+        <ol className="sheet-qs">
           <li>
-            <span className="qn">Q2</span>
-            <Handwriting lines={['4(2x − 3)', '= 8x − 3']} seed={521} slip={1} />
-            <span className="mk cut">
-              <span className="strike">3¾</span>
-              <motion.span style={{ opacity: staticMode ? 1 : override }}>4</motion.span>
-            </span>
+            <SheetQuestion n={2} q={QUESTIONS[1]} />
+            <div className="sheet-mark review-mark">
+              <span className="pen review-old">3¾</span>
+              <motion.span className="review-new" style={{ opacity: staticMode ? 1 : override }}>
+                <span className="sheet-mark-n">
+                  <PenLoop seed={3} />4
+                </span>
+                <span className="sheet-mark-of">/5</span>
+                <span className="pen review-initials">method + effort — T.M.</span>
+              </motion.span>
+            </div>
           </li>
           <li>
-            <span className="qn">Q3</span>
-            <Handwriting lines={['x² + 5x + 6', '= (x + 2)(x + 3)']} seed={541} />
-            <span className="mk cut">4¾</span>
+            <SheetQuestion n={3} q={QUESTIONS[2]} />
+            <div className="sheet-mark">
+              <span className="sheet-mark-n">
+                <PenLoop seed={4} />
+                {QUESTIONS[2].mark}
+              </span>
+              <span className="sheet-mark-of">/5</span>
+            </div>
           </li>
           <li>
-            <span className="qn">Q7</span>
-            <Handwriting lines={['— hand-drawn diagram —']} seed={563} />
-            <span className="chip-ask">Asks you</span>
+            <div className="sheet-q">
+              <p className="sheet-prompt">
+                <span>7.&nbsp;&nbsp;Sketch the forces on the block</span>
+                <span className="sheet-pts">(3 marks)</span>
+              </p>
+              <FreeBody className="fbd--sheet" />
+            </div>
+            <div className="sheet-mark">
+              <p className="stamp">
+                Teacher
+                <br />
+                to mark
+              </p>
+            </div>
           </li>
-        </ul>
-        <p className="pg-note">Hand-drawn diagram — flagged for the teacher, not scored on a hunch.</p>
-        <div className="ktca">
-          <span>K 8/10</span>
-          <span>T 6½/8</span>
-          <span>C 5/6</span>
-          <span>A 4/5</span>
+        </ol>
+        <div className="rubric">
+          <p className="sheet-kicker">Achievement chart</p>
+          <div className="rubric-grid">
+            {KTCA.map(([k, got, of]) => (
+              <p key={k} className="rubric-cell">
+                <span>{k}</span>
+                <span>
+                  <b className="pen">{got}</b> / {of}
+                </span>
+              </p>
+            ))}
+          </div>
         </div>
       </div>
       <figcaption>
@@ -413,33 +407,37 @@ function ReviewVisual({ local, staticMode }: VisProps) {
   );
 }
 
+/* The class set as it comes out of the printer: the CSV in the typewriter
+   face, paper-clipped, each row checked off against the stack in red pen. */
 const CSV_ROWS = [
-  ['01', '17½', '88%'],
-  ['02', '15¾', '79%'],
-  ['03', '19', '95%'],
-  ['04', '12½', '63%'],
-  ['05', '16¼', '81%'],
-  ['06', '18½', '93%'],
+  ['01', '17.5', '88'],
+  ['02', '15.75', '79'],
+  ['03', '19', '95'],
+  ['04', '12.5', '63'],
+  ['05', '16.25', '81'],
+  ['06', '18.5', '93'],
 ];
 
 function ExportVisual({ local, staticMode }: VisProps) {
   return (
     <figure className="illo">
       <div
-        className="page"
+        className="printout"
         role="img"
-        aria-label="Stylised illustration of a gradebook CSV: four rows of paper numbers, marks including halves and quarters, and percentages."
+        aria-label="Illustration of a printed gradebook CSV, paper-clipped: paper numbers, marks including halves and quarters, and percentages, each row ticked in red pen, with a note that nothing is sent to a gradebook, a student or a parent."
       >
-        <div className="pg-top">
-          <span className="field field--file">class-set.csv</span>
-          <span className="tag-ok tag-push">or a Doc in Drive</span>
-        </div>
-        <table className="csv">
+        <svg className="printout-clip" viewBox="0 0 44 92" aria-hidden="true" focusable="false">
+          <path d="M10 2 L10 72 Q10 84 22 84 Q34 84 34 72 L34 14 Q34 6 26 6 Q18 6 18 14 L18 64" />
+        </svg>
+        <p className="printout-file">class-set.csv</p>
+        <p className="printout-meta">Unit 3 quiz · printed 14 Oct · page 1 of 1</p>
+        <table className="printout-table">
           <thead>
             <tr>
-              <th scope="col">Paper</th>
-              <th scope="col">Mark</th>
-              <th scope="col" style={{ textAlign: 'right' }}>%</th>
+              <th scope="col">paper</th>
+              <th scope="col">mark</th>
+              <th scope="col">%</th>
+              <th aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
@@ -451,13 +449,20 @@ function ExportVisual({ local, staticMode }: VisProps) {
                 <motion.tr key={row[0]} style={{ opacity: staticMode ? 1 : show, x: staticMode ? 0 : slide }}>
                   <td>{row[0]}</td>
                   <td>{row[1]}</td>
-                  <td className="num">{row[2]}</td>
+                  <td>{row[2]}</td>
+                  <td>
+                    <Tick className="pen-tick" />
+                  </td>
                 </motion.tr>
               );
             })}
           </tbody>
         </table>
-        <p className="pg-note">Nothing is sent to a gradebook, a student or a parent.</p>
+        <p className="printout-meta printout-foot">30 rows · columns: paper, mark, %</p>
+        <p className="pen printout-note">
+          Nothing is sent to a gradebook,
+          <br />a student or a parent.
+        </p>
       </div>
       <figcaption>An illustration of a gradebook export, not a screenshot.</figcaption>
     </figure>
