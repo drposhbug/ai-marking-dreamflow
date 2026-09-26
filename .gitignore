@@ -62,3 +62,7 @@ tool/sql/node_modules/
 # by tool/build_vercel.ps1 whenever it is deployed.
 .vercel-out/
 .vercel/
+
+# Blender render frames. Re-created by rendering site/art/paper-stack.blend;
+# only the encoded video and stills in site/public/art/ are shipped.
+.render/
