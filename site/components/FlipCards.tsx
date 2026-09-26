@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { motion, useScroll, useSpring, useTransform } from 'framer-motion';
+import { motion, useMotionValue, useMotionValueEvent, useScroll, useSpring, useTransform } from 'framer-motion';
 import { FLIP_CARDS, type FlipCard } from '../lib/content';
 import { MarkedPaper } from './MarkedPaper';
 import { useReducedMotionSafe } from './useMedia';
@@ -10,10 +10,11 @@ import { useReducedMotionSafe } from './useMedia';
    Flip cards.
 
    One face is what the student wrote. The other is what came back: the mark,
-   the quarter mark, the reason for the deduction and the feedback. The flip is
-   scroll-linked rather than timed - the card turns over as it crosses the
-   viewport, and turns back if you scroll up - and each card in a row is offset
-   slightly so a row cascades instead of snapping in unison.
+   the quarter mark, the reason for the deduction and the feedback. The flip
+   is scroll-earned rather than timed - the card turns over, once, as it
+   crosses the viewport, at a spring's pace, and a turned card stays turned -
+   and each card in a row is offset slightly so a row cascades instead of
+   snapping in unison.
 
    Under `prefers-reduced-motion` the two faces cannot occupy the same box, so
    the CSS stacks them: the answer, then what came back, both fully readable
@@ -86,9 +87,18 @@ function Card({ card, index }: { card: FlipCard; index: number }) {
   // spring is what stops a fast scroll reading as an instant snap: however
   // hard the wheel is flicked, the card itself turns at a paper pace and
   // settles, instead of teleporting to its end state.
+  //
+  // And it turns ONCE. The rotation used to track the scroll in both
+  // directions, so reading up and down the page spun the cards over and
+  // over like a lark — the latch keeps the largest angle the scroll has
+  // earned, and a turned card stays turned.
   const lead = Math.min(index, 3) * 0.045;
   const raw = useTransform(scrollYProgress, [0.12 + lead, 0.92 + lead], [0, 180]);
-  const rotateY = useSpring(raw, { stiffness: 48, damping: 38, mass: 1, restDelta: 0.01 });
+  const latched = useMotionValue(0);
+  useMotionValueEvent(raw, 'change', (v) => {
+    if (v > latched.get()) latched.set(v);
+  });
+  const rotateY = useSpring(latched, { stiffness: 48, damping: 38, mass: 1, restDelta: 0.01 });
 
   return (
     <div className="flip" ref={ref}>

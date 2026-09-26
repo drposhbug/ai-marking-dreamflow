@@ -162,6 +162,10 @@ export type FlipCard = {
   tone: 'cut' | 'good' | 'ask';
 };
 
+/* Six cards, six subjects, because a marking assistant that only ever shows
+   algebra looks like a maths tool. Every card's marking is genuinely right
+   in its own discipline — the French card cites the actual rule — since a
+   teacher of that subject will read exactly that card hardest. */
 export const FLIP_CARDS: FlipCard[] = [
   {
     id: 'q2',
@@ -172,6 +176,29 @@ export const FLIP_CARDS: FlipCard[] = [
     outOf: '/5',
     reason: 'Method correct throughout. Arithmetic slip on line two: 25 − 7 is 18, not 32.',
     feedback: 'Write the subtraction on its own line before you divide.',
+    tone: 'cut',
+  },
+  {
+    id: 'q1',
+    subject: 'English',
+    question: 'Q1 · What does the fog in the opening suggest?',
+    answer: ['The fog shows that no one can see', 'what is really going on, and it', 'follows the lawyers around.'],
+    mark: '5',
+    outOf: '/5',
+    reason: 'Reads the fog as concealment and ties it to a named group in the text. Full marks.',
+    feedback: 'Quote four words of it next time and the point lands harder.',
+    tone: 'good',
+  },
+  {
+    id: 'q3',
+    subject: 'French',
+    question: 'Q3 · Mettez au passé composé : « Je vais au cinéma. »',
+    answer: ['J’ai allé au cinéma.'],
+    mark: '2½',
+    outOf: '/4',
+    reason:
+      'Right tense, wrong auxiliary: « aller » takes être, and the participle agrees — « je suis allé », or « allée ».',
+    feedback: 'Aller is a VANDERTRAMP verb. Say the sentence once with « suis » and it will stick.',
     tone: 'cut',
   },
   {
@@ -187,6 +214,17 @@ export const FLIP_CARDS: FlipCard[] = [
     tone: 'cut',
   },
   {
+    id: 'q5',
+    subject: 'History',
+    question: 'Q5 · Give one cause of the 1929 crash and explain it',
+    answer: ['People borrowed money to buy shares,', 'so when prices fell they had to sell,', 'and selling pushed prices down further.'],
+    mark: '4',
+    outOf: '/4',
+    reason: 'Names a real cause — buying on margin — and runs the mechanism in both directions. Full marks.',
+    feedback: 'Use the term “buying on margin” and the same answer earns its keep in the exam.',
+    tone: 'good',
+  },
+  {
     id: 'q7',
     subject: 'Physics',
     question: 'Q7 · Sketch the forces on the block',
@@ -196,17 +234,6 @@ export const FLIP_CARDS: FlipCard[] = [
     reason: 'A hand-drawn diagram. Not scored on a hunch — handed back for a teacher to mark.',
     feedback: 'Flagged as “requires teacher marking”.',
     tone: 'ask',
-  },
-  {
-    id: 'q1',
-    subject: 'English',
-    question: 'Q1 · What does the fog in the opening suggest?',
-    answer: ['The fog shows that no one can see', 'what is really going on, and it', 'follows the lawyers around.'],
-    mark: '5',
-    outOf: '/5',
-    reason: 'Reads the fog as concealment and ties it to a named group in the text. Full marks.',
-    feedback: 'Quote four words of it next time and the point lands harder.',
-    tone: 'good',
   },
 ];
 
