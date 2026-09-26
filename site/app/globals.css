@@ -588,6 +588,34 @@ figure.illo figcaption, figure.shot figcaption {
 }
 .hero-shot figcaption { margin-inline: auto; text-align: center; }
 
+/* The rendered paper stack. It is lit on its own desk, so its edges are
+   faded out: the render's desk becomes the page's paper instead of a
+   rectangle laid on top of it. No frame and no fake browser bar — those say
+   "screenshot", and this is not one. */
+.render-frame {
+  position: relative;
+  aspect-ratio: 1400 / 980;
+  -webkit-mask-image: radial-gradient(ellipse 70% 72% at 50% 52%, #000 56%, transparent 100%);
+          mask-image: radial-gradient(ellipse 70% 72% at 50% 52%, #000 56%, transparent 100%);
+}
+.render-frame > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Two classes deep, so they outrank `.render-frame > *` above — at equal
+   specificity the still would show on top of the video for everyone. */
+.render-frame > .render-still { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .render-frame > .render-motion { display: none; }
+  .render-frame > .render-still { display: block; }
+}
+/* A lit sheet of paper on a dark page is a lamp in the reader's face. */
+@media (prefers-color-scheme: dark) {
+  .render-frame > * { filter: brightness(.8) saturate(.92); }
+}
+
 /* The four real timings. The strip is the whole width of the screen; the
    numbers inside it are held to the same column as the copy above. */
 .hero-times-strip {
