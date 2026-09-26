@@ -66,3 +66,7 @@ tool/sql/node_modules/
 # Blender render frames. Re-created by rendering site/art/paper-stack.blend;
 # only the encoded video and stills in site/public/art/ are shipped.
 .render/
+
+# Local preview build of the app (served on :3000). Rebuilt by
+# tool/build_web.ps1 -BasePath / -OutDir .local-web; never shipped from git.
+.local-web/
