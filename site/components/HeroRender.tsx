@@ -4,11 +4,16 @@ import { useEffect, useRef } from 'react';
 import { useReducedMotionSafe } from './useMedia';
 
 const DESCRIPTION =
-  'A rendered illustration of a class set of papers on a desk. The top sheets turn over one at a time onto a second pile, the way a teacher works through a stack. Each sheet has its name line blacked out, four answers in pencil, a red tick beside one of them and a score written in red in the corner.';
+  "A rendered illustration of a hand bringing a phone in over a student's algebra quiz lying on a desk. The phone's camera finds the page and captures it, and the screen comes back with the paper marked 17 out of 20 and the student's name hidden before upload.";
 
 /**
- * The paper stack, rendered in Blender (site/art/paper-stack.blend) and played
- * once: the top sheets turn over onto a second pile, then it settles.
+ * A hand scanning a student's algebra quiz with a phone, rendered in Blender
+ * (site/art/marking-scan.blend) and played once: the phone comes in, finds
+ * the page, captures, and the screen comes back with the paper marked.
+ *
+ * The quiz is real type (site/art/worksheet.html), not grey bars standing in
+ * for writing, and every answer and mark on it is correct algebra: 17/20 is
+ * what those five answers actually earn.
  *
  * Once, not on a loop. A hero that moves forever is a distraction from the
  * words beside it; one that does a single thing and stops is a demonstration.
@@ -52,18 +57,18 @@ export function HeroRender() {
         muted
         playsInline
         preload="auto"
-        poster="art/paper-stack-start.webp"
+        poster="art/marking-scan-start.webp"
         width={1400}
         height={980}
         aria-label={DESCRIPTION}
       >
-        <source src="art/paper-stack.webm" type="video/webm" />
-        <source src="art/paper-stack.mp4" type="video/mp4" />
+        <source src="art/marking-scan.webm" type="video/webm" />
+        <source src="art/marking-scan.mp4" type="video/mp4" />
       </video>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         className="render-still"
-        src="art/paper-stack-end.webp"
+        src="art/marking-scan-end.webp"
         width={1400}
         height={980}
         alt={DESCRIPTION}
