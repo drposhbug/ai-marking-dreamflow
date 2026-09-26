@@ -4,16 +4,21 @@ import { useEffect, useRef } from 'react';
 import { useReducedMotionSafe } from './useMedia';
 
 const DESCRIPTION =
-  "A rendered illustration of a hand bringing a phone in over a student's algebra quiz lying on a desk. The phone's camera finds the page and captures it, and the screen comes back with the paper marked 17 out of 20 and the student's name hidden before upload.";
+  'A rendered illustration of a marked class set of algebra quizzes being flipped through, page by page, onto a done pile. Each paper shows a different student’s working with the teacher’s red ticks, a comment naming any mistake, and a circled score in the Total box.';
 
 /**
- * A hand scanning a student's algebra quiz with a phone, rendered in Blender
- * (site/art/marking-scan.blend) and played once: the phone comes in, finds
- * the page, captures, and the screen comes back with the paper marked.
+ * A marked class set being flipped through, rendered in Blender
+ * (site/art/class-set.blend) and played once: six pages turn onto a done
+ * pile, then it settles on the next marked paper.
  *
- * The quiz is real type (site/art/worksheet.html), not grey bars standing in
- * for writing, and every answer and mark on it is correct algebra: 17/20 is
- * what those five answers actually earn.
+ * The quizzes are real type (site/art/worksheet.html), not grey bars
+ * standing in for writing, and every answer and mark is correct algebra
+ * across three different students' scripts — 17, 20 and 16 out of 20 are
+ * what those answers actually earn.
+ *
+ * The frames have a transparent background, so the pile sits on the page's
+ * own paper: the WebM carries the alpha, and the MP4 fallback (H.264 has no
+ * alpha) bakes the same cream underneath instead.
  *
  * Once, not on a loop. A hero that moves forever is a distraction from the
  * words beside it; one that does a single thing and stops is a demonstration.
@@ -57,18 +62,18 @@ export function HeroRender() {
         muted
         playsInline
         preload="auto"
-        poster="art/marking-scan-start.webp"
+        poster="art/class-set-start.webp"
         width={1400}
         height={980}
         aria-label={DESCRIPTION}
       >
-        <source src="art/marking-scan.webm" type="video/webm" />
-        <source src="art/marking-scan.mp4" type="video/mp4" />
+        <source src="art/class-set.webm" type="video/webm" />
+        <source src="art/class-set.mp4" type="video/mp4" />
       </video>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         className="render-still"
-        src="art/marking-scan-end.webp"
+        src="art/class-set-end.webp"
         width={1400}
         height={980}
         alt={DESCRIPTION}
