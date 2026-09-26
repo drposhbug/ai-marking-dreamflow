@@ -1,18 +1,15 @@
 import { LAUNCH_MAILTO, ROUTES } from '../lib/content';
-import { HeroRender } from './HeroRender';
 
 /**
  * The cover page of the exam booklet: warm paper edge to edge, a faint red
- * margin rule down the left, the title centred in the schoolbook serif, and
- * under it what the product leaves behind: a marked class set being flipped
- * through, page by page, onto a done pile.
+ * margin rule down the left, the title centred in the schoolbook serif.
  *
- * That visual is a render, not a screenshot, and is captioned as one — it is
- * a `figure.illo`, so the build's honesty check holds it to that. It replaced
- * a real screenshot of the app that had gone stale: it showed the old blue
- * palette and the old name, which made the page advertise a product that no
- * longer existed. Screenshots and illustrations are never allowed to be
- * mistaken for each other, in either direction.
+ * No product visual here, on purpose, after two attempts at one. A real
+ * screenshot went stale the moment the app was redesigned and quietly
+ * advertised a product that no longer existed; a rendered animation drew the
+ * eye away from the one sentence this section exists to say. The headline
+ * and the four real timings under it ARE the hero. The marked-paper
+ * illustrations live further down, where they explain rather than decorate.
  *
  * Under it, the only numbers UMarkless actually has - how long each route takes
  * for a class of thirty - in a strip whose rules run the full width of the
@@ -27,7 +24,7 @@ export function Hero() {
           <p className="eyebrow">
             Marking assistant for teachers · <b>not on any app store yet</b>
           </p>
-          <h1 id="h-hero">Marking eats your evenings. UMarkless takes the first pass.</h1>
+          <h1 id="h-hero">Marking eats your evenings. UMarkless marks it first — you just check and sign off.</h1>
 
           <p className="lede">
             Import a Google Form, scan a stack from the photocopier, or photograph papers one at a
@@ -49,10 +46,6 @@ export function Hero() {
           </p>
         </div>
 
-        <figure className="illo hero-shot hero-render">
-          <HeroRender />
-          <figcaption>An illustration, rendered in Blender — not a screenshot of the app.</figcaption>
-        </figure>
       </div>
 
       <div className="hero-times-strip">

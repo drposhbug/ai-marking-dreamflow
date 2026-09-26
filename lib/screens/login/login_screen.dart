@@ -495,7 +495,7 @@ class _LoginScreenState extends State<LoginScreen> {
   /// and a hand-drawn underline on a sign-in screen was working hard to be
   /// liked rather than helping anyone sign in.
   Widget _promise(BuildContext context, PaperTones tones, {required double fontSize}) => Text(
-        'Marking eats your evenings. UMarkless takes the first pass.',
+        'Marking eats your evenings. UMarkless marks it first — you just check and sign off.',
         style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: fontSize, height: 1.14, letterSpacing: -0.7),
       );
 
