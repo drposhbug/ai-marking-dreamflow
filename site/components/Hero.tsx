@@ -19,7 +19,7 @@ export function Hero() {
         <div className="hero-intro">
           <p className="eyebrow">The marking assistant for teachers</p>
           <h1 id="h-hero">
-            Marking shouldn&rsquo;t be your life. UMarkless marks the whole stack.
+            Marking shouldn&rsquo;t be your life. Mark less, teach more.
           </h1>
 
           <p className="lede">
