@@ -1,4 +1,5 @@
-import { LAUNCH_MAILTO, ROUTES } from '../lib/content';
+import { APP_URL, LAUNCH_MAILTO, ROUTES } from '../lib/content';
+import { CountUp } from './CountUp';
 
 /**
  * The cover page of the exam booklet: warm paper edge to edge, a faint red
@@ -33,7 +34,7 @@ export function Hero() {
           </p>
 
           <div className="cta-row">
-            <a className="btn btn-primary" href="#signin">
+            <a className="btn btn-primary" href={APP_URL}>
               Sign in and start marking
             </a>
             {/* TODO: replace this mailto with the Google Play listing URL once the app is live. */}
@@ -53,7 +54,7 @@ export function Hero() {
           {ROUTES.map((r) => (
             <li key={r.id}>
               <b>
-                {r.minutes}
+                <CountUp value={r.minutes} />
                 <em>min</em>
               </b>
               <span>{r.tab}</span>

@@ -3,7 +3,7 @@ import { RouteTabs } from '../components/RouteTabs';
 import { PinnedSequence } from '../components/PinnedSequence';
 import { FlipCards } from '../components/FlipCards';
 import { Beliefs } from '../components/Beliefs';
-import { Closing, Plans, Privacy, SignIn, SiteFooter, SiteHeader } from '../components/Sections';
+import { Closing, Limits, Plans, Privacy, SiteFooter, SiteHeader } from '../components/Sections';
 
 /**
  * One page, in the order a teacher meets the product, and one band per step.
@@ -19,10 +19,13 @@ import { Closing, Plans, Privacy, SignIn, SiteFooter, SiteHeader } from '../comp
  *   PinnedSequence  split   paper panel left, one chalk word right
  *   FlipCards       manila  one question, both sides: the answer and the marking
  *   Beliefs         board   seven rules, including the awkward ones
- *   Privacy         paper   what leaves the phone, and where the promise stops
+ *   Privacy         paper   what leaves the phone
  *   Plans           board   the four tiers, at the prices the app states
- *   SignIn          paper   the handoff into the app
- *   Closing         board   who built it and what state it is in
+ *   Limits          paper   where the promise stops, for those who look
+ *   Closing         board   what state it is in, and how to hear more
+ *
+ * Every "Sign in" goes straight to the app, whose own screen signs in,
+ * creates accounts and offers Google.
  */
 export default function Page() {
   return (
@@ -39,7 +42,7 @@ export default function Page() {
         <Beliefs />
         <Privacy />
         <Plans />
-        <SignIn />
+        <Limits />
         <Closing />
       </main>
       <SiteFooter />

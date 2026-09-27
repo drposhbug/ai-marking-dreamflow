@@ -1,8 +1,9 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ROUTES } from '../lib/content';
+import { CountUp } from './CountUp';
 import { Tick } from './Ink';
 import { useReducedMotionSafe } from './useMedia';
 
@@ -20,13 +21,44 @@ import { useReducedMotionSafe } from './useMedia';
 
    The tab list follows the ARIA tabs pattern: arrow keys move between tabs,
    Home and End jump to the ends, and only the selected tab is in the tab order.
+
+   Left alone, the panel moves on to the next route once there has been time
+   to read it - a thin bar fills under the tab meanwhile, so the change is
+   never a surprise. It holds while the pointer is over the section or the
+   section is off screen, and stops for good the moment a tab is chosen.
    ========================================================================== */
+
+/** Roughly how long a panel takes to read: about 230 words a minute. */
+function readingTime(route: (typeof ROUTES)[number]): number {
+  const text = [route.title, route.bestFor, route.how, route.onDevice, ...route.steps].join(' ');
+  const words = text.split(/s+/).filter(Boolean).length;
+  return Math.min(18000, Math.max(10000, words * 260));
+}
 
 export function RouteTabs() {
   const [selected, setSelected] = useState(0);
   const baseId = useId();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const reduced = useReducedMotionSafe();
+  const [auto, setAuto] = useState(true);
+  const [inView, setInView] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([entry]) => setInView(!!entry?.isIntersecting), { threshold: 0.35 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const choose = (i: number) => {
+    setAuto(false);
+    setSelected(i);
+  };
+  const advance = () => setSelected((s) => (s + 1) % ROUTES.length);
+  const playing = auto && inView && !hovering;
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     const last = ROUTES.length - 1;
@@ -37,14 +69,21 @@ export function RouteTabs() {
     else if (e.key === 'End') next = last;
     else return;
     e.preventDefault();
-    setSelected(next);
+    choose(next);
     tabRefs.current[next]?.focus();
   };
 
   const route = ROUTES[selected];
 
   return (
-    <section className="s s--dark" id="how" aria-labelledby="h-how">
+    <section
+      className="s s--dark"
+      id="how"
+      aria-labelledby="h-how"
+      ref={sectionRef}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
       <div className="wrap">
         <p className="kicker">Times are for a class of thirty</p>
 
@@ -76,10 +115,19 @@ export function RouteTabs() {
               aria-selected={selected === i}
               aria-controls={`${baseId}-panel-${r.id}`}
               tabIndex={selected === i ? 0 : -1}
-              onClick={() => setSelected(i)}
+              onClick={() => choose(i)}
             >
               {r.tab}
               <em>{r.minutes} min</em>
+              {auto && !reduced && selected === i && (
+                <span
+                  key={r.id}
+                  className="tab-progress"
+                  aria-hidden="true"
+                  style={{ animationDuration: `${readingTime(r)}ms`, animationPlayState: playing ? 'running' : 'paused' }}
+                  onAnimationEnd={advance}
+                />
+              )}
             </button>
           ))}
         </div>
@@ -100,7 +148,7 @@ export function RouteTabs() {
           >
             <div>
               <p className="tab-time">
-                {route.minutes}
+                <CountUp value={route.minutes} duration={900} />
                 <em>min</em>
               </p>
               <p className="tab-of">for a class of thirty, start to finish</p>

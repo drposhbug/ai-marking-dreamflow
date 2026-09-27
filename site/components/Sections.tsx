@@ -29,7 +29,7 @@ export function SiteHeader() {
           <a href="#privacy">Privacy</a>
           <a href="#pricing">Plans</a>
         </nav>
-        <a className="btn btn-ghost" href="#signin">
+        <a className="btn btn-ghost" href={APP_URL}>
           Sign in
         </a>
       </div>
@@ -109,22 +109,6 @@ export function Privacy() {
           </figure>
         </div>
 
-        <div className="limits">
-          <h3>Where the promise stops</h3>
-          <ul>
-            {LIMITS.map((l) => (
-              <li key={l.before.slice(0, 40)}>
-                {l.before}
-                {l.em && <em>{l.em}</em>}
-                {l.after}
-              </li>
-            ))}
-          </ul>
-          <p className="after">
-            It reduces exposure; it does not make a page anonymous. Every gap is in{' '}
-            <a href={COMPLIANCE_URL}>Security and compliance</a>.
-          </p>
-        </div>
       </div>
     </section>
   );
@@ -185,106 +169,31 @@ export function Plans() {
   );
 }
 
-/* -------------------------------------------------------------- sign in */
+/* --------------------------------------------------------------- limits */
 
-export function SignIn() {
+/**
+ * The known gaps, near the foot of the page: stated in full for anyone
+ * deciding whether to trust it, and out of the way of everyone else.
+ */
+export function Limits() {
   return (
-    <section className="s s--paper" id="signin" aria-labelledby="h-signin">
+    <section className="s s--paper s--limits" id="limits" aria-label="Where the promise stops">
       <div className="wrap">
-        <p className="kicker">The password is typed in the app</p>
-
-        <div className="signin-split">
-          <div>
-            <div className="head">
-              <h2 id="h-signin">Sign in, and your marking is where you left it</h2>
-              <p className="sub">
-                Classes, answer keys and every marked test stay with the account rather than the
-                device. Sign in somewhere else and they are already there.
-              </p>
-            </div>
-
-            <ul className="claims">
-              <li>
-                <h3>This page hands you over. It does not sign you in.</h3>
-                <p>
-                  There is no server behind this page — it is a static file. Your email travels
-                  across to UMarkless in the address bar, and the app&rsquo;s own sign-in screen
-                  takes the password. Nothing here asks for one, and nothing here could receive it.
-                </p>
+        <div className="limits">
+          <h3>Where the promise stops</h3>
+          <ul>
+            {LIMITS.map((l) => (
+              <li key={l.before.slice(0, 40)}>
+                {l.before}
+                {l.em && <em>{l.em}</em>}
+                {l.after}
               </li>
-              <li>
-                <h3>No account yet? Create one on the same screen.</h3>
-                <p>
-                  <strong>Create Account</strong> sits directly under the sign-in button in the app
-                  and asks for an email and a password. Plans start on a free trial. Google,
-                  Microsoft and Apple sign-in appear there too, when the server has them switched
-                  on.
-                </p>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            {/* A handoff, not a login: this page is static and has no server,
-                so it must never ask for a password. The Google button opens
-                the app with ?sso=google and the app starts Google sign-in at
-                once; the email form GETs the app with ?email= prefilled and
-                the app's own screen takes the password. */}
-            <form className="page signin-form" method="get" action={APP_URL}>
-              {/* The header every sign-in form in the world wears: the mark,
-                  "Sign in to", and one line of what happens next. It looked
-                  like a paper card that happened to hold an email box; a
-                  teacher should know she is at the front door before she
-                  reads a word of it. */}
-              <div className="signin-head">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="icon.png" alt="UMarkless" width={44} height={44} />
-                <h3>Sign in to UMarkless</h3>
-                <p>
-                  Opens the app with your account ready — passwords are typed there, never on this
-                  page.
-                </p>
-              </div>
-              <a className="btn btn-google" href={`${APP_URL}?sso=google`}>
-                <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-                  <path fill="#4285F4" d="M44.5 24.5c0-1.6-.1-2.8-.4-4.1H24v7.8h11.5c-.2 1.9-1.5 4.8-4.3 6.7l6.6 5.1c4-3.7 6.7-9.1 6.7-15.5z" />
-                  <path fill="#34A853" d="M24 46c5.9 0 10.9-1.9 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.9 0-10.9-3.9-12.7-9.3l-7.1 5.5C7.8 40.9 15.3 46 24 46z" />
-                  <path fill="#FBBC05" d="M11.3 28.2c-.5-1.3-.7-2.8-.7-4.2s.2-2.9.7-4.2l-7.1-5.5C2.7 17.1 2 20.5 2 24s.7 6.9 2.1 9.7l7.2-5.5z" />
-                  <path fill="#EA4335" d="M24 9.5c3.3 0 6.3 1.1 8.6 3.3l6.4-6.3C35 2.6 30 .5 24 .5 15.3.5 7.8 5.6 4.1 13l7.1 5.5C13.1 13.4 18.1 9.5 24 9.5z" />
-                </svg>
-                Continue with Google
-              </a>
-              <div className="or-rule" aria-hidden="true">
-                <span>or with email</span>
-              </div>
-              <label className="field" htmlFor="signin-email">
-                Your email
-              </label>
-              <input
-                id="signin-email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                inputMode="email"
-                spellCheck={false}
-                autoCapitalize="off"
-                placeholder="teacher@school.edu"
-                required
-              />
-              <button className="btn btn-primary" type="submit">
-                Continue to UMarkless
-              </button>
-              <a className="btn btn-ghost" href={APP_URL}>
-                Create an account
-              </a>
-            </form>
-            <p className="note-small">
-              In a browser the name blackout runs here on your own machine, but it reads the printed
-              “Name:” line rather than the handwriting, so it covers that whole line. On a page where
-              it finds no printed label, nothing is covered and the app tells you.{' '}
-              <a href="#privacy">Read the limits</a>.
-            </p>
-          </div>
+            ))}
+          </ul>
+          <p className="after">
+            It reduces exposure; it does not make a page anonymous. Every gap is in{' '}
+            <a href={COMPLIANCE_URL}>Security and compliance</a>.
+          </p>
         </div>
       </div>
     </section>
@@ -299,7 +208,7 @@ export function Closing() {
       <div className="wrap">
         <div className="close-row">
           <div>
-            <h2 id="h-close">Made for the teacher with a stack to mark.</h2>
+            <h2 id="h-close">Take back your evenings.</h2>
             <p>
               Submitted to the RevenueCat Shipaton 2026 and not on an app store yet. Ask to hear
               when it launches — or, if you are a school, read the compliance write-up first.
