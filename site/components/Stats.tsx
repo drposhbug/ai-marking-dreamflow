@@ -12,11 +12,11 @@ import { CountUp } from './CountUp';
 
 const STATS = [
   {
-    value: '4.6',
+    value: '5',
     unit: 'hours',
-    text: 'a week the average teacher spends marking and correcting student work.',
-    who: 'OECD average, lower secondary, TALIS 2024',
-    href: 'https://www.oecd.org/en/publications/results-from-talis-2024-country-notes_e127f9e2-en/alberta-canada_60368aa6-en.html',
+    text: 'a week a typical US teacher spends grading and giving feedback on student work.',
+    who: 'EdWeek Research Center teacher survey, 2022',
+    href: 'https://www.edweek.org/teaching-learning/how-teachers-spend-their-time-a-breakdown/2022/04',
   },
   {
     value: '52%',

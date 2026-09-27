@@ -87,10 +87,11 @@ export function RouteTabs() {
         <p className="kicker">Times are for a class of thirty</p>
 
         <div className="head head--wide">
-          <h2 id="h-how">Four ways to mark. The fastest is the one nobody guesses.</h2>
+          <h2 id="h-how">Take back 11% of your week.</h2>
           <p className="sub">
-            Most teachers settle on two of them — one for quizzes, one for real tests on paper. Pick
-            a route to see what it costs you in minutes.
+            The average teacher spends 4.6 of their 41 working hours a week marking (OECD TALIS
+            2024). There are four ways to hand that to UMarkless — pick one to see what a class of
+            thirty costs you in minutes.
           </p>
         </div>
       </div>

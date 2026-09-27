@@ -119,21 +119,22 @@ export function Plans() {
         {/* TODO: name the charity before launch. */}
         <p className="kicker">10% goes to charity, off the top</p>
 
-        <div className="head head--wide">
-          <h2 id="h-plans">Plans</h2>
+        <div className="head head--wide plans-head">
+          <div>
+            <h2 id="h-plans">Plans</h2>
+            {/* The give-back, where it cannot be missed rather than inside a paragraph. */}
+            <div className="give-back">
+              <p className="give-back-n" aria-hidden="true">10%</p>
+              <p className="give-back-text">
+                <strong>of every paid plan goes to charities that help kids learn</strong> — off the
+                top.
+              </p>
+            </div>
+          </div>
           <p className="sub">
             Start on a free trial. Paid plans are credit-based: credits scale with how much work a
             paper actually takes, so a short multiple-choice quiz costs a fraction of a six-page
             problem set, and re-marking the same paper is free.
-          </p>
-        </div>
-
-        {/* The give-back, where it cannot be missed rather than inside a paragraph. */}
-        <div className="give-back">
-          <p className="give-back-n" aria-hidden="true">10%</p>
-          <p className="give-back-text">
-            <strong>10% of every paid plan goes to charities that help kids learn.</strong> Off the
-            top, before anything else — not a marketing line.
           </p>
         </div>
       </div>
