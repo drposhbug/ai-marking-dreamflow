@@ -20,12 +20,17 @@ export function Hero() {
           <p className="eyebrow">
             Marking assistant for teachers · <b>not on any app store yet</b>
           </p>
-          <h1 id="h-hero">Marking eats your evenings. UMarkless marks it first — you just check and sign off.</h1>
+          <h1 id="h-hero">
+            Marking eats your{' '}
+            {/* The one animation up here: a red pen underline drawn once, on load. */}
+            <span className="hero-mark">evenings</span>. UMarkless marks it first. You just check
+            and sign off.
+          </h1>
 
           <p className="lede">
             Import a Google Form, scan a stack from the photocopier, or photograph papers one at a
             time. Back come question-by-question marks, a written reason for every deduction, and
-            feedback a fourteen-year-old will actually read — all of which you can override.
+            feedback a fourteen-year-old will actually read. You can override all of it.
           </p>
 
           <div className="cta-row">
@@ -38,7 +43,7 @@ export function Hero() {
             </a>
           </div>
           <p className="note-small">
-            There is no app store listing yet — signing in opens the browser version.
+            There is no app store listing yet. Signing in opens the browser version.
           </p>
         </div>
 

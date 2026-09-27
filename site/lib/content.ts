@@ -48,7 +48,7 @@ export const ROUTES: Route[] = [
     how:
       'Export the Form responses to a CSV and import it. Confirm the detected columns, tap the correct option for each multiple-choice question, and the class comes back marked. Every student’s answer to a written question is marked together in one pass, so the whole class is judged against the same standard.',
     steps: ['Export the responses CSV', 'Confirm columns and MC keys', 'One pass per question'],
-    onDevice: 'Multiple choice is marked on the device for free — no API call, no credits.',
+    onDevice: 'Multiple choice is marked on the device for free. No API call, no credits.',
   },
   {
     id: 'stamped',
@@ -57,9 +57,9 @@ export const ROUTES: Route[] = [
     title: 'Print it stamped, then scan the stack',
     bestFor: 'Real tests on paper. The one route that cannot mix students up.',
     how:
-      'Upload the test file, pick a copy count, and print the single PDF it makes: every copy is stamped in the footer of every page with its own code — mk-7F3A-01, mk-7F3A-02. Feed the stack through the copier as one PDF and pages sharing a code reassemble, shuffled, creased or out of order.',
+      'Upload the test file, pick a copy count, and print the single PDF it makes: every copy is stamped in the footer of every page with its own code, like mk-7F3A-01 and mk-7F3A-02. Feed the stack through the copier as one PDF and pages sharing a code reassemble, shuffled, creased or out of order.',
     steps: ['Print the stamped copies', 'Feed the stack as one PDF', 'Codes reassemble the papers'],
-    onDevice: 'Stamping runs entirely on the device — no API cost.',
+    onDevice: 'Stamping runs entirely on the device, with no API cost.',
   },
   {
     id: 'stack',
@@ -68,9 +68,9 @@ export const ROUTES: Route[] = [
     title: 'Scan a stack you already printed',
     bestFor: 'A test printed and written on the ordinary way.',
     how:
-      'Scan the stack to one PDF. It splits back into papers on the device, either by fixed page length or by spotting cover-page signals — a “Name:” field near the top, a “Page 1 of 4”. You see the split before anything is marked. Say how many students to expect and it catches a page the feeder swallowed.',
+      'Scan the stack to one PDF. It splits back into papers on the device, either by fixed page length or by spotting cover-page signals, like a “Name:” field near the top or a “Page 1 of 4”. You see the split before anything is marked. Say how many students to expect and it catches a page the feeder swallowed.',
     steps: ['One scanned PDF', 'Split found on the device', 'You confirm before marking'],
-    onDevice: 'Detection uploads nothing — the boundaries are found on the phone.',
+    onDevice: 'Detection uploads nothing. The boundaries are found on the phone.',
   },
   {
     id: 'photo',
@@ -105,7 +105,7 @@ export const STAGES: Stage[] = [
     n: '01',
     title: 'A stack goes through the copier once.',
     body:
-      'Thirty papers, one document feeder, one PDF. Nothing is sorted, nothing is renamed, no page is photographed twice. The name field is read on your own device and painted solid black in the copy that gets uploaded — the unaltered page never leaves it.',
+      'Thirty papers, one document feeder, one PDF. Nothing is sorted, nothing is renamed, no page is photographed twice. The name field is read on your own device and painted solid black in the copy that gets uploaded. The unaltered page never leaves it.',
     note: 'In a browser it covers the printed “Name:” line, not the handwriting.',
   },
   {
@@ -114,7 +114,7 @@ export const STAGES: Stage[] = [
     n: '02',
     title: 'It splits back into papers before anything is uploaded.',
     body:
-      'Boundaries are found on the phone — a printed code in the footer, a “Name:” field near the top, a “Page 1 of 4”. The split is shown to you and only what you confirm is marked. Tell it how many students to expect and it catches the page the feeder swallowed.',
+      'Boundaries are found on the phone: a printed code in the footer, a “Name:” field near the top, a “Page 1 of 4”. The split is shown to you and only what you confirm is marked. Tell it how many students to expect and it catches the page the feeder swallowed.',
     note: 'Detection uploads nothing at all.',
   },
   {
@@ -141,7 +141,7 @@ export const STAGES: Stage[] = [
     n: '05',
     title: 'Marks leave as a CSV, or a document in Drive.',
     body:
-      'A gradebook CSV, or a Google Doc written into the folder UMarkless made. That is the whole handoff. UMarkless sends nothing to a gradebook, a student or a parent — you carry the mark forward yourself.',
+      'A gradebook CSV, or a Google Doc written into the folder UMarkless made. That is the whole handoff. UMarkless sends nothing to a gradebook, a student or a parent. You carry the mark forward yourself.',
     note: 'Nothing is sent on your behalf.',
   },
 ];
@@ -204,7 +204,7 @@ export const FLIP_CARDS: FlipCard[] = [
     answer: ['J’ai allé au cinéma.'],
     mark: '2½',
     outOf: '/4',
-    reason: 'Right tense, wrong auxiliary — aller takes être: « je suis allé(e) ».',
+    reason: 'Right tense, wrong auxiliary. Aller takes être: « je suis allé(e) ».',
     feedback: 'Aller is a VANDERTRAMP verb. Say it once with « suis » and it will stick.',
     tone: 'cut',
     slip: 0,
@@ -219,7 +219,7 @@ export const FLIP_CARDS: FlipCard[] = [
     answer: ['People borrowed money to buy shares, so when prices fell they had to sell, and selling pushed prices down further.'],
     mark: '4',
     outOf: '/4',
-    reason: 'A real cause — buying on margin — and the mechanism both ways. Full marks.',
+    reason: 'A real cause (buying on margin) and the mechanism both ways. Full marks.',
     feedback: 'Use the term “buying on margin” in the exam.',
     tone: 'good',
   },
@@ -233,7 +233,7 @@ export const FLIP_CARDS: FlipCard[] = [
     answer: ['[ hand-drawn free-body diagram ]'],
     mark: 'Asks you',
     outOf: '',
-    reason: 'A hand-drawn diagram. Not scored on a hunch — handed back for you to mark.',
+    reason: 'A hand-drawn diagram. Not scored on a hunch, so it comes back for you to mark.',
     feedback: 'Flagged as “requires teacher marking”.',
     tone: 'ask',
     diagram: 'free-body',
@@ -255,7 +255,7 @@ export const BELIEFS: Belief[] = [
     n: '02',
     title: 'Student identity does not go to the AI.',
     body:
-      'The model grades the work. It is not told, and does not need to know, whose work it is. The name is read on your own device, blacked out of the uploaded copy, and kept there — on a phone it reads the handwriting itself, in a browser it covers the printed “Name:” line. Imported answers go up keyed by row number.',
+      'The model grades the work. It is not told, and does not need to know, whose work it is. The name is read on your own device, blacked out of the uploaded copy, and kept there. On a phone it reads the handwriting itself, in a browser it covers the printed “Name:” line. Imported answers go up keyed by row number.',
   },
   {
     n: '03',
@@ -267,7 +267,7 @@ export const BELIEFS: Belief[] = [
     n: '04',
     title: 'A wrong answer key costs one paper, not thirty.',
     body:
-      'That is the whole reason the first paper goes alone. A key that reads the wrong option, a mark scheme out of step with the test — you find out once, on one page, and fix it before the set runs.',
+      'That is the whole reason the first paper goes alone. A key that reads the wrong option, a mark scheme out of step with the test: you find out once, on one page, and fix it before the set runs.',
   },
   {
     n: '05',
@@ -360,7 +360,7 @@ export const PRIVACY_CLAIMS = [
   {
     title: 'Pages are not kept, and nothing is tracked',
     body:
-      'Images are marked, then discarded. No ads, no analytics, no student accounts — and deleting your account deletes everything.',
+      'Images are marked, then discarded. No ads, no analytics, no student accounts, and deleting your account deletes everything.',
   },
 ];
 

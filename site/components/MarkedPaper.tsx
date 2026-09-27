@@ -82,7 +82,7 @@ export function MarkedPaper() {
       </ol>
 
       <p className="pen sheet-note">
-        Q2 — right method! 4 × −3 = −12, not −3.
+        Q2: right method! 4 × −3 = −12, not −3.
         <br />
         Show the substitution next time.
       </p>

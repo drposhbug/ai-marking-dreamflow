@@ -63,7 +63,7 @@ const SITE = (() => {
 })();
 const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
-const TITLE = 'UMarkless — mark a class set in minutes, with real feedback';
+const TITLE = 'UMarkless: mark a class set in minutes, with real feedback';
 const DESCRIPTION =
   'UMarkless does the marking first, so you check and sign off instead of writing every comment yourself. Import a Google Form or scan a stack of paper and get question-by-question marks, a justification for every deduction, and feedback students will read. Student names are blacked out on your own device before anything is uploaded.';
 
@@ -82,14 +82,14 @@ export const metadata: Metadata = {
     url: SITE,
     title: TITLE,
     description:
-      'Marking eats your evenings. UMarkless marks it first — question-by-question, with a reason for every deduction — so you just check and sign off. The teacher decides the grade.',
+      'Marking eats your evenings. UMarkless marks it first, question by question, with a reason for every deduction, so you just check and sign off. The teacher decides the grade.',
     images: [{ url: `${SITE}icon.png`, alt: 'The UMarkless app icon.' }],
   },
   twitter: {
     card: 'summary',
     title: TITLE,
     description:
-      'Marking eats your evenings. UMarkless marks it first — question-by-question, with a reason for every deduction — so you just check and sign off. The teacher decides the grade.',
+      'Marking eats your evenings. UMarkless marks it first, question by question, with a reason for every deduction, so you just check and sign off. The teacher decides the grade.',
     images: [{ url: `${SITE}icon.png`, alt: 'The UMarkless app icon.' }],
   },
 };

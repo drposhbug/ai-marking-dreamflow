@@ -87,10 +87,10 @@ export function RouteTabs() {
         <p className="kicker">Times are for a class of thirty</p>
 
         <div className="head head--wide">
-          <h2 id="h-how">Take back 11% of your week.</h2>
+          <h2 id="h-how">Take back your week.</h2>
           <p className="sub">
             The average teacher spends 4.6 of their 41 working hours a week marking (OECD TALIS
-            2024). There are four ways to hand that to UMarkless — pick one to see what a class of
+            2024). There are four ways to hand that to UMarkless. Pick one to see what a class of
             thirty costs you in minutes.
           </p>
         </div>
@@ -181,8 +181,8 @@ export function RouteTabs() {
           <Tick />
           <p>
             <strong>The first paper of a set is always marked on its own</strong> and shown to you
-            before the other twenty-nine go ahead. A wrong answer key costs one paper, never thirty
-            — on every plan, including free.
+            before the other twenty-nine go ahead. A wrong answer key costs one paper, never thirty,
+            on every plan, including free.
           </p>
         </div>
       </div>

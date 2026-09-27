@@ -20,8 +20,8 @@ export function Beliefs() {
         <div className="head head--wide">
           <h2 id="h-beliefs">What UMarkless will not do</h2>
           <p className="sub">
-            Seven rules the product is built around. Each of them costs something — speed, margin,
-            or a claim we would rather be able to make — and each of them is in the code, not the
+            Seven rules the product is built around. Each of them costs something (speed, margin,
+            or a claim we would rather be able to make), and each of them is in the code, not the
             marketing.
           </p>
         </div>
