@@ -82,14 +82,14 @@ export const metadata: Metadata = {
     url: SITE,
     title: TITLE,
     description:
-      'Take your evenings back. UMarkless marks the whole class set, question by question, with a reason for every deduction. You check and sign off, and the teacher decides the grade.',
+      'Take your evenings back. UMarkless marks the whole class set, question by question, with a reason for every deduction and feedback your students will actually read.',
     images: [{ url: `${SITE}icon.png`, alt: 'The UMarkless app icon.' }],
   },
   twitter: {
     card: 'summary',
     title: TITLE,
     description:
-      'Take your evenings back. UMarkless marks the whole class set, question by question, with a reason for every deduction. You check and sign off, and the teacher decides the grade.',
+      'Take your evenings back. UMarkless marks the whole class set, question by question, with a reason for every deduction and feedback your students will actually read.',
     images: [{ url: `${SITE}icon.png`, alt: 'The UMarkless app icon.' }],
   },
 };
