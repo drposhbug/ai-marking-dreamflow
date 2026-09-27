@@ -720,7 +720,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   /// On a monitor the running work sits on the left and the student box on
   /// the right, because a search field stretched across 1400px is a slot for
   /// a name that looks like a mistake.
-  Widget _workInProgress(BuildContext context, GradingQueueService queue, TeacherClass? selectedClass) {
+  ({List<Widget> start, List<Widget> rest, List<Widget> stacked}) _workInProgress(BuildContext context, GradingQueueService queue, TeacherClass? selectedClass) {
     final running = <Widget>[
       if (context.watch<OvernightService>().batches.isNotEmpty) ...[
         const SizedBox(height: 14),
@@ -912,7 +912,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
         ),
       ),
     ];
-    return DeskColumns(
+    return (
       start: running,
       rest: [const SizedBox(height: 14), ...student],
       stacked: [...running, ...student],
@@ -928,7 +928,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   /// down the right, so the scan card stays a card rather than a gradient
   /// banner stretched across a 27" screen with a small stack of writing lost
   /// in the middle of it.
-  Widget _routes(BuildContext context) {
+  ({List<Widget> start, List<Widget> rest, List<Widget> stacked}) _routes(BuildContext context) {
     final Widget scan = GestureDetector(
       onTap: _pickFromCamera,
       // The one loud thing on the screen, and the only place boldness is
@@ -1171,7 +1171,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     // On a desk every way into marking sits in one column under the camera,
     // so the copier and the printed test are beside the scan card rather
     // than across the screen from it; the other jobs go on the right.
-    return DeskColumns(
+    return (
       start: [
         scan,
         if (hint != null) ...[const SizedBox(height: 10), hint],
@@ -1208,6 +1208,20 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     );
   }
 
+  /// One pair of columns for the whole screen. The routes and the work in
+  /// progress used to be two stacked rows, and once every way to mark moved
+  /// into the left column the first row's right side ran out early - a
+  /// hole sat above the student box until the taller left column ended.
+  Widget _desk(BuildContext context, GradingQueueService queue, TeacherClass? selectedClass) {
+    final r = _routes(context);
+    final w = _workInProgress(context, queue, selectedClass);
+    return DeskColumns(
+      start: [...r.start, ...w.start],
+      rest: [...r.rest, ...w.rest],
+      stacked: [...r.stacked, ...w.stacked],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthService>().currentUser;
@@ -1229,8 +1243,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                 const SizedBox(height: 2),
                 Text('${user?.name.isNotEmpty == true ? user!.name : 'Teacher'} 👋', style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 14),
-                _routes(context),
-                _workInProgress(context, queue, selectedClass),
+                _desk(context, queue, selectedClass),
               ],
             ),
           ),
