@@ -12,9 +12,9 @@ import { CountUp } from './CountUp';
 
 const STATS = [
   {
-    value: '5',
+    value: '54',
     unit: 'hours',
-    text: 'a week a typical US teacher spends grading and giving feedback on student work.',
+    text: 'in a typical US teacher’s working week, and less than half of it is spent teaching.',
     who: 'EdWeek Research Center teacher survey, 2022',
     href: 'https://www.edweek.org/teaching-learning/how-teachers-spend-their-time-a-breakdown/2022/04',
   },
@@ -26,11 +26,11 @@ const STATS = [
     href: 'https://www.oecd.org/en/publications/results-from-talis-2024-country-notes_e127f9e2-en/alberta-canada_60368aa6-en.html',
   },
   {
-    value: '10',
-    unit: 'hours',
-    text: 'a week US teachers work beyond their contract: 49 hours against 39.',
-    who: 'RAND, State of the American Teacher 2025',
-    href: 'https://www.rand.org/pubs/research_reports/RRA1108-16.html',
+    value: '73%',
+    unit: '',
+    text: 'of Canadian educators work more than 45 hours a week, and three quarters say the load has grown.',
+    who: 'Canadian Teachers’ Federation survey, 2025',
+    href: 'https://www.ctf-fce.ca/news-parachute-survey-finds-canadian-education/',
   },
 ];
 
