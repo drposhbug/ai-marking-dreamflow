@@ -1168,23 +1168,26 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     final Widget importForm = _importFormCard(context);
 
     const gap = SizedBox(height: 12);
+    // On a desk every way into marking sits in one column under the camera,
+    // so the copier and the printed test are beside the scan card rather
+    // than across the screen from it; the other jobs go on the right.
     return DeskColumns(
       start: [
         scan,
         if (hint != null) ...[const SizedBox(height: 10), hint],
         if (kIsWeb) ...[gap, importForm],
-      ],
-      rest: [
-        prepareTest,
         gap,
         splitStack,
+        gap,
+        prepareTest,
         if (!kIsWeb) ...[gap, importForm],
+      ],
+      rest: [
+        waysToMark,
         gap,
         planWithMark,
         gap,
         reportComments,
-        gap,
-        waysToMark,
       ],
       stacked: [
         scan,
