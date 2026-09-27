@@ -6,7 +6,6 @@ import { STAGES } from '../lib/content';
 import { FreeBody, PenLoop, Tick } from './Ink';
 import { QUESTIONS, SheetQuestion } from './MarkedPaper';
 import { useNarrow, useReducedMotionSafe } from './useMedia';
-import { RiseWords } from './RiseWords';
 
 /* ==========================================================================
    The scroll-locked sequence: one class set, from the copier to the gradebook,
@@ -127,7 +126,7 @@ export function PinnedSequence() {
         <p className="kicker">One class set, start to finish</p>
 
         <div className="head head--wide">
-          <h2 id="h-seq"><RiseWords>Scan, split, mark, review, export. Then your evening.</RiseWords></h2>
+          <h2 id="h-seq">Scan, split, mark, review, export. Then your evening.</h2>
           <p className="sub">
             This is the paper route — a stack off the photocopier, thirty papers deep. Scroll and it
             moves through it one step at a time.

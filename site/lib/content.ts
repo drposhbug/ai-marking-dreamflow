@@ -372,18 +372,18 @@ export const LIMITS: Limit[] = [
     before: 'Redaction covers name ',
     em: 'fields',
     after:
-      '. A name inside an essay, a signature on artwork, or handwriting the recognizer cannot read gets through — and the app reports when that happened.',
+      '. A name inside an essay or a signature can get through, and the app says when it does.',
   },
   {
     before:
-      'It is weaker in a browser: the reader there works off the printed “Name:” label rather than the handwriting, so it blacks out that whole line instead of the name exactly — and on a page with no printed label nothing is covered, which the app tells you. The phone apps read the handwriting itself. The Form and CSV route is unaffected either way.',
+      'In a browser it covers the whole printed “Name:” line, and nothing on a page without one. The phone apps read the handwriting.',
   },
   {
     before:
-      'One cheap route for objective and short answers goes to a provider whose terms permit training on submitted content and store data in the People’s Republic of China. Answer text only — never images, never names — and it can be switched off.',
+      'One low-cost route for short answers uses a provider that may train on submissions and stores data in China. Answer text only, never images or names, and it can be switched off.',
   },
   {
     before:
-      'No SOC 2 report, no third-party security audit, and no signed DPA template yet; one is available on request.',
+      'No SOC 2 report or third-party audit yet. A DPA is available on request.',
   },
 ];
