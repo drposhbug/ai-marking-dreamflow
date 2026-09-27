@@ -12,7 +12,7 @@ import { useWriteOn } from './useWriteOn';
    One face is what the student wrote. The other is what came back: the mark,
    the quarter mark, the reason for the deduction and the feedback. Once a
    card is well inside the viewport it turns over by itself, slowly and
-   once, each a little after the one before it. After that it turns only
+   once, each a moment after the one before it. After that it turns only
    when clicked, tapped or pressed (Enter or Space).
 
    Under `prefers-reduced-motion` the two faces cannot occupy the same box, so
@@ -43,10 +43,10 @@ export function FlipCards() {
         <p className="kicker">Turn one over</p>
 
         <div className="head head--wide">
-          <h2 id="h-flip">Real marking, not a vibe check</h2>
+          <h2 id="h-flip">Marked the way you would mark it</h2>
           <p className="sub">
             Every card is one question. The front is what the student wrote; the back is what came
-            back — the mark, the quarter mark, the reason for the deduction, and something to do
+            back: the mark, the quarter mark, the reason for the deduction, and something to do
             differently. You can change any of it.
           </p>
         </div>
@@ -57,7 +57,7 @@ export function FlipCards() {
           <figure className="illo marking-paper">
             <MarkedPaper />
             <figcaption>
-              An illustration of one whole marked paper — half and quarter marks down the page, the
+              An illustration of one whole marked paper: half and quarter marks down the page, the
               slip on Q2 underlined and corrected. Not a screenshot.
             </figcaption>
           </figure>
@@ -108,7 +108,7 @@ export function FlipCards() {
               </li>
             </ul>
             <p className="pen-key-foot">
-              Green is the student’s pen. Red is what comes back — and you can change any of it.
+              Green is the student’s pen. Red is what comes back, and you can change any of it.
             </p>
           </aside>
 
@@ -118,7 +118,7 @@ export function FlipCards() {
             <h3 id="h-class">Then, across all thirty</h3>
             <p className="class-bars-sub">
               Mark the whole set and each question shows how many students got it fully right, and
-              the slip that came up most — worst first, so you know what to go over tomorrow.
+              the slip that came up most, worst first, so you know what to go over tomorrow.
             </p>
             <p className="class-bars-avg">
               Class average <b>15.7</b>
@@ -139,7 +139,7 @@ export function FlipCards() {
                 </li>
               ))}
             </ul>
-            <p className="pen class-bars-note">Reteach Q2 tomorrow — ten minutes.</p>
+            <p className="pen class-bars-note">Reteach Q2 tomorrow: ten minutes.</p>
           </section>
 
           {/* The rest of what the app does, beside the paper rather than a
@@ -150,7 +150,7 @@ export function FlipCards() {
               <li><b>Answer keys</b> scanned once, or learned from the first paper of a stack.</li>
               <li><b>Ontario KTCA</b> categories and curriculum expectations for your region.</li>
               <li><b>Gradebook export</b> as a CSV, or straight to Google Drive.</li>
-              <li><b>Planning</b> — drafted quizzes, worksheets and lesson plans.</li>
+              <li><b>Planning:</b> drafted quizzes, worksheets and lesson plans.</li>
             </ul>
           </section>
           </div>
@@ -191,9 +191,9 @@ function Card({ card, index }: { card: FlipCard; index: number }) {
       ([entry]) => {
         if (!entry?.isIntersecting) return;
         io.disconnect();
-        timer = window.setTimeout(() => setTurned(true), 500 + index * 450);
+        timer = window.setTimeout(() => setTurned(true), 150 + index * 160);
       },
-      { threshold: 0.7 },
+      { threshold: 0.5 },
     );
     io.observe(el);
     return () => {

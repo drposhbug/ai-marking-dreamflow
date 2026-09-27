@@ -21,14 +21,14 @@ const STATS = [
   {
     value: '52%',
     unit: '',
-    text: 'of Alberta teachers name “too much marking” as a source of stress — the most common one.',
+    text: 'of Alberta teachers name “too much marking” as a source of stress, the most common one.',
     who: 'OECD TALIS 2024, Alberta country note',
     href: 'https://www.oecd.org/en/publications/results-from-talis-2024-country-notes_e127f9e2-en/alberta-canada_60368aa6-en.html',
   },
   {
     value: '10',
     unit: 'hours',
-    text: 'a week US teachers work beyond their contract — 49 hours against 39.',
+    text: 'a week US teachers work beyond their contract: 49 hours against 39.',
     who: 'RAND, State of the American Teacher 2025',
     href: 'https://www.rand.org/pubs/research_reports/RRA1108-16.html',
   },

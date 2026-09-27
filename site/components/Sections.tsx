@@ -94,12 +94,12 @@ export function Privacy() {
                   <li>Location</li>
                   <li>Your photo library, beyond the pages you pick</li>
                   <li>Advertising identifiers</li>
-                  <li>Any analytics profile — there is no analytics SDK</li>
+                  <li>Any analytics profile: there is no analytics SDK</li>
                 </ul>
               </div>
             </div>
             <figcaption>
-              An illustration of the split between device and server on iOS and Android — not a
+              An illustration of the split between device and server on iOS and Android, not a
               screenshot. <a href="privacy.html#limits">Read the limits</a>.
             </figcaption>
           </figure>
@@ -126,7 +126,7 @@ export function Plans() {
             <div className="give-back">
               <p className="give-back-n" aria-hidden="true">10%</p>
               <p className="give-back-text">
-                <strong>of every paid plan goes to charities that help kids learn</strong> — off the
+                <strong>of every paid plan goes to charities that help kids learn</strong>, off the
                 top.
               </p>
             </div>
@@ -184,7 +184,7 @@ export function Closing() {
             <h2 id="h-close">Take back your evenings.</h2>
             <p>
               Submitted to the RevenueCat Shipaton 2026 and not on an app store yet. Ask to hear
-              when it launches — or, if you are a school, read the compliance write-up first.
+              when it launches, or if you are a school, read the compliance write-up first.
             </p>
           </div>
           <div className="cta-row">

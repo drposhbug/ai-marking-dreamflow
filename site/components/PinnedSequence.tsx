@@ -128,7 +128,7 @@ export function PinnedSequence() {
         <div className="head head--wide">
           <h2 id="h-seq">Scan, split, mark, review, export. Then your evening.</h2>
           <p className="sub">
-            This is the paper route — a stack off the photocopier, thirty papers deep. Scroll and it
+            This is the paper route: a stack off the photocopier, thirty papers deep. Scroll and it
             moves through it one step at a time.
           </p>
         </div>
@@ -286,7 +286,7 @@ function ScanVisual({ local, staticMode }: VisProps) {
         <p className="pen scan-count">30 papers · one feeder · one PDF</p>
       </div>
       <figcaption>
-        An illustration of redaction — not a screenshot. <a href="privacy.html#limits">Read the limits</a>.
+        An illustration of redaction, not a screenshot. <a href="privacy.html#limits">Read the limits</a>.
       </figcaption>
     </figure>
   );
@@ -316,7 +316,7 @@ function SplitVisual({ local, staticMode }: VisProps) {
         <p className="pen split-count">30 of 30 papers found</p>
       </div>
       <figcaption>
-        An illustration of a stack coming apart by the codes printed on each page — not a screenshot.
+        An illustration of a stack coming apart by the codes printed on each page, not a screenshot.
       </figcaption>
     </figure>
   );
@@ -368,7 +368,7 @@ function MarkVisual({ local, staticMode }: VisProps) {
             );
           })}
         </ol>
-        <p className="pen sheet-note">Q2 — right method, arithmetic slip in the last line.</p>
+        <p className="pen sheet-note">Q2: right method, arithmetic slip in the last line.</p>
       </div>
       <figcaption>An illustration of what comes back, not a screenshot.</figcaption>
     </figure>
@@ -414,7 +414,7 @@ function ReviewVisual({ local, staticMode }: VisProps) {
                   <PenLoop seed={3} />4
                 </span>
                 <span className="sheet-mark-of">/5</span>
-                <span className="pen review-initials">method + effort — T.M.</span>
+                <span className="pen review-initials">method + effort, T.M.</span>
               </motion.span>
             </div>
           </li>
