@@ -21,10 +21,7 @@ export function Hero() {
             Marking assistant for teachers · <b>not on any app store yet</b>
           </p>
           <h1 id="h-hero">
-            Marking eats your{' '}
-            {/* The one animation up here: a red pen underline drawn once, on load. */}
-            <span className="hero-mark">evenings</span>. UMarkless marks it first. You just check
-            and sign off.
+            Marking eats your evenings. UMarkless marks it first. You just check and sign off.
           </h1>
 
           <p className="lede">
@@ -49,6 +46,12 @@ export function Hero() {
 
       </div>
 
+      {/* The hero fills the first screen, so say there is more below it. */}
+      <a className="scroll-cue" href="#evenings" aria-label="Scroll down to the next section">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 4v15M5.5 12.5 12 19l6.5-6.5" />
+        </svg>
+      </a>
     </section>
   );
 }

@@ -1865,15 +1865,21 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
 #marking .class-bars li.is-flag .class-bars-fill { background: #c0281e; }
 #marking .also li::before { background: rgba(33, 30, 21, .45); opacity: 1; }
 
-/* ---------------------------------------------------------- hero pen mark
-   The one animation in the hero: the teacher's red pen underlines
-   "evenings" once as the page opens, then stays put. */
-.hero-mark { position: relative; white-space: nowrap; }
-.hero-mark::after {
-  content: ''; position: absolute; left: -.04em; right: -.06em; bottom: .02em;
-  height: .09em; border-radius: 99px; background: #c0281e; opacity: .85;
-  transform: rotate(-1.2deg); transform-origin: left;
-  animation: heroMark .7s .35s cubic-bezier(.5, 0, .2, 1) both;
+/* ---------------------------------------------------------- scroll cue
+   The hero fills the first screen, so an arrow at its foot says there is
+   more below, bobbing gently. It is a link to the next band. */
+.s--hero { position: relative; padding-block: clamp(2rem, 1rem + 2.5vw, 4.5rem) calc(clamp(2rem, 1rem + 2.5vw, 4.5rem) + 3.5rem); }
+.scroll-cue {
+  position: absolute; left: 50%; bottom: clamp(1rem, 2.5vh, 2rem);
+  width: 2.75rem; height: 2.75rem; margin-left: -1.375rem;
+  display: grid; place-items: center; border-radius: 50%;
+  border: 1px solid var(--rule); color: var(--ink); background: transparent;
+  transition: background-color .2s ease, border-color .2s ease;
+  animation: cueBob 1.8s ease-in-out infinite;
 }
-@keyframes heroMark { from { transform: rotate(-1.2deg) scaleX(0); } to { transform: rotate(-1.2deg) scaleX(1); } }
-@media (prefers-reduced-motion: reduce) { .hero-mark::after { animation: none; } }
+.scroll-cue:hover { background: rgba(0, 0, 0, .04); border-color: var(--ink); }
+.scroll-cue svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@keyframes cueBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .scroll-cue { animation: none; } }
+/* On a short screen the hero is taller than the window; no cue is needed. */
+@media (max-height: 560px) { .scroll-cue { display: none; } }
