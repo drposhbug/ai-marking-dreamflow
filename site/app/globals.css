@@ -1857,10 +1857,6 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
 /* ---------------------------------------------------------- quieter marking section
    Two inks carry the meaning here - the student's green pen and the
    teacher's red - so nothing else in the section competes with them. */
-#marking .sticky {
-  background: var(--paper-a, #fffdf7); color: #3b3526;
-  border-top: 1px dashed rgba(0, 0, 0, .18); box-shadow: none; transform: none;
-}
 #marking .class-bars-fill { background: rgba(33, 30, 21, .55); }
 #marking .class-bars li.is-flag .class-bars-fill { background: #c0281e; }
 #marking .also li::before { background: rgba(33, 30, 21, .45); opacity: 1; }
