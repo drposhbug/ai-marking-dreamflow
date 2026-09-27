@@ -1,5 +1,4 @@
-import { APP_URL, LAUNCH_MAILTO, ROUTES } from '../lib/content';
-import { CountUp } from './CountUp';
+import { APP_URL, LAUNCH_MAILTO } from '../lib/content';
 
 /**
  * The cover page of the exam booklet: warm paper edge to edge, a faint red
@@ -12,10 +11,6 @@ import { CountUp } from './CountUp';
  * and the four real timings under it ARE the hero. The marked-paper
  * illustrations live further down, where they explain rather than decorate.
  *
- * Under it, the only numbers UMarkless actually has - how long each route takes
- * for a class of thirty - in a strip whose rules run the full width of the
- * screen. There are no adoption rates, no hours-saved claims and no user
- * counts here, because none has ever been measured.
  */
 export function Hero() {
   return (
@@ -49,19 +44,6 @@ export function Hero() {
 
       </div>
 
-      <div className="hero-times-strip">
-        <ul className="hero-times">
-          {ROUTES.map((r) => (
-            <li key={r.id}>
-              <b>
-                <CountUp value={r.minutes} />
-                <em>min</em>
-              </b>
-              <span>{r.tab}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
     </section>
   );
 }

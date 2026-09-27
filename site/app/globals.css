@@ -875,7 +875,7 @@ figure.illo figcaption, figure.shot figcaption {
 .class-bars h3 { margin: 0; font: 600 clamp(1.15rem, 1rem + .4vw, 1.45rem)/1.2 var(--display); color: var(--ink); }
 .class-bars-sub { margin: .5rem 0 0; max-width: 56ch; font-size: .95rem; line-height: 1.5; color: var(--muted); }
 .class-bars ul { list-style: none; margin: 1.3rem 0 0; padding: 0; display: grid; gap: 1.05rem; }
-.class-bars li { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) 3.6rem; gap: .35rem .9rem; align-items: center; }
+.class-bars li { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) 7.2rem; gap: .35rem .9rem; align-items: center; }
 .class-bars-err { grid-column: 2 / -1; font-size: .88rem; line-height: 1.4; color: var(--muted); }
 .class-bars li.is-flag .class-bars-err { color: #a3241b; font-weight: 500; }
 .class-bars-q { font: 600 .85rem/1 var(--mono); color: var(--muted); }
@@ -886,10 +886,9 @@ figure.illo figcaption, figure.shot figcaption {
 .class-bars-n { font: 600 1.05rem/1 var(--sans); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
 .class-bars-n small { font-size: .7em; font-weight: 500; color: var(--muted); }
 .class-bars .class-bars-note { margin: 1rem 0 0; color: #c0281e; font-size: 1.25rem; line-height: 1.2; transform: rotate(-1deg); transform-origin: left; }
-/* After the pen has finished the paper, the class bars grow in. */
-@keyframes barGrow { from { transform: scaleX(0); } to { transform: none; } }
-.marking-lead[data-write] .class-bars-fill { animation: barGrow .8s cubic-bezier(.3, .7, .3, 1) both; animation-delay: calc(3.1s + var(--i, 0) * .15s); }
-.marking-lead[data-write] .class-bars-note { animation: writeOn .8s ease-out both; animation-delay: 4s; }
+.class-bars-avg { margin: 1.1rem 0 0; font-size: .95rem; color: var(--muted); }
+.class-bars-avg b { font: 600 1.9rem/1 var(--display); color: var(--ink); margin-left: .35rem; }
+.class-bars-avg small { font-size: 1rem; }
 .also { border-top: 1px solid var(--rule, rgba(0, 0, 0, .12)); padding-top: 1.6rem; }
 .also h3 { margin: 0; font: 600 clamp(1.15rem, 1rem + .4vw, 1.45rem)/1.2 var(--display); color: var(--ink); }
 .also ul { list-style: none; margin: 1.1rem 0 0; padding: 0; display: grid; gap: .9rem 2.4rem; }
@@ -1483,8 +1482,15 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
 
 /* ---------------------------------------- privacy: what leaves the device */
 
-.privacy-split { display: grid; gap: clamp(2rem, 1rem + 2.5vw, 5rem); align-items: start; }
+/* Centred against the text, so the box has even room above and below it. */
+.privacy-split { display: grid; gap: clamp(2rem, 1rem + 2.5vw, 5rem); align-items: center; }
 @media (min-width: 64rem) { .privacy-split { grid-template-columns: minmax(0, 1fr) minmax(0, .92fr); } }
+/* Only the box is centred against the text: its caption hangs below it
+   rather than counting toward the height being centred. */
+@media (min-width: 64rem) {
+  .privacy-split > figure { position: relative; }
+  .privacy-split > figure > figcaption { position: absolute; top: 100%; left: 0; right: 0; }
+}
 
 .leaves {
   display: grid; gap: 1px;
@@ -1837,3 +1843,5 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
 .stat-text { margin: .7rem 0 0; max-width: 34ch; font-size: clamp(1rem, .95rem + .25vw, 1.15rem); line-height: 1.5; color: var(--ink); }
 .stat-src { display: inline-block; margin-top: .7rem; font-size: .8rem; color: var(--muted); text-underline-offset: .18em; }
 .stat-src:hover { color: var(--ink); }
+
+.stats-sub { margin: -.6rem 0 clamp(1.6rem, 2.6vw, 2.6rem); max-width: 60ch; font-size: clamp(1rem, .95rem + .3vw, 1.2rem); line-height: 1.55; color: var(--muted); }

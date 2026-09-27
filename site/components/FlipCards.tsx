@@ -22,14 +22,15 @@ import { useWriteOn } from './useWriteOn';
 
 /**
  * The class summary for the quiz drawn above, as the app lays it out: worst
- * question first, the class average out of five, and the slip that came up
- * most on the papers that lost marks there, with how many made it.
+ * question first, how many of the thirty got it fully right, and the slip
+ * that came up most on the papers that lost marks there. The class average
+ * (15.7 / 20) is the sum of the per-question averages 2.9, 3.8, 4.2, 4.8.
  */
 const CLASS_BARS = [
-  { q: 'Q2', avg: 2.9, error: '11 of 30 wrote 4 × −3 as −3, not −12', flag: true },
-  { q: 'Q3', avg: 3.8, error: '6 of 30 swapped the signs in a bracket' },
-  { q: 'Q4', avg: 4.2, error: '4 of 30 stopped at 2x − 2 = x + 7' },
-  { q: 'Q1', avg: 4.8, error: 'The whole class had this one.' },
+  { q: 'Q2', full: 12, error: '11 wrote 4 × −3 as −3, not −12', flag: true },
+  { q: 'Q3', full: 18, error: '6 swapped the signs in a bracket' },
+  { q: 'Q4', full: 22, error: '4 stopped at 2x − 2 = x + 7' },
+  { q: 'Q1', full: 28, error: 'Marks came off with no single repeated slip.' },
 ];
 
 export function FlipCards() {
@@ -116,19 +117,23 @@ export function FlipCards() {
           <section className="class-bars" aria-labelledby="h-class">
             <h3 id="h-class">Then, across all thirty</h3>
             <p className="class-bars-sub">
-              Mark the whole set and each question shows the class average and the slip that came
-              up most — worst first, so you know what to go over tomorrow.
+              Mark the whole set and each question shows how many students got it fully right, and
+              the slip that came up most — worst first, so you know what to go over tomorrow.
+            </p>
+            <p className="class-bars-avg">
+              Class average <b>15.7</b>
+              <small> / 20</small>
             </p>
             <ul>
               {CLASS_BARS.map((b, i) => (
                 <li key={b.q} className={b.flag ? 'is-flag' : undefined} style={{ '--i': i } as React.CSSProperties}>
                   <span className="class-bars-q">{b.q}</span>
                   <span className="class-bars-track">
-                    <span className="class-bars-fill" style={{ width: `${(b.avg / 5) * 100}%` }} />
+                    <span className="class-bars-fill" style={{ width: `${(b.full / 30) * 100}%` }} />
                   </span>
                   <span className="class-bars-n">
-                    {b.avg.toFixed(1)}
-                    <small>/5</small>
+                    {b.full}/30
+                    <small> students</small>
                   </span>
                   <span className="class-bars-err">{b.error}</span>
                 </li>

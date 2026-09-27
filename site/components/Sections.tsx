@@ -176,7 +176,7 @@ export function Plans() {
 
 export function Closing() {
   return (
-    <section className="s s--dark" aria-labelledby="h-close">
+    <section className="s s--paper s--close" aria-labelledby="h-close">
       <div className="wrap">
         <div className="close-row">
           <div>
