@@ -1,30 +1,23 @@
 'use client';
 
-import { useRef } from 'react';
-import { motion, useMotionValue, useMotionValueEvent, useScroll, useSpring, useTransform } from 'framer-motion';
+import { useState } from 'react';
 import { FLIP_CARDS, type FlipCard } from '../lib/content';
 import { FreeBody, PenLoop, Tick } from './Ink';
 import { MarkedPaper } from './MarkedPaper';
-import { RiseWords } from './RiseWords';
 import { useWriteOn } from './useWriteOn';
-import { useReducedMotionSafe } from './useMedia';
 
 /* ==========================================================================
    Flip cards.
 
    One face is what the student wrote. The other is what came back: the mark,
-   the quarter mark, the reason for the deduction and the feedback. The flip
-   is scroll-earned rather than timed - the card turns over, once, as it
-   crosses the viewport, at a spring's pace, and a turned card stays turned -
-   and each card in a row is offset slightly so a row cascades instead of
-   snapping in unison.
+   the quarter mark, the reason for the deduction and the feedback. A card
+   turns over only when it is clicked, tapped or pressed (Enter or Space),
+   and turns back the same way - nothing on this page spins by itself as it
+   scrolls past.
 
    Under `prefers-reduced-motion` the two faces cannot occupy the same box, so
    the CSS stacks them: the answer, then what came back, both fully readable
-   with no rotation at all. The inline rotation this file writes is overruled
-   there by `!important`, and the hook additionally pins the rotation to a
-   literal 0 - a literal rather than an absent style prop, because dropping the
-   prop would leave whatever the animation had last written on the element.
+   with no rotation at all.
    ========================================================================== */
 
 export function FlipCards() {
@@ -37,7 +30,7 @@ export function FlipCards() {
         <p className="kicker">Turn one over</p>
 
         <div className="head head--wide">
-          <h2 id="h-flip"><RiseWords>Real marking, not a vibe check</RiseWords></h2>
+          <h2 id="h-flip">Real marking, not a vibe check</h2>
           <p className="sub">
             Every card is one question. The front is what the student wrote; the back is what came
             back — the mark, the quarter mark, the reason for the deduction, and something to do
@@ -56,6 +49,7 @@ export function FlipCards() {
             </figcaption>
           </figure>
 
+          <div className="marking-side">
           <aside className="pen-key" aria-labelledby="h-pen-key">
             <h3 id="h-pen-key">Reading the red pen</h3>
             <ul>
@@ -104,6 +98,19 @@ export function FlipCards() {
               Green is the student’s pen. Red is what comes back — and you can change any of it.
             </p>
           </aside>
+
+          {/* The rest of what the app does, beside the paper rather than a
+              paragraph under the cards. */}
+          <section className="also" aria-labelledby="h-also">
+            <h3 id="h-also">Also in the app</h3>
+            <ul>
+              <li><b>Answer keys</b> scanned once, or learned from the first paper of a stack.</li>
+              <li><b>Ontario KTCA</b> categories and curriculum expectations for your region.</li>
+              <li><b>Gradebook export</b> as a CSV, or straight to Google Drive.</li>
+              <li><b>Planning</b> — drafted quizzes, worksheets and lesson plans.</li>
+            </ul>
+          </section>
+          </div>
         </div>
 
         <figure className="illo">
@@ -118,49 +125,30 @@ export function FlipCards() {
           </figcaption>
         </figure>
 
-        <p className="more">
-          <strong>Also in the app:</strong> answer keys, scanned once or learned from the first
-          paper of a stack · Ontario KTCA categories and curriculum expectations for your region ·
-          gradebook CSV and Google Drive export · drafted quizzes, worksheets and lesson plans.
-        </p>
       </div>
     </section>
   );
 }
 
 function Card({ card, index }: { card: FlipCard; index: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const reduced = useReducedMotionSafe();
-
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    // The whole lower two-thirds of the viewport, so the turn spends real
-    // scroll distance turning. The old window was a third as deep, which on
-    // one wheel-flick meant the card had already snapped over.
-    offset: ['start 0.98', 'start 0.22'],
-  });
-
-  // The card holds its answer face until it is well inside the viewport, then
-  // turns; each card in a row starts a little after the one before it. The
-  // spring is what stops a fast scroll reading as an instant snap: however
-  // hard the wheel is flicked, the card itself turns at a paper pace and
-  // settles, instead of teleporting to its end state.
-  //
-  // And it turns ONCE. The rotation used to track the scroll in both
-  // directions, so reading up and down the page spun the cards over and
-  // over like a lark — the latch keeps the largest angle the scroll has
-  // earned, and a turned card stays turned.
-  const lead = Math.min(index, 3) * 0.045;
-  const raw = useTransform(scrollYProgress, [0.12 + lead, 0.92 + lead], [0, 180]);
-  const latched = useMotionValue(0);
-  useMotionValueEvent(raw, 'change', (v) => {
-    if (v > latched.get()) latched.set(v);
-  });
-  const rotateY = useSpring(latched, { stiffness: 60, damping: 26, mass: 1, restDelta: 0.01 });
+  const [turned, setTurned] = useState(false);
+  const turn = () => setTurned((t) => !t);
 
   return (
-    <div className="flip" ref={ref}>
-      <motion.div className="flip-inner" style={{ rotateY: reduced ? 0 : rotateY }}>
+    <div
+      className={`flip${turned ? ' is-turned' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-pressed={turned}
+      onClick={turn}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          turn();
+        }
+      }}
+    >
+      <div className="flip-inner">
         {/* The front is a piece cut from the subject's printed test: its
             running header, the numbered question with its marks, and the
             student's answer written on the printed answer lines. */}
@@ -191,7 +179,7 @@ function Card({ card, index }: { card: FlipCard; index: number }) {
                 ))}
               </div>
             )}
-            <p className="pen flip-hint" aria-hidden="true">turn over →</p>
+            <p className="pen flip-hint" aria-hidden="true">tap to turn over →</p>
           </div>
         </div>
 
@@ -224,7 +212,7 @@ function Card({ card, index }: { card: FlipCard; index: number }) {
             )}
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

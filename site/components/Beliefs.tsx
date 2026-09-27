@@ -1,6 +1,5 @@
 import { BELIEFS, COMPLIANCE_URL } from '../lib/content';
 import { RevealItem } from './Reveal';
-import { RiseWords } from './RiseWords';
 
 /**
  * A dark band, and the only list on the page that is full-bleed: each rule
@@ -19,7 +18,7 @@ export function Beliefs() {
         <p className="kicker">Rules, not preferences</p>
 
         <div className="head head--wide">
-          <h2 id="h-beliefs"><RiseWords>What UMarkless will not do</RiseWords></h2>
+          <h2 id="h-beliefs">What UMarkless will not do</h2>
           <p className="sub">
             Seven rules the product is built around. Each of them costs something — speed, margin,
             or a claim we would rather be able to make — and each of them is in the code, not the

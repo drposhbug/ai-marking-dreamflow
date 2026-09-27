@@ -9,7 +9,6 @@ import {
   README_URL,
   REPO_URL,
 } from '../lib/content';
-import { RiseWords } from './RiseWords';
 
 /* --------------------------------------------------------------- header */
 
@@ -49,7 +48,7 @@ export function Privacy() {
         <div className="privacy-split">
           <div>
             <div className="head">
-              <h2 id="h-priv"><RiseWords>What leaves the phone, stated plainly</RiseWords></h2>
+              <h2 id="h-priv">What leaves the phone, stated plainly</h2>
               <p className="sub">
                 You would be handing us other people&rsquo;s children&rsquo;s work. Here is exactly
                 what happens to it.
@@ -122,9 +121,8 @@ export function Privacy() {
             ))}
           </ul>
           <p className="after">
-            UMarkless reduces exposure substantially. It does not make a scanned page anonymous, and
-            no vendor should claim otherwise. Subprocessors, legal footing, retention and every
-            known gap are in <a href={COMPLIANCE_URL}>Security and compliance</a>.
+            It reduces exposure; it does not make a page anonymous. Every gap is in{' '}
+            <a href={COMPLIANCE_URL}>Security and compliance</a>.
           </p>
         </div>
       </div>
@@ -142,7 +140,7 @@ export function Plans() {
         <p className="kicker">10% goes to charity, off the top</p>
 
         <div className="head head--wide">
-          <h2 id="h-plans"><RiseWords>Plans</RiseWords></h2>
+          <h2 id="h-plans">Plans</h2>
           <p className="sub">
             <strong>Every paid plan gives 10% to charities that help kids learn</strong> — not a
             marketing line, it comes off the top. Start on a free trial. Paid plans are
@@ -198,7 +196,7 @@ export function SignIn() {
         <div className="signin-split">
           <div>
             <div className="head">
-              <h2 id="h-signin"><RiseWords>Sign in, and your marking is where you left it</RiseWords></h2>
+              <h2 id="h-signin">Sign in, and your marking is where you left it</h2>
               <p className="sub">
                 Classes, answer keys and every marked test stay with the account rather than the
                 device. Sign in somewhere else and they are already there.
@@ -301,11 +299,10 @@ export function Closing() {
       <div className="wrap">
         <div className="close-row">
           <div>
-            <h2 id="h-close"><RiseWords>Built by a teacher, for teachers.</RiseWords></h2>
+            <h2 id="h-close">Made for the teacher with a stack to mark.</h2>
             <p>
-              An active project, submitted to the RevenueCat Shipaton 2026, and not on any app store
-              yet. Ask to be told when it is — or, if you are a school, to read the compliance
-              write-up first.
+              Submitted to the RevenueCat Shipaton 2026 and not on an app store yet. Ask to hear
+              when it launches — or, if you are a school, read the compliance write-up first.
             </p>
           </div>
           <div className="cta-row">
