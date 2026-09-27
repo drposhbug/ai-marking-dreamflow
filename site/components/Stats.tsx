@@ -41,6 +41,10 @@ export function Stats() {
         <h2 id="h-stats" className="stats-head">
           Where the evenings go
         </h2>
+        <p className="stats-sub">
+          UMarkless gives that time back: a class set of thirty is marked in 2 to 15 minutes,
+          depending on the route, and you check and sign off instead of marking every paper.
+        </p>
         <ul className="stats">
           {STATS.map((s) => (
             <li key={s.value}>
