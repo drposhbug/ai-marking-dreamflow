@@ -36,7 +36,7 @@ const STATS = [
 
 export function Stats() {
   return (
-    <section className="s s--tint s--stats" aria-labelledby="h-stats">
+    <section className="s s--tint s--stats" id="evenings" aria-labelledby="h-stats">
       <div className="wrap">
         <h2 id="h-stats" className="stats-head">
           Where the evenings go
