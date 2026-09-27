@@ -285,7 +285,9 @@ function ScanVisual({ local, staticMode }: VisProps) {
         </p>
         <p className="pen scan-count">30 papers · one feeder · one PDF</p>
       </div>
-      <figcaption>An illustration of redaction — not a screenshot, and read the limits below.</figcaption>
+      <figcaption>
+        An illustration of redaction — not a screenshot. <a href="privacy.html#limits">Read the limits</a>.
+      </figcaption>
     </figure>
   );
 }
