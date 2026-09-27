@@ -621,7 +621,7 @@ figure.illo figcaption, figure.shot figcaption {
   font-size: .3em; color: var(--muted);
   letter-spacing: .1em; margin-left: .3em; text-transform: uppercase;
 }
-.hero-times span {
+.hero-times li > span {
   display: block; margin-top: .55rem;
   font-size: .8375rem; line-height: 1.4; color: var(--muted);
   letter-spacing: .01em;
@@ -871,6 +871,23 @@ figure.illo figcaption, figure.shot figcaption {
   }
 }
 .marking-side { display: grid; gap: 2.5rem; }
+.class-bars { border-top: 1px solid var(--rule, rgba(0, 0, 0, .12)); padding-top: 1.6rem; }
+.class-bars h3 { margin: 0; font: 600 clamp(1.15rem, 1rem + .4vw, 1.45rem)/1.2 var(--display); color: var(--ink); }
+.class-bars-sub { margin: .5rem 0 0; max-width: 56ch; font-size: .95rem; line-height: 1.5; color: var(--muted); }
+.class-bars ul { list-style: none; margin: 1.3rem 0 0; padding: 0; display: grid; gap: .75rem; }
+.class-bars li { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) 3.6rem; gap: .9rem; align-items: center; }
+.class-bars-q { font: 600 .85rem/1 var(--mono); color: var(--muted); }
+.class-bars-track { position: relative; height: .7rem; border-radius: 99px; background: rgba(0, 0, 0, .07); overflow: hidden; }
+.class-bars-fill { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: #2f6b4f; transform-origin: left; }
+.class-bars li.is-flag .class-bars-fill { background: #c0281e; }
+.class-bars li.is-flag .class-bars-q, .class-bars li.is-flag .class-bars-n { color: #c0281e; }
+.class-bars-n { font: 600 1.05rem/1 var(--sans); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.class-bars-n small { font-size: .7em; font-weight: 500; color: var(--muted); }
+.class-bars .class-bars-note { margin: 1rem 0 0; color: #c0281e; font-size: 1.25rem; line-height: 1.2; transform: rotate(-1deg); transform-origin: left; }
+/* After the pen has finished the paper, the class bars grow in. */
+@keyframes barGrow { from { transform: scaleX(0); } to { transform: none; } }
+.marking-lead[data-write] .class-bars-fill { animation: barGrow .8s cubic-bezier(.3, .7, .3, 1) both; animation-delay: calc(3.1s + var(--i, 0) * .15s); }
+.marking-lead[data-write] .class-bars-note { animation: writeOn .8s ease-out both; animation-delay: 4s; }
 .also { border-top: 1px solid var(--rule, rgba(0, 0, 0, .12)); padding-top: 1.6rem; }
 .also h3 { margin: 0; font: 600 clamp(1.15rem, 1rem + .4vw, 1.45rem)/1.2 var(--display); color: var(--ink); }
 .also ul { list-style: none; margin: 1.1rem 0 0; padding: 0; display: grid; gap: .9rem 2.4rem; }
@@ -1062,6 +1079,8 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
   transform-style: preserve-3d;
   transition: transform .7s cubic-bezier(.3, .7, .25, 1);
 }
+/* Turning over by itself, it takes its time; a click answers quickly. */
+.flip.is-slow .flip-inner { transition-duration: 1.6s; transition-timing-function: cubic-bezier(.45, .05, .25, 1); }
 .flip.is-turned .flip-inner { transform: rotateY(180deg); }
 .flip-face {
   grid-area: 1 / 1;
@@ -1311,6 +1330,23 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
 }
 .tabs button:hover { color: var(--ink); }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--hl); }
+/* The time left on a panel before it moves on by itself. */
+.tabs button { position: relative; }
+.tab-progress {
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: var(--hl); transform-origin: left; transform: scaleX(0);
+  animation-name: tabFill; animation-timing-function: linear; animation-fill-mode: forwards;
+}
+@keyframes tabFill { to { transform: scaleX(1); } }
+.tabs button[aria-selected="true"]:has(.tab-progress) { border-bottom-color: var(--rule); }
+/* The big number counts up; "min" is written in after it lands. */
+.count-up { font-variant-numeric: tabular-nums; }
+@keyframes minIn { from { opacity: 0; transform: translateX(-.4em); } to { opacity: 1; transform: none; } }
+.tabpanel .tab-time em { animation: minIn .45s .75s cubic-bezier(.3, .7, .3, 1) both; }
+.hero-times b > em { animation: minIn .45s 1s cubic-bezier(.3, .7, .3, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .tabpanel .tab-time em, .hero-times b > em { animation: none; }
+}
 
 .tabpanel {
   display: grid; gap: clamp(1.6rem, 3vw, 4.5rem);
@@ -1479,6 +1515,9 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
 @media (min-width: 34rem) and (max-width: 63.99rem) { .leaves { grid-template-columns: 1fr 1fr; } }
 
 /* Where the promise stops: ruled in red pen, because that is what it is. */
+/* Its own slim band near the foot of the page. */
+.s.s--limits { padding-block: clamp(2rem, 1.2rem + 2vw, 3.5rem); }
+.s--limits .limits { margin-top: 0; }
 .limits {
   margin-top: clamp(2rem, 1rem + 2.4vw, 4rem);
   background: var(--surface);
@@ -1588,88 +1627,6 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
   border-radius: 1px;
 }
 .fine { margin: clamp(1.5rem, 2.4vw, 2.6rem) 0 0; max-width: 84ch; font-size: .875rem; line-height: 1.6; color: var(--muted); }
-
-/* ------------------------------------------------------------- sign in */
-
-.signin-split { display: grid; gap: clamp(2rem, 1rem + 2.5vw, 5rem); align-items: start; }
-@media (min-width: 64rem) { .signin-split { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); } }
-
-/* On a wide monitor the two things this page promises sit side by side on
-   their own rules rather than stacking down a column that is half empty. */
-@media (min-width: 88rem) {
-  #signin .claims {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: var(--gap);
-    align-items: start;
-  }
-  #signin .claims li {
-    border-top: 2px solid var(--ink);
-    border-bottom: 0;
-    padding: .9rem 0 0;
-    margin: 0;
-  }
-  #signin .claims p { max-width: none; }
-}
-
-/* Unmistakably a sign-in: the mark, "Sign in to", a lifted card. */
-.signin-form {
-  display: grid; gap: .55rem; align-content: start;
-  width: 100%; max-width: 34rem; margin-inline-start: auto;
-  box-shadow: var(--lift-2);
-}
-.signin-head {
-  display: grid; justify-items: center; gap: .4rem;
-  text-align: center;
-  padding-bottom: 1rem; margin-bottom: .4rem;
-  border-bottom: 1px solid var(--feint);
-}
-.signin-head img { width: 44px; height: 44px; border-radius: 10px; }
-.signin-head h3 {
-  font: 700 1.45rem/1.15 var(--display);
-  letter-spacing: -.015em; color: var(--ink);
-  margin: 0;
-}
-.signin-head p { margin: 0; max-width: 24rem; font-size: .82rem; line-height: 1.45; color: var(--ink-muted); }
-/* The formal front door. The G wears Google's own colours because a sign-in
-   button is the one place the familiar mark IS the meaning; everything else
-   about it stays in the site's materials — paper, hairline, ink. */
-.btn-google {
-  display: inline-flex; align-items: center; justify-content: center; gap: .6rem;
-  background: #fffef8;
-  color: var(--ink);
-  border: 1px solid var(--rule-strong, var(--rule));
-  font-weight: 700;
-}
-.btn-google svg { width: 1.15em; height: 1.15em; flex: none; }
-.btn-google:hover { background: var(--paper-2, #f9f4e5); }
-.or-rule {
-  display: flex; align-items: center; gap: .8rem;
-  margin: .35rem 0 .1rem;
-  color: var(--ink-muted);
-  font: 700 .68rem/1 var(--mono);
-  letter-spacing: .12em; text-transform: uppercase;
-}
-.or-rule::before, .or-rule::after { content: ''; flex: 1; border-top: 1px solid var(--rule); }
-.signin-form + .note-small { max-width: 34rem; margin-inline-start: auto; }
-.signin-form .pg-top { margin-bottom: .5rem; }
-.signin-form label.field { margin-top: .3rem; }
-.signin-form input {
-  width: 100%;
-  padding: .8rem .9rem;
-  border: 1px solid var(--graphite);
-  border-radius: var(--r);
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: .95rem;
-  line-height: 1.3;
-}
-.signin-form input::placeholder { color: var(--muted); opacity: 1; }
-.signin-form input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-color: var(--focus); }
-.signin-form .btn { width: 100%; }
-.signin-form .btn-primary { margin-top: .55rem; }
-.signin-form .pg-note { margin-top: .8rem; }
 
 /* ------------------------------------------------------------- closing */
 
@@ -1791,7 +1748,6 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
   .tabs { gap: 0 1.2rem; }
   .tabs button { padding: .8rem .1rem; font-size: .9rem; }
   .tab-time { font-size: 3.4rem; }
-  .signin-form, .signin-form + .note-small { max-width: none; margin-inline-start: 0; }
 }
 
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FLIP_CARDS, type FlipCard } from '../lib/content';
 import { FreeBody, PenLoop, Tick } from './Ink';
 import { MarkedPaper } from './MarkedPaper';
@@ -10,15 +10,23 @@ import { useWriteOn } from './useWriteOn';
    Flip cards.
 
    One face is what the student wrote. The other is what came back: the mark,
-   the quarter mark, the reason for the deduction and the feedback. A card
-   turns over only when it is clicked, tapped or pressed (Enter or Space),
-   and turns back the same way - nothing on this page spins by itself as it
-   scrolls past.
+   the quarter mark, the reason for the deduction and the feedback. Once a
+   card is well inside the viewport it turns over by itself, slowly and
+   once, each a little after the one before it. After that it turns only
+   when clicked, tapped or pressed (Enter or Space).
 
    Under `prefers-reduced-motion` the two faces cannot occupy the same box, so
    the CSS stacks them: the answer, then what came back, both fully readable
    with no rotation at all.
    ========================================================================== */
+
+/** Full marks per question across a class of thirty, for the quiz drawn above. */
+const CLASS_BARS = [
+  { q: 'Q1', full: 28 },
+  { q: 'Q2', full: 12, flag: true },
+  { q: 'Q3', full: 22 },
+  { q: 'Q4', full: 25 },
+];
 
 export function FlipCards() {
   // One trigger for the paper and its key, so each line of the key lights up
@@ -99,6 +107,31 @@ export function FlipCards() {
             </p>
           </aside>
 
+          {/* What the same marks say about the whole set - the class analysis
+              the app builds from a class set, drawn for this quiz. */}
+          <section className="class-bars" aria-labelledby="h-class">
+            <h3 id="h-class">Then, across all thirty</h3>
+            <p className="class-bars-sub">
+              Mark the whole set and every question shows how many got full marks, so you know
+              what to go over tomorrow.
+            </p>
+            <ul>
+              {CLASS_BARS.map((b, i) => (
+                <li key={b.q} className={b.flag ? 'is-flag' : undefined} style={{ '--i': i } as React.CSSProperties}>
+                  <span className="class-bars-q">{b.q}</span>
+                  <span className="class-bars-track">
+                    <span className="class-bars-fill" style={{ width: `${(b.full / 30) * 100}%` }} />
+                  </span>
+                  <span className="class-bars-n">
+                    {b.full}
+                    <small>/30</small>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="pen class-bars-note">Q2 — most lost the sign. Worth ten minutes tomorrow.</p>
+          </section>
+
           {/* The rest of what the app does, beside the paper rather than a
               paragraph under the cards. */}
           <section className="also" aria-labelledby="h-also">
@@ -132,11 +165,37 @@ export function FlipCards() {
 
 function Card({ card, index }: { card: FlipCard; index: number }) {
   const [turned, setTurned] = useState(false);
-  const turn = () => setTurned((t) => !t);
+  const [slow, setSlow] = useState(true);
+  const ref = useRef<HTMLDivElement>(null);
+  const turn = () => {
+    setSlow(false);
+    setTurned((t) => !t);
+  };
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let timer = 0;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        io.disconnect();
+        timer = window.setTimeout(() => setTurned(true), 500 + index * 450);
+      },
+      { threshold: 0.7 },
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [index]);
 
   return (
     <div
-      className={`flip${turned ? ' is-turned' : ''}`}
+      ref={ref}
+      className={`flip${turned ? ' is-turned' : ''}${slow ? ' is-slow' : ''}`}
       role="button"
       tabIndex={0}
       aria-pressed={turned}
