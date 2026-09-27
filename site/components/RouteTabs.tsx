@@ -24,8 +24,10 @@ import { useReducedMotionSafe } from './useMedia';
 
    Left alone, the panel moves on to the next route once there has been time
    to read it - a thin bar fills under the tab meanwhile, so the change is
-   never a surprise. It holds while the pointer is over the section or the
-   section is off screen, and stops for good the moment a tab is chosen.
+   never a surprise. It holds while the section is off screen, and stops for
+   good the moment a tab is chosen. It does not hold for the pointer: a
+   reader's mouse rests on the section they are reading, so pausing on hover
+   meant it never moved at all.
    ========================================================================== */
 
 /** Roughly how long a panel takes to read: about 230 words a minute. */
@@ -42,13 +44,12 @@ export function RouteTabs() {
   const reduced = useReducedMotionSafe();
   const [auto, setAuto] = useState(true);
   const [inView, setInView] = useState(false);
-  const [hovering, setHovering] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const el = sectionRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(([entry]) => setInView(!!entry?.isIntersecting), { threshold: 0.35 });
+    const io = new IntersectionObserver(([entry]) => setInView(!!entry?.isIntersecting), { threshold: 0.2 });
     io.observe(el);
     return () => io.disconnect();
   }, []);
@@ -58,7 +59,7 @@ export function RouteTabs() {
     setSelected(i);
   };
   const advance = () => setSelected((s) => (s + 1) % ROUTES.length);
-  const playing = auto && inView && !hovering;
+  const playing = auto && inView;
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     const last = ROUTES.length - 1;
@@ -81,8 +82,6 @@ export function RouteTabs() {
       id="how"
       aria-labelledby="h-how"
       ref={sectionRef}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
     >
       <div className="wrap">
         <p className="kicker">Times are for a class of thirty</p>

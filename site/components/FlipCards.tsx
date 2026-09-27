@@ -20,12 +20,16 @@ import { useWriteOn } from './useWriteOn';
    with no rotation at all.
    ========================================================================== */
 
-/** Full marks per question across a class of thirty, for the quiz drawn above. */
+/**
+ * The class summary for the quiz drawn above, as the app lays it out: worst
+ * question first, the class average out of five, and the slip that came up
+ * most on the papers that lost marks there, with how many made it.
+ */
 const CLASS_BARS = [
-  { q: 'Q1', full: 28 },
-  { q: 'Q2', full: 12, flag: true },
-  { q: 'Q3', full: 22 },
-  { q: 'Q4', full: 25 },
+  { q: 'Q2', avg: 2.9, error: '11 of 30 wrote 4 × −3 as −3, not −12', flag: true },
+  { q: 'Q3', avg: 3.8, error: '6 of 30 swapped the signs in a bracket' },
+  { q: 'Q4', avg: 4.2, error: '4 of 30 stopped at 2x − 2 = x + 7' },
+  { q: 'Q1', avg: 4.8, error: 'The whole class had this one.' },
 ];
 
 export function FlipCards() {
@@ -112,24 +116,25 @@ export function FlipCards() {
           <section className="class-bars" aria-labelledby="h-class">
             <h3 id="h-class">Then, across all thirty</h3>
             <p className="class-bars-sub">
-              Mark the whole set and every question shows how many got full marks, so you know
-              what to go over tomorrow.
+              Mark the whole set and each question shows the class average and the slip that came
+              up most — worst first, so you know what to go over tomorrow.
             </p>
             <ul>
               {CLASS_BARS.map((b, i) => (
                 <li key={b.q} className={b.flag ? 'is-flag' : undefined} style={{ '--i': i } as React.CSSProperties}>
                   <span className="class-bars-q">{b.q}</span>
                   <span className="class-bars-track">
-                    <span className="class-bars-fill" style={{ width: `${(b.full / 30) * 100}%` }} />
+                    <span className="class-bars-fill" style={{ width: `${(b.avg / 5) * 100}%` }} />
                   </span>
                   <span className="class-bars-n">
-                    {b.full}
-                    <small>/30</small>
+                    {b.avg.toFixed(1)}
+                    <small>/5</small>
                   </span>
+                  <span className="class-bars-err">{b.error}</span>
                 </li>
               ))}
             </ul>
-            <p className="pen class-bars-note">Q2 — most lost the sign. Worth ten minutes tomorrow.</p>
+            <p className="pen class-bars-note">Reteach Q2 tomorrow — ten minutes.</p>
           </section>
 
           {/* The rest of what the app does, beside the paper rather than a

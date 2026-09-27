@@ -3,7 +3,6 @@ import {
   COMPLIANCE_URL,
   CONTACT,
   LAUNCH_MAILTO,
-  LIMITS,
   PLANS,
   PRIVACY_CLAIMS,
   README_URL,
@@ -49,10 +48,7 @@ export function Privacy() {
           <div>
             <div className="head">
               <h2 id="h-priv">What leaves the phone, stated plainly</h2>
-              <p className="sub">
-                You would be handing us other people&rsquo;s children&rsquo;s work. Here is exactly
-                what happens to it.
-              </p>
+              <p className="sub">It is other people&rsquo;s children&rsquo;s work. Here is what happens to it.</p>
             </div>
 
             <ul className="claims">
@@ -104,7 +100,7 @@ export function Privacy() {
             </div>
             <figcaption>
               An illustration of the split between device and server on iOS and Android — not a
-              screenshot, and read the limits below.
+              screenshot. <a href="privacy.html#limits">Read the limits</a>.
             </figcaption>
           </figure>
         </div>
@@ -126,11 +122,18 @@ export function Plans() {
         <div className="head head--wide">
           <h2 id="h-plans">Plans</h2>
           <p className="sub">
-            <strong>Every paid plan gives 10% to charities that help kids learn</strong> — not a
-            marketing line, it comes off the top. Start on a free trial. Paid plans are
-            credit-based: credits scale with how much work a paper actually takes, so a short
-            multiple-choice quiz costs a fraction of a six-page problem set, and re-marking the same
-            paper is free.
+            Start on a free trial. Paid plans are credit-based: credits scale with how much work a
+            paper actually takes, so a short multiple-choice quiz costs a fraction of a six-page
+            problem set, and re-marking the same paper is free.
+          </p>
+        </div>
+
+        {/* The give-back, where it cannot be missed rather than inside a paragraph. */}
+        <div className="give-back">
+          <p className="give-back-n" aria-hidden="true">10%</p>
+          <p className="give-back-text">
+            <strong>10% of every paid plan goes to charities that help kids learn.</strong> Off the
+            top, before anything else — not a marketing line.
           </p>
         </div>
       </div>
@@ -164,37 +167,6 @@ export function Plans() {
           a fifth of marking on the spot, which is why every plan goes so much further that way.
           Subscriptions renew until cancelled and can be cancelled any time in the store.
         </p>
-      </div>
-    </section>
-  );
-}
-
-/* --------------------------------------------------------------- limits */
-
-/**
- * The known gaps, near the foot of the page: stated in full for anyone
- * deciding whether to trust it, and out of the way of everyone else.
- */
-export function Limits() {
-  return (
-    <section className="s s--paper s--limits" id="limits" aria-label="Where the promise stops">
-      <div className="wrap">
-        <div className="limits">
-          <h3>Where the promise stops</h3>
-          <ul>
-            {LIMITS.map((l) => (
-              <li key={l.before.slice(0, 40)}>
-                {l.before}
-                {l.em && <em>{l.em}</em>}
-                {l.after}
-              </li>
-            ))}
-          </ul>
-          <p className="after">
-            It reduces exposure; it does not make a page anonymous. Every gap is in{' '}
-            <a href={COMPLIANCE_URL}>Security and compliance</a>.
-          </p>
-        </div>
       </div>
     </section>
   );
@@ -237,6 +209,7 @@ export function SiteFooter() {
       <div className="wrap">
         <nav aria-label="Footer">
           <a href="privacy.html">Privacy policy</a>
+          <a href="privacy.html#limits">Where the promise stops</a>
           <a href="delete-account.html">Delete your account</a>
           <a href={COMPLIANCE_URL}>Security and compliance</a>
           <a href={README_URL}>How it works, in detail</a>

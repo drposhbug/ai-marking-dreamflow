@@ -11,10 +11,12 @@ import { useEffect, useRef, useState } from 'react';
  * such as "~"; only the digits count.
  */
 export function CountUp({ value, duration = 1100 }: { value: string; duration?: number }) {
-  const match = /^(\D*)(\d+)(.*)$/.exec(value);
+  const match = /^(\D*)(\d+(?:\.\d+)?)(.*)$/.exec(value);
   const prefix = match?.[1] ?? '';
   const target = match ? Number(match[2]) : 0;
   const suffix = match?.[3] ?? '';
+  // "4.6" counts in tenths, "52" in whole numbers.
+  const places = match?.[2].split('.')[1]?.length ?? 0;
   const [shown, setShown] = useState(target);
   const ref = useRef<HTMLSpanElement>(null);
 
@@ -28,7 +30,8 @@ export function CountUp({ value, duration = 1100 }: { value: string; duration?: 
       const start = performance.now();
       const tick = (now: number) => {
         const t = Math.min(1, (now - start) / duration);
-        setShown(Math.round(target * (1 - Math.pow(1 - t, 3))));
+        const f = 10 ** places;
+        setShown(Math.round(target * (1 - Math.pow(1 - t, 3)) * f) / f);
         if (t < 1) raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
@@ -56,7 +59,7 @@ export function CountUp({ value, duration = 1100 }: { value: string; duration?: 
       {/* Screen readers get the real value once, not every frame of the count. */}
       <span aria-hidden="true">
         {prefix}
-        {shown}
+        {shown.toFixed(places)}
         {suffix}
       </span>
       <span className="sr-only">{value}</span>

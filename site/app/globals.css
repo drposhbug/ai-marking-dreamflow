@@ -874,8 +874,10 @@ figure.illo figcaption, figure.shot figcaption {
 .class-bars { border-top: 1px solid var(--rule, rgba(0, 0, 0, .12)); padding-top: 1.6rem; }
 .class-bars h3 { margin: 0; font: 600 clamp(1.15rem, 1rem + .4vw, 1.45rem)/1.2 var(--display); color: var(--ink); }
 .class-bars-sub { margin: .5rem 0 0; max-width: 56ch; font-size: .95rem; line-height: 1.5; color: var(--muted); }
-.class-bars ul { list-style: none; margin: 1.3rem 0 0; padding: 0; display: grid; gap: .75rem; }
-.class-bars li { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) 3.6rem; gap: .9rem; align-items: center; }
+.class-bars ul { list-style: none; margin: 1.3rem 0 0; padding: 0; display: grid; gap: 1.05rem; }
+.class-bars li { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) 3.6rem; gap: .35rem .9rem; align-items: center; }
+.class-bars-err { grid-column: 2 / -1; font-size: .88rem; line-height: 1.4; color: var(--muted); }
+.class-bars li.is-flag .class-bars-err { color: #a3241b; font-weight: 500; }
 .class-bars-q { font: 600 .85rem/1 var(--mono); color: var(--muted); }
 .class-bars-track { position: relative; height: .7rem; border-radius: 99px; background: rgba(0, 0, 0, .07); overflow: hidden; }
 .class-bars-fill { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: #2f6b4f; transform-origin: left; }
@@ -1792,3 +1794,46 @@ figure.marking-paper { max-width: 46rem; margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   .marking-lead[data-write] *, .marking-lead[data-write] *::after { animation: none !important; }
 }
+
+/* ---------------------------------------------------------- give-back
+   The charity line in Plans: a big gold figure beside one plain sentence,
+   so a reader skimming the prices still sees it. */
+.give-back {
+  display: flex; align-items: center; gap: clamp(1rem, 2.4vw, 2.2rem);
+  margin: clamp(1.6rem, 2.6vw, 2.6rem) 0 clamp(1.8rem, 3vw, 3rem);
+  padding: clamp(1rem, 1.8vw, 1.6rem) clamp(1.2rem, 2.4vw, 2.2rem);
+  border: 1px solid color-mix(in srgb, var(--hl) 55%, transparent);
+  background: color-mix(in srgb, var(--hl) 10%, transparent);
+  border-radius: 8px; max-width: 58rem;
+}
+.give-back-n {
+  margin: 0; flex: none;
+  font: 600 clamp(2.8rem, 1.6rem + 3vw, 4.6rem)/.9 var(--display);
+  letter-spacing: -.02em; color: var(--hl);
+}
+.give-back-text { margin: 0; font-size: clamp(1rem, .95rem + .3vw, 1.25rem); line-height: 1.5; color: var(--muted); }
+.give-back-text strong { color: var(--ink); font-weight: 600; }
+
+/* ---------------------------------------------------------- stats
+   Three published figures on what marking costs, each with its source
+   under it. Big serif numbers on the manila tint, like the route timings. */
+.s.s--stats { padding-block: clamp(2.4rem, 1.4rem + 3vw, 4.5rem); }
+.stats-head {
+  margin: 0 0 clamp(1.4rem, 2.4vw, 2.4rem);
+  font: 600 clamp(1.3rem, 1rem + .8vw, 1.9rem)/1.2 var(--display); color: var(--ink);
+}
+.stats { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(1.6rem, 3vw, 3.5rem); }
+@media (min-width: 52rem) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.stats li { border-top: 2px solid var(--ink); padding-top: 1rem; }
+.stat-n {
+  margin: 0; display: flex; align-items: baseline; gap: .45rem;
+  font: 600 clamp(2.8rem, 1.6rem + 3.4vw, 5rem)/1 var(--display);
+  letter-spacing: -.02em; color: var(--ink);
+}
+.stat-n em {
+  font-style: normal; font-family: var(--mono); font-weight: 700; font-size: .28em;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
+.stat-text { margin: .7rem 0 0; max-width: 34ch; font-size: clamp(1rem, .95rem + .25vw, 1.15rem); line-height: 1.5; color: var(--ink); }
+.stat-src { display: inline-block; margin-top: .7rem; font-size: .8rem; color: var(--muted); text-underline-offset: .18em; }
+.stat-src:hover { color: var(--ink); }

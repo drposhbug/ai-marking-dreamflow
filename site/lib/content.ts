@@ -350,17 +350,17 @@ export const PRIVACY_CLAIMS = [
   {
     title: 'The name is blacked out before upload',
     body:
-      'On iOS and Android, on-device text recognition finds identity fields — Name:, Student:, Student ID: — and paints them solid black in the uploaded copy. The unaltered page stays on your phone, and the name files the result under the right student.',
+      'On the phone, Name:, Student: and Student ID: are found and painted black in the uploaded copy. The original stays on your phone.',
   },
   {
     title: 'Imported answers go up keyed by row number',
     body:
-      'Never by name. The name column is never transmitted, known student names are scrubbed out of the answer text, and multiple-choice questions never leave the device at all.',
+      'Never by name. The name column is never sent, and multiple choice never leaves the device.',
   },
   {
     title: 'Pages are not kept, and nothing is tracked',
     body:
-      'Images are marked and discarded; what is stored is the result. No ads, no analytics SDK, no student accounts. Delete your account in the app and every result, class and key goes with it, irreversibly.',
+      'Images are marked, then discarded. No ads, no analytics, no student accounts — and deleting your account deletes everything.',
   },
 ];
 
