@@ -181,19 +181,19 @@ export function Closing() {
       <div className="wrap">
         <div className="close-row">
           <div>
-            <h2 id="h-close">Take back your evenings.</h2>
+            <h2 id="h-close">Tonight, hand the stack to UMarkless.</h2>
             <p>
-              Submitted to the RevenueCat Shipaton 2026 and not on an app store yet. Ask to hear
-              when it launches, or if you are a school, read the compliance write-up first.
+              Start free in your browser; the phone apps reach the stores soon. If you are a
+              school, the compliance write-up is ready for your review.
             </p>
           </div>
           <div className="cta-row">
-            {/* TODO: replace this mailto with the Google Play listing URL once the app is live. */}
-            <a className="btn btn-primary" href={LAUNCH_MAILTO}>
-              Ask to be told when it launches
+            <a className="btn btn-primary" href={APP_URL}>
+              Start marking free
             </a>
-            <a className="btn btn-ghost" href={REPO_URL}>
-              Read the source
+            {/* TODO: point this at the Google Play listing once the app is live. */}
+            <a className="btn btn-ghost" href={LAUNCH_MAILTO}>
+              Get an email when the apps land
             </a>
           </div>
         </div>

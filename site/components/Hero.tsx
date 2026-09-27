@@ -1,4 +1,4 @@
-import { APP_URL, LAUNCH_MAILTO } from '../lib/content';
+import { APP_URL } from '../lib/content';
 
 /**
  * The cover page of the exam booklet: warm paper edge to edge, a faint red
@@ -17,31 +17,26 @@ export function Hero() {
     <section className="s s--paper s--hero" aria-labelledby="h-hero">
       <div className="wrap">
         <div className="hero-intro">
-          <p className="eyebrow">
-            Marking assistant for teachers · <b>not on any app store yet</b>
-          </p>
+          <p className="eyebrow">The marking assistant for teachers</p>
           <h1 id="h-hero">
-            Marking eats your evenings. UMarkless marks it first. You just check and sign off.
+            Take your evenings back. UMarkless marks the whole stack; you check and sign off.
           </h1>
 
           <p className="lede">
-            Import a Google Form, scan a stack from the photocopier, or photograph papers one at a
-            time. Back come question-by-question marks, a written reason for every deduction, and
-            feedback a fourteen-year-old will actually read. You can override all of it.
+            A class set of thirty, marked in the time it takes to pour a coffee: a mark for every
+            question, a written reason for every deduction, and feedback your students will
+            actually read. Every mark stays yours to change.
           </p>
 
           <div className="cta-row">
             <a className="btn btn-primary" href={APP_URL}>
-              Sign in and start marking
+              Start marking free
             </a>
-            {/* TODO: replace this mailto with the Google Play listing URL once the app is live. */}
-            <a className="btn btn-ghost" href={LAUNCH_MAILTO}>
-              Ask to be told when it launches
+            <a className="btn btn-ghost" href="#how">
+              See how it works
             </a>
           </div>
-          <p className="note-small">
-            There is no app store listing yet. Signing in opens the browser version.
-          </p>
+          <p className="note-small">Free to start, right in your browser. No card, no setup.</p>
         </div>
 
       </div>
