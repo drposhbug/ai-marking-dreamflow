@@ -1485,6 +1485,93 @@ function cheapTextRoute(): { url: string; key: string; model: string; host: stri
   return null;
 }
 
+// ---------- Keyless marking: Kimi K2.6, instant (non-thinking) ----------
+//
+// With no answer key the marker has to work out the answers itself, which
+// is where Sonnet's cost and run-to-run drift both lived. Kimi K2.6 reads
+// the page images directly (native multimodal), runs without a thinking
+// pass ("instant"), and is roughly a third of the price.
+//
+// Same residency rule as the cheap text route above: Kimi is open-weight, so
+// it runs on DeepInfra (US data centres, zero retention) with the key this
+// project already uses there. Moonshot's own API is in the PRC and is only
+// used when KIMI_ALLOW_MOONSHOT=true is set deliberately — see
+// docs/security-and-compliance.md. Any Kimi failure falls back to Claude,
+// then Gemini, so keyless marking can only get slower, never stop.
+const KIMI_PRICE_IN = 0.75; // USD per 1M input tokens (DeepInfra, 2026-09)
+const KIMI_PRICE_OUT = 3.5; // USD per 1M output tokens
+
+function kimiRoute(): { url: string; key: string; model: string; host: "deepinfra" | "moonshot" } | null {
+  const di = Deno.env.get("DEEPINFRA_API_KEY");
+  if (di) {
+    return {
+      url: "https://api.deepinfra.com/v1/openai/chat/completions",
+      key: di,
+      model: Deno.env.get("KIMI_MODEL") ?? "moonshotai/Kimi-K2.6",
+      host: "deepinfra",
+    };
+  }
+  const ms = Deno.env.get("MOONSHOT_API_KEY");
+  if (ms && Deno.env.get("KIMI_ALLOW_MOONSHOT") === "true") {
+    return { url: "https://api.moonshot.ai/v1/chat/completions", key: ms, model: Deno.env.get("KIMI_MODEL") ?? "kimi-k2.6", host: "moonshot" };
+  }
+  return null;
+}
+
+async function callKimi(
+  imagesBase64: string[],
+  mediaType: string,
+  prompt: string,
+  jsonInstruction: string,
+  usage?: { inputTokens: number; outputTokens: number },
+) {
+  const route = kimiRoute();
+  if (!route) throw new Error("No Kimi route (DEEPINFRA_API_KEY, or MOONSHOT_API_KEY with KIMI_ALLOW_MOONSHOT=true)");
+  // deno-lint-ignore no-explicit-any
+  const content: any[] = [];
+  imagesBase64.forEach((img, i) => {
+    content.push({ type: "text", text: `Page ${i + 1} of ${imagesBase64.length}:` });
+    content.push({ type: "image_url", image_url: { url: `data:${mediaType};base64,${img}` } });
+  });
+  content.push({ type: "text", text: prompt + jsonInstruction });
+
+  // "Instant" is K2.6 with thinking off. The two hosts spell it differently:
+  // Moonshot takes a `thinking` object (and fixes temperature at 0.6 in this
+  // mode — passing one is an error there); DeepInfra serves the open weights
+  // behind vLLM, where it is a chat-template switch and temperature is ours
+  // to set. Low temperature there is the point: marking the same page twice
+  // should give the same marks.
+  // deno-lint-ignore no-explicit-any
+  const body: any = {
+    model: route.model,
+    messages: [{ role: "user", content }],
+    max_tokens: 16384,
+    response_format: { type: "json_object" },
+  };
+  if (route.host === "moonshot") {
+    body.thinking = { type: "disabled" };
+  } else {
+    body.chat_template_kwargs = { thinking: false };
+    body.temperature = 0;
+  }
+
+  const res = await fetch(route.url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${route.key}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`kimi (${route.host}) ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  if (usage) {
+    usage.inputTokens = data?.usage?.prompt_tokens ?? 0;
+    usage.outputTokens = data?.usage?.completion_tokens ?? 0;
+  }
+  const text = data?.choices?.[0]?.message?.content ?? "";
+  if (!text) throw new Error(`kimi (${route.host}) returned no text`);
+  const cleaned = String(text).trim().replace(/^```(?:json)?/, "").replace(/```$/, "").trim();
+  return JSON.parse(cleaned);
+}
+
 /// True when the cheap route is available at all.
 function cheapRouteAvailable(): boolean {
   return cheapTextRoute() !== null;
@@ -3074,7 +3161,12 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
   // Claude grades by default; Gemini is the fallback (or primary when
   // the request asks for it with "provider": "gemini").
   const preferGemini = String(payload?.provider ?? "").toLowerCase() === "gemini";
-  const attempts: Array<"claude" | "gemini"> = preferGemini ? ["gemini", "claude"] : ["claude", "gemini"];
+  // Keyless marking runs on Kimi K2.6 instant first (see kimiRoute); with a
+  // key, or when Kimi is not configured, Claude leads as before.
+  const kimiFirst = !answerKey && !preferGemini && kimiRoute() !== null;
+  const attempts: Array<"kimi" | "claude" | "gemini"> = preferGemini
+    ? ["gemini", "claude"]
+    : (kimiFirst ? ["kimi", "claude", "gemini"] : ["claude", "gemini"]);
 
   // ── Cheap objective route ───────────────────────────────────────────────
   // With an official answer key on file, homework/quiz marking is mostly
@@ -3137,13 +3229,19 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
             usage,
             effort: plan.effort,
           })
+        : name === "kimi"
+        ? await callKimi(imagesBase64, mediaType, geminiPrompt, shape, usage)
         : await callGemini(imagesBase64, mediaType, geminiPrompt, shape);
       if (name === "gemini") {
         // Gemini doesn't report through the same path — conservative estimate.
         usage.inputTokens = imagesBase64.length * 1400 + 1200;
         usage.outputTokens = 900;
       }
-      await logUsage(gradeTeacherId, "grade", usage.inputTokens, usage.outputTokens);
+      if (name === "kimi") {
+        await logUsage(gradeTeacherId, "grade", usage.inputTokens, usage.outputTokens, KIMI_PRICE_IN, KIMI_PRICE_OUT);
+      } else {
+        await logUsage(gradeTeacherId, "grade", usage.inputTokens, usage.outputTokens);
+      }
       await cacheWrite(cacheKey, name, raw, imageHashes);
       const stats: CodeUse[] = [];
       const normalized = normalize(raw, name, maxScore, formatOverride, stats, expectationGrade);
