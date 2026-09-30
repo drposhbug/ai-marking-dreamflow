@@ -254,7 +254,42 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Developer shortcut: instant dev account, onboarding skipped, sensible
   /// defaults set — straight to the app for feature testing.
+  /// Debug builds only, and behind a PIN so a demo phone handed to someone
+  /// else doesn't offer them a way past sign-in. The PIN is in the source,
+  /// so it keeps out a passer-by, not anyone reading the code.
+  static const _devPin = '1211';
+
+  Future<bool> _askDevPin() async {
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Developer mode'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Password'),
+          onSubmitted: (_) => Navigator.pop(ctx, controller.text == _devPin),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text == _devPin), child: const Text('Enter')),
+        ],
+      ),
+    );
+    final typed = controller.text;
+    controller.dispose();
+    if (ok != true && mounted && typed.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wrong password.')));
+    }
+    return ok == true;
+  }
+
   Future<void> _devMode() async {
+    if (!await _askDevPin()) return;
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final auth = context.read<AuthService>();
@@ -332,16 +367,6 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // The rule runs the height of the page whether or not there is
-          // writing beside it -- that is what makes it a page rather than a
-          // divider between two boxes.
-          Positioned(
-            left: gutter,
-            top: 0,
-            bottom: 0,
-            width: 1,
-            child: ColoredBox(color: tones.pen.withValues(alpha: 0.45)),
-          ),
           SafeArea(
             child: LayoutBuilder(
               builder: (context, page) => SingleChildScrollView(
@@ -432,7 +457,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 top: 0,
                                 bottom: 0,
                                 width: 1,
-                                child: ColoredBox(color: tones.pen.withValues(alpha: 0.45)),
+                                child: ColoredBox(color: tones.rule),
                               ),
                               // Centred against the taller half, so the form
                               // sits in the page rather than stranded at the
