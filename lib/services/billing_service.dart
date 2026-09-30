@@ -235,6 +235,14 @@ class BillingService extends ChangeNotifier {
       _unavailableReason = 'In-app purchases aren\'t switched on in this build yet — you\'re on the preview allowance.';
       return;
     }
+    // A test_ key points at RevenueCat's Test Store, and the SDK crashes a
+    // release build configured with one on purpose (so it can never reach a
+    // real store). That was the Aug 5 on-device crash. Test keys are for
+    // debug builds only; a release build with one just stays unavailable.
+    if (_apiKey.startsWith('test_') && kReleaseMode) {
+      _unavailableReason = 'This build uses test purchases, which only work in a debug build.';
+      return;
+    }
     try {
       await Purchases.setLogLevel(kReleaseMode ? LogLevel.warn : LogLevel.debug);
       await Purchases.configure(PurchasesConfiguration(_apiKey));

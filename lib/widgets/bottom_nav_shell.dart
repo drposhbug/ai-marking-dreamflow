@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/responsive.dart';
+import 'package:provider/provider.dart';
 
 /// One of the five places the app keeps state for, written down once so the
 /// phone's bottom bar and the desktop sidebar can never drift apart.
@@ -184,6 +188,7 @@ class _Sidebar extends StatelessWidget {
                     ],
                   ),
                 ),
+                const _SidebarUpgradePromo(),
                 const _SidebarPlansButton(),
               ],
             ),
@@ -279,6 +284,82 @@ class _SidebarItem extends StatelessWidget {
           ),
         ),
       ),
+      ),
+    );
+  }
+}
+
+/// The app's only advertising: our own upgrade pitch, shown to free-trial
+/// teachers and nobody else. No ad network — teachers upload students' work,
+/// and a third-party tracker in the same window would undo the promise that
+/// student identity never leaves the device. Paying teachers never see it.
+class _SidebarUpgradePromo extends StatefulWidget {
+  const _SidebarUpgradePromo();
+
+  @override
+  State<_SidebarUpgradePromo> createState() => _SidebarUpgradePromoState();
+}
+
+class _SidebarUpgradePromoState extends State<_SidebarUpgradePromo> {
+  UsageSummary? _usage;
+  String? _loadedFor;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final id = Provider.of<AuthService>(context).currentUser?.id;
+    if (id == null || id == _loadedFor) return;
+    _loadedFor = id;
+    // getUsage is cached for 45s and shared with the rest of the app, so
+    // this costs nothing extra on most screens.
+    AiGradingService().getUsage(teacherId: id).then((u) {
+      if (mounted) setState(() => _usage = u);
+    }).catchError((Object e) {
+      debugPrint('Sidebar promo usage load failed: $e');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final usage = _usage;
+    final isPro = context.watch<BillingService>().isPro;
+    if (usage == null || isPro || usage.planLabel != 'Free Trial') return const SizedBox.shrink();
+
+    final used = usage.monthPct;
+    final (headline, body) = used >= 60
+        ? ('$used% of your free marking used', 'Starter marks about 200 papers a month for \$6.99.')
+        : !usage.instantMarking
+            ? ('Mark the whole class now', 'Pro marks a class set on the spot, not overnight.')
+            : ('Enjoying the free trial?', 'Pro marks about 450 papers a month.');
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(headline, style: const TextStyle(color: AiMarkerColors.boardDeep, fontSize: 14, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(body, style: TextStyle(color: AiMarkerColors.boardDeep.withValues(alpha: 0.75), fontSize: 12.5, height: 1.35)),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => context.push(AppRoutes.plans),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AiMarkerColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                child: const Text('See plans'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

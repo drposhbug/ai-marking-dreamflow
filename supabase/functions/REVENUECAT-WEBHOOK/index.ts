@@ -85,6 +85,14 @@ Deno.serve(async (req) => {
   // Anonymous RevenueCat ids belong to a device, not an account — a purchase
   // made before sign-in arrives again as TRANSFER once the teacher logs in.
   if (teacherId.startsWith("$RCAnonymousID:")) return json({ ok: true, ignored: "anonymous id" });
+  // Sandbox and Test Store purchases cost nothing, and a test_ SDK key is
+  // easy to come by, so by default they never change a real teacher's plan.
+  // Set REVENUECAT_ACCEPT_SANDBOX=true to let them through while testing.
+  const sandbox = String(event?.environment ?? "").toUpperCase() === "SANDBOX" ||
+    String(event?.store ?? "").toUpperCase() === "TEST_STORE";
+  if (sandbox && Deno.env.get("REVENUECAT_ACCEPT_SANDBOX") !== "true") {
+    return json({ ok: true, ignored: "sandbox" });
+  }
 
   let plan: string | null = null;
   if (GRANTS.includes(type)) {

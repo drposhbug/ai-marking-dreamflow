@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/widgets/bottom_nav_shell.dart';
+import 'package:provider/provider.dart';
 
 /// The desktop sidebar has to reach a screen reader.
 ///
@@ -29,7 +32,15 @@ void main() {
         ),
       ],
     );
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    // The same app-wide services main.dart provides; a signed-out teacher,
+    // so the sidebar's upgrade promo stays hidden.
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => BillingService(onWeb: false)),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsLabel('Dashboard'), findsOneWidget);

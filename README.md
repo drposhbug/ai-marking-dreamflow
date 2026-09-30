@@ -340,6 +340,7 @@ Server-side secrets (set with `npx supabase secrets set`, never in the repo):
 | `DEEPINFRA_MODEL`, `KIMI_MODEL` | Optional model id overrides |
 | `MOONSHOT_API_KEY`, `KIMI_ALLOW_MOONSHOT` | Optional. Kimi via Moonshot's own API, only when explicitly allowed |
 | `REVENUECAT_WEBHOOK_SECRET` | Must match the Authorization header configured in the RevenueCat dashboard webhook |
+| `REVENUECAT_ACCEPT_SANDBOX` | Optional. `true` lets sandbox and Test Store purchases change a plan; by default they are ignored, since test purchases are free |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Web checkout and its signed webhook |
 | `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_PRO_ANNUAL`, `STRIPE_PRICE_SCHOOL` | Stripe price ids for each tier |
 | `STRIPE_RETURN_ORIGIN` | Where Checkout sends the teacher back, e.g. `https://umarkless.com` |
