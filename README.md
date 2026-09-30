@@ -122,13 +122,18 @@ comments.
 
 The marking pipeline:
 
-- **Primary grader:** Claude Sonnet (`claude-sonnet-5`) with vision.
+- **Primary grader:** Claude Sonnet 5.5 (`claude-sonnet-5-5`) with vision and
+  adaptive thinking. Thinking depth follows the job: `low` when marking against
+  a key (the model is comparing, not deducing), `medium` for reading a key or
+  grouping pages, and `high` for keyless marking.
 - **Fallback:** Gemini 2.5 Flash (`gemini-2.5-flash`), when the primary path
   fails.
 - **Keyless marking:** with no answer key the model has to work the answers out
-  itself, so this path runs Kimi K2.6 in instant (non-thinking) mode first, at
-  temperature 0 so the same page marks the same way twice. It reads the page
-  images directly and falls back to Claude, then Gemini, on any failure.
+  itself, and those answers become the class's learned key (below). One wrong
+  answer there is thirty wrong marks, and it runs once per class set, so it
+  gets Claude at `high` effort. Kimi K2.6 instant can be put in front with
+  `KIMI_KEYLESS=true`, but stays off until it has been measured against Claude
+  on real keyless papers.
 - **Cheap objective route:** for *keyed* marking of objective questions (and
   keyless homework at grade 6 and below), Gemini transcribes the page and a
   cheaper text model (DeepSeek) marks against the key at roughly a tenth of the
@@ -335,7 +340,8 @@ Server-side secrets (set with `npx supabase secrets set`, never in the repo):
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Primary marking model and overnight batches |
 | `GEMINI_API_KEY` | Fallback marking model; page transcription for the cheap route |
-| `DEEPINFRA_API_KEY` | Optional. Serves the cheap objective route (DeepSeek) and keyless Kimi marking. Without it, that work goes to Claude |
+| `DEEPINFRA_API_KEY` | Optional. Serves the cheap objective route (DeepSeek) and, if enabled, keyless Kimi marking. Without it, that work goes to Claude |
+| `KIMI_KEYLESS` | Optional. `true` puts Kimi K2.6 ahead of Claude for keyless marking; off by default |
 | `DEEPSEEK_API_KEY` | Optional, older alternative for the cheap route, used only when `DEEPINFRA_API_KEY` is unset |
 | `DEEPINFRA_MODEL`, `KIMI_MODEL` | Optional model id overrides |
 | `MOONSHOT_API_KEY`, `KIMI_ALLOW_MOONSHOT` | Optional. Kimi via Moonshot's own API, only when explicitly allowed |

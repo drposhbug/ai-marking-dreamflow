@@ -2,7 +2,7 @@
 //
 // Grades a scanned page of student work with AI vision.
 // Primary grader: Claude (Anthropic). Fallback: Gemini (Google).
-// Keyless marking tries Kimi K2.6 on DeepInfra first when configured (see
+// Keyless marking can try Kimi K2.6 on DeepInfra first (KIMI_KEYLESS=true, see
 // kimiRoute); keyed objective work tries the cheap text route first.
 //
 // Token optimizations (all invisible to the Flutter app — response shape is unchanged):
@@ -984,6 +984,8 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
   // marking, where judgement IS the work, stays at "medium".
   effort?: "low" | "medium" | "high";
 }) {
+  // Sonnet 5.5 rejects `thinking: {type: "disabled"}`, forced tool_choice
+  // and non-default temperature; none are used here or in the batch path.
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY secret");
 
@@ -997,11 +999,7 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
 
   const anthropic = new Anthropic({ apiKey });
   const response = await anthropic.messages.create({
-    // Sonnet-class: ~5x cheaper than Opus with near-equal marking quality
-    // against an answer key — this single choice is what makes the $19.99
-    // pricing profitable. Revisit routing (cheaper objective tier, premium
-    // essay tier) when more provider keys are configured.
-    model: "claude-sonnet-5",
+    model: CLAUDE_MODEL,
     max_tokens: 16000,
     thinking: { type: "adaptive" },
     // "medium" keeps grading well inside the edge-function time limit;
@@ -1039,6 +1037,10 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
 // never gated. Checks fail OPEN: an error in metering never blocks marking.
 // Sonnet-class standard pricing (post-Sep 2026 rates, so the meter doesn't
 // under-count once the intro pricing ends).
+// Sonnet-class: much cheaper than Opus with near-equal marking quality
+// against an answer key — this single choice is what makes the plan
+// pricing profitable. Used by the live and the overnight batch paths.
+const CLAUDE_MODEL = "claude-sonnet-5-5";
 const PRICE_IN_PER_M = 3; // USD per 1M input tokens
 const PRICE_OUT_PER_M = 15; // USD per 1M output tokens
 
@@ -1502,7 +1504,9 @@ function cheapTextRoute(): { url: string; key: string; model: string; host: stri
 // project already uses there. Moonshot's own API is in the PRC and is only
 // used when KIMI_ALLOW_MOONSHOT=true is set deliberately — see
 // docs/security-and-compliance.md. Any Kimi failure falls back to Claude,
-// then Gemini, so keyless marking can only get slower, never stop.
+// then Gemini, so keyless marking can only get slower, never stop. Off unless
+// KIMI_KEYLESS=true: the keyless mark becomes the class's learned key, so
+// Kimi has to match Claude on real papers before it takes that job.
 const KIMI_PRICE_IN = 0.75; // USD per 1M input tokens (DeepInfra, 2026-09)
 const KIMI_PRICE_OUT = 3.5; // USD per 1M output tokens
 
@@ -1682,7 +1686,7 @@ function buildMarkingPrompt(p: {
   // deno-lint-ignore no-explicit-any
   answerKey: any;
   // deno-lint-ignore no-explicit-any
-}): { systemBlocks: any[]; contextText: string; schema: any; geminiPrompt: string; shape: string; effort: "low" | "medium" } {
+}): { systemBlocks: any[]; contextText: string; schema: any; geminiPrompt: string; shape: string; effort: "low" | "medium" | "high" } {
   const contextText = buildContext({
     mode: p.mode,
     maxScore: p.maxScore,
@@ -1731,7 +1735,11 @@ function buildMarkingPrompt(p: {
     shape,
     // Marking against a key is comparison, not deduction — the key already
     // holds the reasoning, so buy less thinking (thinking bills as output).
-    effort: p.answerKey ? "low" : "medium",
+    // Keyless is the opposite: this mark is where the answers get worked
+    // out, and maybeStoreLearnedKey turns them into the key the rest of
+    // the class is marked against. One wrong answer here is thirty wrong
+    // marks, and it runs once per class set, so it gets the most thinking.
+    effort: p.answerKey ? "low" : "high",
   };
 }
 
@@ -2187,7 +2195,7 @@ Deno.serve(async (req) => {
       requests.push({
         custom_id: customId,
         params: {
-          model: "claude-sonnet-5",
+          model: CLAUDE_MODEL,
           max_tokens: 16000,
           thinking: { type: "adaptive" },
           output_config: { effort: plan.effort, format: { type: "json_schema", schema: plan.schema } },
@@ -3167,9 +3175,12 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
   // Claude grades by default; Gemini is the fallback (or primary when
   // the request asks for it with "provider": "gemini").
   const preferGemini = String(payload?.provider ?? "").toLowerCase() === "gemini";
-  // Keyless marking runs on Kimi K2.6 instant first (see kimiRoute); with a
-  // key, or when Kimi is not configured, Claude leads as before.
-  const kimiFirst = !answerKey && !preferGemini && kimiRoute() !== null;
+  // Keyless marking is where the class's learned key gets solved, so Claude
+  // leads it. Kimi K2.6 instant (see kimiRoute) can be put first with
+  // KIMI_KEYLESS=true once it has been measured against Claude on real
+  // keyless papers; until then it is off.
+  const kimiFirst = !answerKey && !preferGemini && Deno.env.get("KIMI_KEYLESS") === "true" &&
+    kimiRoute() !== null;
   const attempts: Array<"kimi" | "claude" | "gemini"> = preferGemini
     ? ["gemini", "claude"]
     : (kimiFirst ? ["kimi", "claude", "gemini"] : ["claude", "gemini"]);

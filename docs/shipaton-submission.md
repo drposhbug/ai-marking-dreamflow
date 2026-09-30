@@ -188,10 +188,12 @@ capable of being fast.
 - **Identity never reaches the model.** The student name is read on the phone,
   blacked out of the image, and kept locally as the link between the result and
   the right student. Only the anonymised page is uploaded.
-- **Model routing.** Claude Sonnet for judgment, Gemini 2.5 Flash as fallback,
-  Kimi K2.6 (instant, temperature 0) first for keyless papers, and a cheap text
-  model for keyed objective questions, with any failure falling through to the
-  frontier path rather than returning a worse mark.
+- **Model routing.** Claude Sonnet 5.5 for judgment, with thinking depth set by
+  the job: low when comparing against a key, high when solving a keyless paper
+  whose answers become the key for the whole class. Gemini 2.5 Flash as
+  fallback, and a cheap text model for keyed objective questions, with any
+  failure falling through to the frontier path rather than returning a worse
+  mark.
 - **Refusing to guess.** A diagram, an unreadable page, a right answer reached
   by an unusual method, or a language comprehension paper with no key returns a
   flag for the teacher, not a fabricated score.
