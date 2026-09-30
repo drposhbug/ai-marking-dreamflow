@@ -65,7 +65,7 @@ export function Privacy() {
             <div
               className="leaves"
               role="img"
-              aria-label="Diagram of what stays on the device, what is uploaded, and what is never sent. Staying: the unaltered page, the student name, multiple-choice marking, the split of a scanned stack, and the printed stamping of test copies. Uploaded: the redacted page image, typed answers keyed by row number, marking settings, and the teacher account id used for metering. Never sent: contacts, location, the photo library beyond the pages picked, advertising identifiers, and any analytics profile."
+              aria-label="Diagram of what stays on the device, what is uploaded, and what is never sent. Staying: the unaltered page, the student name, multiple-choice marking, the split of a scanned stack, and the printed stamping of test copies. Uploaded: the redacted page image, typed answers keyed by row number, marking settings, and the teacher account id used for metering. Never sent: contacts, location, the photo library beyond the pages picked, student work, names or marks to any advertiser, and any analytics profile."
             >
               <div className="stays">
                 <h4>Stays on the device</h4>
@@ -93,7 +93,7 @@ export function Privacy() {
                   <li>Contacts</li>
                   <li>Location</li>
                   <li>Your photo library, beyond the pages you pick</li>
-                  <li>Advertising identifiers</li>
+                  <li>Student work, names or marks to any advertiser</li>
                   <li>Any analytics profile: there is no analytics SDK</li>
                 </ul>
               </div>
