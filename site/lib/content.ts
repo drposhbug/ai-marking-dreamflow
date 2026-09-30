@@ -360,7 +360,7 @@ export const PRIVACY_CLAIMS = [
   {
     title: 'Pages are not kept, and nothing is tracked',
     body:
-      'Images are marked, then discarded. No ads, no analytics, no student accounts, and deleting your account deletes everything.',
+      'Images are marked, then discarded. No analytics, no student accounts, no ads on any paid plan, and deleting your account deletes everything.',
   },
 ];
 

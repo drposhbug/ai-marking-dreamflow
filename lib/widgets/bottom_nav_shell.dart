@@ -5,6 +5,7 @@ import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/widgets/free_tier_banner_ad.dart';
 import 'package:marking_prokect_v2/widgets/responsive.dart';
 import 'package:provider/provider.dart';
 
@@ -263,33 +264,33 @@ class _SidebarItem extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Material(
-        color: selected ? Colors.white : Colors.transparent,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: InkWell(
-          onTap: onTap,
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Material(
+          color: selected ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          hoverColor: Colors.white.withValues(alpha: 0.12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            child: Row(
-              children: [
-                Icon(icon, size: 19, color: fg),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: fg, fontSize: 14, fontWeight: selected ? FontWeight.w700 : FontWeight.w600),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            hoverColor: Colors.white.withValues(alpha: 0.12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              child: Row(
+                children: [
+                  Icon(icon, size: 19, color: fg),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: fg, fontSize: 14, fontWeight: selected ? FontWeight.w700 : FontWeight.w600),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -329,6 +330,38 @@ class _SidebarUpgradePromoState extends State<_SidebarUpgradePromo> {
     });
   }
 
+  /// The phone's one-line upgrade pitch, above the bottom bar.
+  Widget _compactLine(BuildContext context, String headline) {
+    return Material(
+      color: AiMarkerColors.primary,
+      child: InkWell(
+        onTap: () => context.push(AppRoutes.plans),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              const Icon(Icons.workspace_premium_rounded, size: 18, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  headline,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w700),
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.push(AppRoutes.plans),
+                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                child: const Text('See plans'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final usage = _usage;
@@ -343,34 +376,10 @@ class _SidebarUpgradePromoState extends State<_SidebarUpgradePromo> {
             : ('Enjoying the free trial?', 'Pro marks about 450 papers a month.');
 
     if (widget.compact) {
-      return Material(
-        color: AiMarkerColors.primary,
-        child: InkWell(
-          onTap: () => context.push(AppRoutes.plans),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.workspace_premium_rounded, size: 18, color: Colors.white),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    headline,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w700),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.push(AppRoutes.plans),
-                  style: TextButton.styleFrom(foregroundColor: Colors.white),
-                  child: const Text('See plans'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+      // Free trial only: our own upgrade line, and under it a small
+      // non-personalised banner ad (see FreeTierBannerAd for what it can
+      // and cannot see). Upgrading removes both.
+      return Column(mainAxisSize: MainAxisSize.min, children: [_compactLine(context, headline), const FreeTierBannerAd()]);
     }
 
     return Padding(

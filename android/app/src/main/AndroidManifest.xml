@@ -44,6 +44,13 @@
                 <data android:scheme="com.markless.app" android:host="login-callback"/>
             </intent-filter>
         </activity>
+        <!-- AdMob app id. This is Google's public SAMPLE id, which only ever
+             serves test ads; swap in the real ca-app-pub-...~... id from the
+             AdMob console before a store release. The SDK crashes at start
+             without this entry. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
