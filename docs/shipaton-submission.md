@@ -112,11 +112,6 @@ used 40% of this month", not the unit economics.
   mark overnight. The one carve-out is deliberate — the pilot paper of every set
   marks live on every plan, free included, because approving the first result
   before the other 29 go out is a safety check, not a premium feature.
-
-  > `TODO:` the Starter card in `lib/screens/plans/plans_screen.dart` advertises
-  > "About 200 papers a month marked overnight, **or 40 on the spot**", but
-  > `INSTANT_MARKING_PLANS` on the server excludes `starter`. One of the two is
-  > wrong. Resolve before a judge or a subscriber finds it.
 - **Free on-device work.** Multiple-choice marking from a Google Form CSV, PDF
   copy stamping, stack splitting and OCR anchoring all run on the phone. Zero
   marginal cost, and stamping in particular removes the credits a mis-split
@@ -193,9 +188,10 @@ capable of being fast.
 - **Identity never reaches the model.** The student name is read on the phone,
   blacked out of the image, and kept locally as the link between the result and
   the right student. Only the anonymised page is uploaded.
-- **Model routing.** Claude Sonnet for judgment, Gemini 2.5 Flash as fallback, a
-  cheap text model for keyed objective questions, with any failure falling
-  through to the frontier path rather than returning a worse mark.
+- **Model routing.** Claude Sonnet for judgment, Gemini 2.5 Flash as fallback,
+  Kimi K2.6 (instant, temperature 0) first for keyless papers, and a cheap text
+  model for keyed objective questions, with any failure falling through to the
+  frontier path rather than returning a worse mark.
 - **Refusing to guess.** A diagram, an unreadable page, a right answer reached
   by an unusual method, or a language comprehension paper with no key returns a
   flag for the teacher, not a fabricated score.
@@ -210,9 +206,13 @@ the edge function at all. So anything the app is allowed to send, a teacher can
 send by hand with `curl`. If plan assignment were a client request, every
 teacher would have a free School plan the day the app went public.
 
-`profiles.plan` therefore has exactly one writer: the `REVENUECAT-WEBHOOK` edge
-function, which RevenueCat calls only after validating the receipt with Google
-or Apple. It authenticates with a shared secret, maps grant and revoke events to
+`profiles.plan` is therefore written only by two server-side webhooks, through
+one SQL function (`apply_entitlement`): `REVENUECAT-WEBHOOK`, which RevenueCat
+calls only after validating the receipt with Google or Apple, and
+`STRIPE-WEBHOOK` for web purchases, which checks Stripe's signature first. Each
+writes its own rail and the plan is the better of the two, so a teacher has one
+subscription whether they bought it on a phone or in a browser. The RevenueCat
+webhook authenticates with a shared secret, maps grant and revoke events to
 plan rows with loose product-id matching, ignores anonymous app user ids, and
 writes with the service role key that never leaves the server.
 
@@ -308,12 +308,11 @@ Beats worth telling, each of which is a real commit:
 
 ## OneSignal — "Keep Them Coming Back"
 
-> **In progress, not shipped.** `REMAINING.md` R7 is unchecked. The
-> `onesignal_flutter` dependency has just been added to `pubspec.yaml`, but the
-> send paths are not finished and every "notification" in the app today is still
-> an in-app SnackBar. This section describes the intended integration and must
-> be rewritten in the past tense — or dropped — depending on what actually ships
-> by the deadline.
+> **Client done, server not deployed.** The app side is wired
+> (`lib/services/push_service.dart`: OneSignal init, login with the teacher id,
+> permission asked after the first batch is queued, deep links). The send side,
+> `OVERNIGHT-SWEEPER`, is written but not deployed (R7.3), so no push has been
+> delivered yet. Describe it as built-but-not-live, or drop this section.
 
 The product gap comes first and the prize second. Overnight marking is the
 flagship feature and the whole point of it is that the teacher closes the app
@@ -347,14 +346,14 @@ toggle; and nothing fires for a teacher who has never queued a batch.
 | Asset | Spec | Status |
 | --- | --- | --- |
 | Demo video | ~2 minutes | `TODO:` not recorded (R5.1) |
-| App icon | 1024×1024 | `assets/icons/markless_icon_1024.png` exists; `TODO:` confirm it is the final art and that `pubspec.yaml`'s `flutter_launcher_icons.image_path` points at it, not at `dreamflow_icon.jpg` (R4.3) |
+| App icon | 1024×1024 | Done: `pubspec.yaml` points `flutter_launcher_icons` at `assets/icons/markless_icon.png` (R4.3) |
 | Screenshot | 1179×2556 | `TODO:` not produced (R4.6) |
 | Judge access | Promo code or free trial | `TODO:` decide which; a promo code needs the app live on a store track |
 | App store URL | Play listing | `TODO:` blocked on R4.7–R4.12 |
 | Public repo | MIT licensed | Licence added; `TODO:` flip the repo to public (R8.2) |
-| Website URL | Public | `docs/index.html` is the landing page, at `https://drposhbug.github.io/ai-marking-dreamflow/`; `TODO:` switch on GitHub Pages (see `docs/README.md`) |
-| Privacy policy URL | Public | `docs/privacy.html`, at `https://drposhbug.github.io/ai-marking-dreamflow/privacy.html`; `TODO:` switch on GitHub Pages (see `docs/README.md`) |
-| Account deletion URL | Public, no login | `docs/delete-account.html`, at `https://drposhbug.github.io/ai-marking-dreamflow/delete-account.html`; `TODO:` fill in its retention and turnaround markers before Play submission |
+| Website URL | Public | Live: https://umarkless.com (Vercel) |
+| Privacy policy URL | Public | Live: https://umarkless.com/privacy.html |
+| Account deletion URL | Public, no login | Live: https://umarkless.com/delete-account.html; `TODO:` fill in its retention and turnaround markers before Play submission |
 | Student evidence | For Next Gen | `TODO:` .edu email or enrolment letter (R8.4) |
 | Build-in-public post links | | `TODO:` collect (R5.3) |
 

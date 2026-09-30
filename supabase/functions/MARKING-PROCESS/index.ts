@@ -2,6 +2,8 @@
 //
 // Grades a scanned page of student work with AI vision.
 // Primary grader: Claude (Anthropic). Fallback: Gemini (Google).
+// Keyless marking tries Kimi K2.6 on DeepInfra first when configured (see
+// kimiRoute); keyed objective work tries the cheap text route first.
 //
 // Token optimizations (all invisible to the Flutter app — response shape is unchanged):
 //   1. Feedback banks — the model returns short codes ("#5", "#1 algebra") that
@@ -24,10 +26,13 @@
 // Secrets required (Dashboard → Edge Functions → Secrets, or `npx supabase secrets set`):
 //   ANTHROPIC_API_KEY  — from https://platform.claude.com
 //   GEMINI_API_KEY     — from https://aistudio.google.com/apikey
-//   DEEPSEEK_API_KEY   — optional, from https://platform.deepseek.com/api_keys.
-//                         Without it, keyed homework/test marking silently
-//                         skips the cheap objective route (see "Cheap objective
-//                         route" below) and pays frontier prices instead.
+//   DEEPINFRA_API_KEY  — optional, from https://deepinfra.com. Serves both the
+//                         cheap objective route (DeepSeek) and keyless Kimi
+//                         marking from US data centres. DEEPSEEK_API_KEY is the
+//                         older alternative for the cheap route. Without either,
+//                         keyed homework/test marking skips the cheap objective
+//                         route (see "Cheap objective route" below) and pays
+//                         frontier prices instead.
 //
 // Run SETUP-DB once after deploying to create the grade_cache table.
 //
@@ -1800,7 +1805,8 @@ Deno.serve(async (req) => {
     // `plan` is deliberately NOT writable here. The anon key ships inside
     // the APK, so anything this endpoint accepts, any teacher can set for
     // themselves — a whitelist only limited them to picking "pro". Plans are
-    // written by the REVENUECAT-WEBHOOK function against a store receipt.
+    // written only by the REVENUECAT-WEBHOOK and STRIPE-WEBHOOK functions,
+    // against a verified purchase, through apply_entitlement (see SETUP-DB).
     // Marking defaults set in Settings, so they follow the account.
     if (payload?.defaultMode != null) row.default_mode = String(payload.defaultMode).slice(0, 40);
     if (payload?.defaultHarshness != null) {
