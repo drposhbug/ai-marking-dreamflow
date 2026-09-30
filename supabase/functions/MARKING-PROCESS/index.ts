@@ -1461,8 +1461,10 @@ function gradeShape(includeTranscription: boolean): string {
 // ---------- DeepSeek (cheap text-only grader for the objective route) ----------
 // OpenAI-compatible API. Text-only: it grades TRANSCRIPTS, never images —
 // a vision parse pass supplies what the student wrote.
-const DEEPSEEK_PRICE_IN = 0.14; // USD per 1M input tokens
-const DEEPSEEK_PRICE_OUT = 0.28; // USD per 1M output tokens
+// DeepSeek-V4.1-Flash on DeepInfra (2026-09). The direct DeepSeek API is
+// cheaper, so metering at these rates is conservative on either host.
+const DEEPSEEK_PRICE_IN = 0.2; // USD per 1M input tokens
+const DEEPSEEK_PRICE_OUT = 0.6; // USD per 1M output tokens
 const GEMINI_PARSE_PRICE_IN = 1.5;
 const GEMINI_PARSE_PRICE_OUT = 9.0;
 
@@ -1481,7 +1483,7 @@ function cheapTextRoute(): { url: string; key: string; model: string; host: stri
     return {
       url: "https://api.deepinfra.com/v1/openai/chat/completions",
       key: di,
-      model: Deno.env.get("DEEPINFRA_MODEL") ?? "deepseek-ai/DeepSeek-V4-Flash",
+      model: Deno.env.get("DEEPINFRA_MODEL") ?? "deepseek-ai/DeepSeek-V4.1-Flash",
       host: "deepinfra",
     };
   }
