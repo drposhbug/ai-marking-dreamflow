@@ -396,6 +396,8 @@ umarkless.com.
 
 ## Documentation
 
+- [`docs/BUILD-LOG.md`](docs/BUILD-LOG.md) — how it was built: a guided tour of
+  the commit history, phase by phase
 - `docs/privacy-policy.md` — privacy policy (rendered for hosting as
   `docs/index.html`)
 - `docs/security-and-compliance.md` — what leaves the device, subprocessors,
