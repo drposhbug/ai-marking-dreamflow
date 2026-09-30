@@ -85,17 +85,23 @@ class BottomNavShell extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       body: shell,
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(color: Theme.of(context).cardColor, border: Border(top: BorderSide(color: cs.outline.withValues(alpha: 0.35), width: 1))),
-        padding: const EdgeInsets.only(top: 6),
-        child: NavigationBar(
-          selectedIndex: shell.currentIndex,
-          onDestinationSelected: _go,
-          destinations: [
-            for (final d in _destinations)
-              NavigationDestination(icon: Icon(d.icon, color: AiMarkerColors.neutral), selectedIcon: Icon(d.icon), label: d.label),
-          ],
-        ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _SidebarUpgradePromo(compact: true),
+          Container(
+            decoration: BoxDecoration(color: Theme.of(context).cardColor, border: Border(top: BorderSide(color: cs.outline.withValues(alpha: 0.35), width: 1))),
+            padding: const EdgeInsets.only(top: 6),
+            child: NavigationBar(
+              selectedIndex: shell.currentIndex,
+              onDestinationSelected: _go,
+              destinations: [
+                for (final d in _destinations)
+                  NavigationDestination(icon: Icon(d.icon, color: AiMarkerColors.neutral), selectedIcon: Icon(d.icon), label: d.label),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -293,8 +299,12 @@ class _SidebarItem extends StatelessWidget {
 /// teachers and nobody else. No ad network — teachers upload students' work,
 /// and a third-party tracker in the same window would undo the promise that
 /// student identity never leaves the device. Paying teachers never see it.
+///
+/// [compact] is the phone's version: one slim line above the bottom bar,
+/// because the sidebar card only exists on wide screens.
 class _SidebarUpgradePromo extends StatefulWidget {
-  const _SidebarUpgradePromo();
+  final bool compact;
+  const _SidebarUpgradePromo({this.compact = false});
 
   @override
   State<_SidebarUpgradePromo> createState() => _SidebarUpgradePromoState();
@@ -331,6 +341,37 @@ class _SidebarUpgradePromoState extends State<_SidebarUpgradePromo> {
         : !usage.instantMarking
             ? ('Mark the whole class now', 'Pro marks a class set on the spot, not overnight.')
             : ('Enjoying the free trial?', 'Pro marks about 450 papers a month.');
+
+    if (widget.compact) {
+      return Material(
+        color: AiMarkerColors.primary,
+        child: InkWell(
+          onTap: () => context.push(AppRoutes.plans),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.workspace_premium_rounded, size: 18, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    headline,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.push(AppRoutes.plans),
+                  style: TextButton.styleFrom(foregroundColor: Colors.white),
+                  child: const Text('See plans'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
