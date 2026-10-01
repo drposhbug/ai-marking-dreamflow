@@ -1488,13 +1488,20 @@ class _AnnotatedImageState extends State<_AnnotatedImage> {
           }),
           // Marks-bearing questions keep the box on the wrong answer itself.
           // Teacher-only "?" questions get amber (check it), not red (wrong).
-          ...scored.where((a) => !a.correct).map((a) => Positioned(
-                left: (px(a.positionLeft) - 46).clamp(pageX, pageX + pageW - 92),
-                top: (py(a.positionTop) - 17).clamp(pageY, pageY + pageH - 34),
+          // A teacher-only question is nearly always a drawing (a diagram, a
+          // graph), so its box is drawing-sized and centred on it rather
+          // than a word-sized box beside it.
+          ...scored.where((a) => !a.correct).map((a) {
+            final drawing = _isTeacherOnly(a);
+            final bw = drawing ? pageW * 0.46 : 92.0;
+            final bh = drawing ? pageW * 0.40 : 34.0;
+            return Positioned(
+                left: (px(a.positionLeft) - bw / 2).clamp(pageX, pageX + pageW - bw),
+                top: (py(a.positionTop) - bh / 2).clamp(pageY, pageY + pageH - bh),
                 child: IgnorePointer(
                   child: Container(
-                    width: 92,
-                    height: 34,
+                    width: bw,
+                    height: bh,
                     decoration: BoxDecoration(
                       color: tone(a).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
@@ -1502,7 +1509,8 @@ class _AnnotatedImageState extends State<_AnnotatedImage> {
                     ),
                   ),
                 ),
-              )),
+              );
+          }),
           // One slot per question: mark chip, then the tiny label bubble.
           ...sorted.map((a) {
             final hasBubble = noteOf(a).isNotEmpty;
