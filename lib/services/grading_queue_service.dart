@@ -142,7 +142,7 @@ class GradingQueueService extends ChangeNotifier {
       createdAt: DateTime.now(),
       pages: pages,
       req: req,
-      label: (label != null && label.trim().isNotEmpty) ? label : _timeLabel(DateTime.now()),
+      label: (label != null && label.trim().isNotEmpty && !_isFileName(label)) ? label : _timeLabel(DateTime.now()),
     );
     job.notifyLearnedKey = notifyLearnedKey;
     job.namesCoveredAlready = namesCoveredAlready;
@@ -152,6 +152,10 @@ class GradingQueueService extends ChangeNotifier {
     return job;
 
   }
+  /// A picked file's name ("scaled_1000000078.png") is not a label a
+  /// teacher can use; the name read off the paper, or a time, replaces it.
+  static bool _isFileName(String s) => RegExp(r'\.(png|jpe?g|heic|webp|pdf)$', caseSensitive: false).hasMatch(s.trim());
+
   /// Default job label when the teacher has not named the paper.
   String _timeLabel(DateTime t) {
     final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
@@ -216,7 +220,7 @@ class GradingQueueService extends ChangeNotifier {
         createdAt: DateTime.now(),
         pages: pagesList[i],
         req: reqs[i],
-        label: (labels[i] ?? '').trim().isNotEmpty ? labels[i]! : 'Paper ${i + 1}',
+        label: ((labels[i] ?? '').trim().isNotEmpty && !_isFileName(labels[i]!)) ? labels[i]! : 'Paper ${i + 1}',
         status: GradingJobStatus.held,
       );
       held.add(job);
@@ -438,7 +442,7 @@ class GradingQueueService extends ChangeNotifier {
           if (matches.length > 1) break; // ambiguous — leave for the teacher
         }
       }
-      if (paperName.isNotEmpty && (job.label.startsWith('Scan') || job.label.isEmpty)) {
+      if (paperName.isNotEmpty && (job.label.startsWith('Scan') || job.label.startsWith('Paper ') || job.label.isEmpty || _isFileName(job.label))) {
         job.label = paperName;
       }
 

@@ -500,6 +500,14 @@ class _ScoreCard extends StatelessWidget {
   final GradingJob job;
   const _ScoreCard({required this.job});
 
+  static String _who(GradingJob job, AiGradeResult res) {
+    final onPaper = (res.studentNameOnPaper ?? '').trim();
+    if (onPaper.isNotEmpty) return onPaper;
+    final label = job.label.trim();
+    final looksLikeFile = RegExp(r'\.(png|jpe?g|heic|webp|pdf)$', caseSensitive: false).hasMatch(label);
+    return (label.isEmpty || looksLikeFile) ? 'First paper' : label;
+  }
+
   @override
   Widget build(BuildContext context) {
     final res = job.result!;
@@ -510,13 +518,13 @@ class _ScoreCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(child: Text(job.label, style: Theme.of(context).textTheme.titleMedium)),
-                Text(res.primaryDisplay,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: cs.primary)),
-              ],
-            ),
+            // The label is the picked file's name when a teacher pulls papers
+            // from the gallery ("scaled_1000000078.png"), which means nothing
+            // to her; the name read off the paper does.
+            Text(_who(job, res), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(res.primaryDisplay,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: cs.primary)),
             const SizedBox(height: 2),
             Text('${_PilotReviewScreenState._n(res.rawScore)} out of ${_PilotReviewScreenState._n(res.maxScore)}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral)),
