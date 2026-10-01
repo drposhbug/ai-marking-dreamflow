@@ -502,7 +502,9 @@ class _ScoreCard extends StatelessWidget {
 
   static String _who(GradingJob job, AiGradeResult res) {
     final onPaper = (res.studentNameOnPaper ?? '').trim();
-    if (onPaper.isNotEmpty) return onPaper;
+    // "student", "fictional student", "name": words off the page, not a name.
+    final generic = RegExp(r'^(the\s+)?(fictional\s+|sample\s+)?(student|name|pupil)$', caseSensitive: false).hasMatch(onPaper);
+    if (onPaper.isNotEmpty && !generic) return onPaper;
     final label = job.label.trim();
     final looksLikeFile = RegExp(r'\.(png|jpe?g|heic|webp|pdf)$', caseSensitive: false).hasMatch(label);
     return (label.isEmpty || looksLikeFile) ? 'First paper' : label;
