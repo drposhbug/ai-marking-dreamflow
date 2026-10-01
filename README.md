@@ -499,14 +499,17 @@ umarkless.com.
 
 **Not done yet:**
 
-- RevenueCat products are not created in the dashboard, so no Offering exists
-  and store billing is inert in every current build. The code paths are
-  written and the webhook is deployed; the purchase flow has not been
-  exercised end to end.
+- Subscriptions are configured in RevenueCat and tested in sandbox; the Google
+  Play release is pending store approval. The Plans screen reads its tiers
+  and prices from the current RevenueCat Offering, and debug builds buy
+  through RevenueCat's Test Store (a `test_` SDK key). The webhook ignores
+  Test Store and sandbox purchases unless `REVENUECAT_ACCEPT_SANDBOX=true`, so
+  a test purchase unlocks Pro in the app without changing the server-side
+  plan. Real Google Play billing uses the `goog_` key in a release build and
+  goes live with the Play release.
 - Stripe web checkout is complete in code but waits on live Stripe keys and
   price ids.
-- No app store release. Play Console listing, declarations and signed release
-  build are outstanding.
+- No App Store release yet; the iOS build is not working (see [iOS](#ios)).
 - Push notifications are wired in the app, but the server half that sends
   "your class set is marked", `OVERNIGHT-SWEEPER`, is not deployed yet, so
   overnight marking still needs the app reopened to see that it finished.
