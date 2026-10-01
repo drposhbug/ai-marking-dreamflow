@@ -21,7 +21,7 @@ actually read it. The teacher overrides anything they disagree with. Marks leave
 as a gradebook CSV or a Google Doc in Drive. Student names are read and blacked
 out on the device, so the marking model never learns whose paper it is.
 
-Repo: https://github.com/drposhbug/ai-marking-dreamflow (MIT)
+Repo: https://github.com/drposhbug/ai-marking-dreamflow (AGPL-3.0)
 
 `TODO:` demo video URL
 `TODO:` app store URL (see the asset checklist at the bottom)
@@ -352,7 +352,7 @@ toggle; and nothing fires for a teacher who has never queued a batch.
 | Screenshot | 1179×2556 | `TODO:` not produced (R4.6) |
 | Judge access | Promo code or free trial | `TODO:` decide which; a promo code needs the app live on a store track |
 | App store URL | Play listing | `TODO:` blocked on R4.7–R4.12 |
-| Public repo | MIT licensed | Licence added; `TODO:` flip the repo to public (R8.2) |
+| Public repo | AGPL-3.0 licensed | Public, licence in LICENSE |
 | Website URL | Public | Live: https://umarkless.com (Vercel) |
 | Privacy policy URL | Public | Live: https://umarkless.com/privacy.html |
 | Account deletion URL | Public, no login | Live: https://umarkless.com/delete-account.html; `TODO:` fill in its retention and turnaround markers before Play submission |

@@ -412,4 +412,4 @@ umarkless.com.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GNU Affero General Public License v3.0 (AGPL-3.0) — see [LICENSE](LICENSE). Anyone who runs a modified version as a service must publish their source too.
