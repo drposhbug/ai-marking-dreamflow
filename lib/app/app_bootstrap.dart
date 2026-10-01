@@ -14,6 +14,8 @@ import 'package:marking_prokect_v2/services/presets_service.dart';
 import 'package:marking_prokect_v2/services/push_service.dart';
 import 'package:marking_prokect_v2/services/student_class_links_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
+import 'package:marking_prokect_v2/services/grading_queue_service.dart';
+import 'package:marking_prokect_v2/services/guest_samples.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/services/supabase_hook.dart';
 import 'package:marking_prokect_v2/theme.dart';
@@ -215,6 +217,19 @@ class _AppBootstrapState extends State<AppBootstrap> {
       presetIds: presets.presets.map((e) => e.id).toList(),
     );
     if (!mounted) return;
+
+    // A guest's first visit: a sample class and three real marked papers,
+    // so the app shows what it does instead of three empty lists. Runs once
+    // per guest account; not awaited, the marking arrives in the tray.
+    if (context.read<AuthService>().isGuest && submissions.submissions.isEmpty) {
+      GuestSamples.seed(
+        teacherId: userId,
+        classes: classes,
+        students: students,
+        submissions: submissions,
+        queue: context.read<GradingQueueService>(),
+      );
+    }
 
     // Overnight marking that finished while the app was closed gets filed
     // now — this is the "wake up to marked papers" half of the feature.
