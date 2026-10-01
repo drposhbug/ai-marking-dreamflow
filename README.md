@@ -115,7 +115,8 @@ API keys for any AI provider — every model call is made server-side.
 
 The web build is the same app. Where a browser cannot do what the phone does
 (ML Kit, the native purchase sheet), it falls back: Tesseract and pdf.js for
-reading pages, and Stripe Checkout instead of the store for buying a plan. The
+reading pages. Buying a plan in a browser uses an experimental Stripe Checkout,
+which is switched off, so for now plans are bought in the mobile app. The
 marketing site in `site/` is a separate Next.js static export.
 
 ### MARKING-PROCESS
@@ -202,6 +203,8 @@ Subscriptions run through RevenueCat (`purchases_flutter` /
 | Webhook: the only path that grants or revokes a plan, via `apply_entitlement` | [`REVENUECAT-WEBHOOK`](supabase/functions/REVENUECAT-WEBHOOK/index.ts) |
 | Test purchases are ignored: events from the `SANDBOX` environment or the `TEST_STORE` are acknowledged without changing a plan, unless `REVENUECAT_ACCEPT_SANDBOX=true` | [`REVENUECAT-WEBHOOK/index.ts#L91`](supabase/functions/REVENUECAT-WEBHOOK/index.ts#L91) |
 
+All subscriptions in the mobile app run through RevenueCat. The repo also contains an experimental Stripe checkout for the web version, which is switched off; the plan is to move web payments to RevenueCat Web Billing so every subscription lives in RevenueCat.
+
 ### Offerings drive pricing, so prices change without an app update
 
 The app hard-codes no prices. `BillingService.loadOfferings()` pulls the current
@@ -224,8 +227,11 @@ but not yet shown from any screen; the Plans screen is the purchase surface.
 
 ### One subscription, two shops
 
-A teacher who marks on a laptop should not need a phone to pay. In a browser,
-the Plans screen sends them to a hosted Stripe Checkout
+*Experimental, and switched off: no Stripe keys are set, so web checkout is
+unavailable. Web payments are planned to move to RevenueCat Web Billing.*
+
+The design: a teacher who marks on a laptop should not need a phone to pay. In
+a browser, the Plans screen would send them to a hosted Stripe Checkout
 (`BillingService.startWebCheckout` → `STRIPE-CHECKOUT`); on Android and iOS it
 uses the store through RevenueCat. Either way it is one plan on one account:
 each webhook records its own rail (`plan_revenuecat`, `plan_stripe`) and the
@@ -507,8 +513,9 @@ umarkless.com.
   a test purchase unlocks Pro in the app without changing the server-side
   plan. Real Google Play billing uses the `goog_` key in a release build and
   goes live with the Play release.
-- Stripe web checkout is complete in code but waits on live Stripe keys and
-  price ids.
+- The experimental Stripe checkout for the web version is switched off (no
+  Stripe keys are set). Web payments are planned to move to RevenueCat Web
+  Billing.
 - No App Store release yet; the iOS build is not working (see [iOS](#ios)).
 - Push notifications are wired in the app, but the server half that sends
   "your class set is marked", `OVERNIGHT-SWEEPER`, is not deployed yet, so
@@ -527,6 +534,19 @@ umarkless.com.
 - `docs/store-listing.md` — store listing copy
 - `docs/stripe-web-billing.md` — web checkout setup
 - `docs/vercel-hosting.md` — how umarkless.com is built and served
+
+## Development timeline
+
+- **Jun 26, 2026:** First version of the app, built in Dreamflow.
+- **Jun 30:** Live camera scanning, and the first edge function that marks a paper with AI.
+- **Jul 25–28:** Multi-page scanning, answer keys saved to the cloud, and real accounts with Google and Apple sign-in.
+- **Aug 4:** Cost routing (cheaper models mark objective questions, with Claude as the fallback), spending caps per plan, and Google Drive export with optional auto-save.
+- **Aug 5–6:** RevenueCat added, PDF batches marked in one go, answer keys learned from the first paper, and mistakes pinned to the exact words with on-device text recognition.
+- **Aug 16:** Release groundwork: app signing, account deletion, and plans that only the server can change.
+- **Aug 24–27:** The four ways to mark: Google Form or CSV import, splitting a photocopier scan into papers, overnight batches, and printed copies stamped with a code for each student.
+- **Aug 30:** A website, and the same app running in a browser.
+- **Sep 21–25:** The rename to UMarkless at umarkless.com, and groundwork for paying from the web version.
+- **Sep 30 – Oct 1:** RevenueCat Test Store purchases, a guest mode with sample papers for judges, the AGPL-3.0 license, and a security review before the public release.
 
 ## Project history
 
