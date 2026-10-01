@@ -132,6 +132,35 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// The display address a guest account carries. Never a real mailbox.
+  static const guestEmail = 'guest@umarkless.com';
+
+  bool get isGuest => _currentUser?.email == guestEmail;
+
+  /// "Try as a guest", for judges and anyone curious: a real Supabase
+  /// account with no email or password (anonymous sign-in), so marking,
+  /// the meter and the free-trial cap all work exactly as for a teacher
+  /// who signed up. Each guest is their own account and starts on the
+  /// free trial; signing out of one throws it away.
+  Future<void> signInAsGuest() async {
+    final client = _supabase;
+    if (client == null) throw Exception('Guest mode needs an internet connection.');
+    try {
+      final res = await client.auth.signInAnonymously();
+      final u = res.user;
+      if (u == null) throw Exception('Couldn\'t start a guest session — try again.');
+      await _setUser(id: u.id, email: guestEmail);
+    } on AuthException catch (e) {
+      if (e.message.toLowerCase().contains('anonymous')) {
+        throw Exception('Guest access is switched off right now. Create a free account instead.');
+      }
+      throw Exception(_friendlyAuthError(e));
+    } catch (e) {
+      if (_looksOffline(e)) throw Exception('Can\'t reach the server — check your internet connection and try again.');
+      rethrow;
+    }
+  }
+
   /// Real sign-up: creates the account (password stored by Supabase Auth).
   Future<void> createAccount({required String email, required String password}) async {
     final client = _supabase;
@@ -289,7 +318,7 @@ class AuthService extends ChangeNotifier {
     if (u == null) return false;
     await DriveService.persistSessionToken();
     if (_currentUser?.id != u.id) {
-      await _setUser(id: u.id, email: u.email ?? '');
+      await _setUser(id: u.id, email: u.isAnonymous ? guestEmail : (u.email ?? ''));
     }
     return true;
   }

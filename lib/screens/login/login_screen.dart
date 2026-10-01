@@ -287,6 +287,41 @@ class _LoginScreenState extends State<LoginScreen> {
     return ok == true;
   }
 
+  /// "Try as a guest": straight to the home screen on a real free-trial
+  /// account, with the setup questions answered for them. Judges and the
+  /// curious shouldn't have to make an account to see a paper marked.
+  Future<void> _guest() async {
+    setState(() => _loading = true);
+    try {
+      final auth = context.read<AuthService>();
+      await auth.signInAsGuest();
+      if (!mounted) return;
+      final user = auth.currentUser;
+      if (user != null) {
+        await const LocalStore().setString(OnboardingScreen.doneKey(user.id), '1');
+        if (!mounted) return;
+        final app = context.read<AppState>();
+        if (app.region.isEmpty) await app.setRegion(teacherId: user.id, regionId: 'ca-on');
+        if (!mounted) return;
+        if (app.school.isEmpty) await app.setSchool(teacherId: user.id, school: 'Guest School');
+        await auth.updateProfile(name: 'Guest', school: 'Guest School');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      if (context.read<AuthService>().currentUser == null) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+        return;
+      }
+      // Signed in, only the profile write failed: carry on into the app.
+      debugPrint('Guest profile setup failed (continuing anyway): $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    if (context.read<AuthService>().currentUser != null) context.go(AppRoutes.grading);
+  }
+
   Future<void> _devMode() async {
     if (!await _askDevPin()) return;
     if (!mounted) return;
@@ -651,7 +686,18 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ],
-      SizedBox(height: _at(20, 38, grow)),
+      const SizedBox(height: 12),
+      // Every build, web included: this is how a judge or a curious
+      // teacher sees a paper marked without making an account.
+      SizedBox(
+        width: double.infinity,
+        child: TextButton.icon(
+          onPressed: _loading ? null : _guest,
+          icon: const Icon(Icons.visibility_outlined, size: 18),
+          label: const Text('Just looking? Try it as a guest'),
+        ),
+      ),
+      SizedBox(height: _at(12, 26, grow)),
       Text(
         'Signing in with the same account always brings back your name, school, and marking preferences.',
         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),

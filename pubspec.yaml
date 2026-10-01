@@ -49,6 +49,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Sample papers a guest can mark straight away (fictional students).
+  assets:
+    - assets/samples/
 
 flutter_launcher_icons:
   android: true

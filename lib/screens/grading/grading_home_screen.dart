@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1216,11 +1217,73 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   Widget _desk(BuildContext context, GradingQueueService queue, TeacherClass? selectedClass) {
     final r = _routes(context);
     final w = _workInProgress(context, queue, selectedClass);
+    final s = _guestSamples(context);
     return DeskColumns(
-      start: [...r.start, ...w.start],
+      start: [...s, ...r.start, ...w.start],
       rest: [...r.rest, ...w.rest],
-      stacked: [...r.stacked, ...w.stacked],
+      stacked: [...s, ...r.stacked, ...w.stacked],
     );
+  }
+
+  /// Papers a guest can mark without bringing their own: three fictional
+  /// students, each with a couple of real mistakes for the marking to find.
+  static const _samples = [
+    ('Grade 9 Math', 'Linear equations quiz', 'assets/samples/grade9-math-quiz.png'),
+    ('Grade 10 History', 'The 1920s, short answer', 'assets/samples/grade10-history.png'),
+    ('Grade 11 Chemistry', 'Reaction rates lab', 'assets/samples/grade11-chemistry.png'),
+  ];
+
+  /// Guests only: the quickest way to see what the app does is to watch it
+  /// mark a paper, so the first thing a guest sees is a paper to mark.
+  List<Widget> _guestSamples(BuildContext context) {
+    if (!context.watch<AuthService>().isGuest) return const [];
+    final theme = Theme.of(context);
+    return [
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Try a sample paper', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 4),
+              Text(
+                'Real student-style work with real mistakes. Pick one and watch it get marked, question by question.',
+                style: theme.textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral),
+              ),
+              const SizedBox(height: 10),
+              for (final (subject, title, asset) in _samples)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: const Icon(Icons.description_outlined),
+                  title: Text(subject),
+                  subtitle: Text(title),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => _markSample(asset, title),
+                ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 14),
+    ];
+  }
+
+  Future<void> _markSample(String asset, String title) async {
+    try {
+      final data = await rootBundle.load(asset);
+      final bytes = data.buffer.asUint8List();
+      if (!mounted) return;
+      final name = '${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}.png';
+      // Already a flat, upright page, so it skips the camera clean-up pass.
+      context.read<AppState>().setImageBytes(bytes: bytes, fileName: name);
+      context.push(AppRoutes.gradingContext, extra: {'imageBytes': bytes, 'fileName': name});
+    } catch (e) {
+      debugPrint('Sample paper failed to load: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open the sample paper.')));
+    }
   }
 
   @override
