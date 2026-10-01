@@ -132,7 +132,7 @@ TextStyle markStyle(BuildContext context, {required double size, required Color 
   );
 }
 
-/// The app's mark: a sheet with a margin rule and a tick on it.
+/// The app's mark: a sheet with a tick on it.
 class MarklessMark extends StatelessWidget {
   final double size;
 
@@ -149,21 +149,7 @@ class MarklessMark extends StatelessWidget {
         borderRadius: BorderRadius.circular(3),
         border: Border.all(color: tones.rule),
       ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: size * 0.2,
-            top: 0,
-            bottom: 0,
-            width: 1,
-            child: ColoredBox(color: tones.pen.withValues(alpha: 0.55)),
-          ),
-          Padding(
-            padding: EdgeInsets.only(left: size * 0.2),
-            child: Center(child: Icon(Icons.check_rounded, size: size * 0.46, color: tones.tick)),
-          ),
-        ],
-      ),
+      child: Center(child: Icon(Icons.check_rounded, size: size * 0.5, color: tones.tick)),
     );
   }
 }
