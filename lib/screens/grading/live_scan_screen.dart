@@ -62,6 +62,13 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
   bool _notAPage = false;
   bool _cutOff = false;
 
+  /// The page's four corners as last seen in the live preview, in display
+  /// coordinates (0..1, portrait), [topLeft, topRight, bottomRight,
+  /// bottomLeft]; null when no page is in view. Drawn as a border so the
+  /// teacher can see the scanner has found the edges before it shoots.
+  List<Offset>? _pageQuad;
+  int _quadFrame = 0;
+
   // Straightening runs in the background so the teacher can swap to the
   // next page immediately instead of holding the pose while it processes.
   int _processingCount = 0;
@@ -362,6 +369,94 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
     return sum / cur.length;
   }
 
+  /// Finds the page in a live frame: Otsu-threshold the brightness plane on
+  /// a coarse grid, take the largest bright connected region as the paper,
+  /// and its extreme points as the corners. Same idea as the still-photo
+  /// straightening in DocumentProcessor, cut down to run every frame.
+  /// Returns display-space corners (portrait, 0..1) or null.
+  List<Offset>? _detectPageQuad(CameraImage image) {
+    final plane = image.planes[0];
+    final bytes = plane.bytes;
+    final stride = plane.bytesPerRow;
+    final iw = image.width, ih = image.height;
+    const gw = 72;
+    final gh = (gw * ih / iw).round().clamp(8, 200);
+    final n = gw * gh;
+    final luma = Uint8List(n);
+    final hist = List<int>.filled(256, 0);
+    for (var gy = 0; gy < gh; gy++) {
+      final y = (gy * ih) ~/ gh;
+      for (var gx = 0; gx < gw; gx++) {
+        final x = (gx * iw) ~/ gw;
+        final idx = y * stride + x;
+        final v = idx < bytes.length ? bytes[idx] : 0;
+        luma[gy * gw + gx] = v;
+        hist[v]++;
+      }
+    }
+    // Otsu: the split that best separates paper from background.
+    var sumAll = 0.0;
+    for (var t = 0; t < 256; t++) {
+      sumAll += t * hist[t];
+    }
+    var sumB = 0.0, wB = 0, best = 0.0, thr = 128;
+    for (var t = 0; t < 256; t++) {
+      wB += hist[t];
+      if (wB == 0) continue;
+      final wF = n - wB;
+      if (wF == 0) break;
+      sumB += t * hist[t];
+      final mB = sumB / wB, mF = (sumAll - sumB) / wF;
+      final between = wB * wF * (mB - mF) * (mB - mF);
+      if (between > best) {
+        best = between;
+        thr = t;
+      }
+    }
+    // Largest bright connected region.
+    final seen = Uint8List(n);
+    var bestCells = <int>[];
+    final stack = <int>[];
+    for (var s = 0; s < n; s++) {
+      if (seen[s] != 0 || luma[s] <= thr) continue;
+      final cells = <int>[];
+      seen[s] = 1;
+      stack.add(s);
+      while (stack.isNotEmpty) {
+        final c = stack.removeLast();
+        cells.add(c);
+        final cx = c % gw, cy = c ~/ gw;
+        if (cx > 0 && seen[c - 1] == 0 && luma[c - 1] > thr) { seen[c - 1] = 1; stack.add(c - 1); }
+        if (cx < gw - 1 && seen[c + 1] == 0 && luma[c + 1] > thr) { seen[c + 1] = 1; stack.add(c + 1); }
+        if (cy > 0 && seen[c - gw] == 0 && luma[c - gw] > thr) { seen[c - gw] = 1; stack.add(c - gw); }
+        if (cy < gh - 1 && seen[c + gw] == 0 && luma[c + gw] > thr) { seen[c + gw] = 1; stack.add(c + gw); }
+      }
+      if (cells.length > bestCells.length) bestCells = cells;
+    }
+    // A page fills a real share of the frame, but not all of it (that is a
+    // white wall, or the camera pressed against the sheet).
+    final share = bestCells.length / n;
+    if (share < 0.12 || share > 0.97) return null;
+    // Extreme points in buffer space: tl = min(x+y), br = max(x+y),
+    // tr = max(x-y), bl = min(x-y).
+    var tl = bestCells.first, tr = tl, br = tl, bl = tl;
+    int key(int c, int sx, int sy) => sx * (c % gw) + sy * (c ~/ gw);
+    for (final c in bestCells) {
+      if (key(c, 1, 1) < key(tl, 1, 1)) tl = c;
+      if (key(c, 1, 1) > key(br, 1, 1)) br = c;
+      if (key(c, 1, -1) > key(tr, 1, -1)) tr = c;
+      if (key(c, 1, -1) < key(bl, 1, -1)) bl = c;
+    }
+    // Buffer → portrait display. The sensor is landscape and the preview is
+    // that buffer turned 90° clockwise, so buffer (x, y) shows at
+    // (1 - y, x). Corner roles rotate with it.
+    Offset disp(int c) => Offset(1 - ((c ~/ gw) + 0.5) / gh, ((c % gw) + 0.5) / gw);
+    final sensor = _controller?.description.sensorOrientation ?? 90;
+    if (sensor != 90) return null; // only the common back-camera mounting is mapped
+    // After rotating, buffer bl is display tl, tl → tr, tr → br, br → bl.
+    return [disp(bl), disp(tl), disp(tr), disp(br)];
+  }
+
   void _onFrame(CameraImage image) {
     if (_state == _ScanState.capturing) return;
 
@@ -373,6 +468,18 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
 
     final isMoving = _motionScore(blocks, last) > _motionThreshold;
     final now = DateTime.now();
+
+    // Every other frame is plenty for a border that follows the page.
+    if (++_quadFrame % 2 == 0) {
+      final quad = _detectPageQuad(image);
+      final prevQuad = _pageQuad;
+      setState(() {
+        _pageQuad = (quad == null || prevQuad == null)
+            ? quad
+            // Ease toward the new corners so the border glides, not jitters.
+            : List.generate(4, (i) => Offset.lerp(prevQuad[i], quad[i], 0.5)!);
+      });
+    }
 
     final hint = _distanceHint(blocks);
     if (hint != _hint) setState(() => _hint = hint);
@@ -678,7 +785,29 @@ class _LiveScanScreenState extends State<LiveScanScreen> {
                 : Stack(
                     fit: StackFit.expand,
                     children: [
-                      CameraPreview(_controller!),
+                      // The preview and the page border share one box at the
+                      // camera's aspect ratio, so the border lands on the
+                      // paper rather than on the letterbox around it.
+                      Center(
+                        child: AspectRatio(
+                          aspectRatio: 1 / _controller!.value.aspectRatio,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              CameraPreview(_controller!),
+                              if (!_webFallback)
+                                IgnorePointer(
+                                  child: CustomPaint(
+                                    painter: _PageEdgePainter(
+                                      quad: _pageQuad,
+                                      ready: _hint == _DistanceHint.ok && !_cutOff,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
                       AnimatedOpacity(
                         opacity: _flash ? 0.7 : 0,
                         duration: const Duration(milliseconds: 120),
@@ -855,4 +984,50 @@ class _PageThumb {
   final int w;
   final int h;
   const _PageThumb(this.lum, this.w, this.h);
+}
+
+/// The border the scanner draws round the paper it has found: green when
+/// the page is fully in view and the right distance away, amber while it is
+/// cut off or too near or far. Corner brackets make the four corners easy
+/// to read even over a busy desk.
+class _PageEdgePainter extends CustomPainter {
+  final List<Offset>? quad;
+  final bool ready;
+
+  _PageEdgePainter({required this.quad, required this.ready});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final q = quad;
+    if (q == null) return;
+    final pts = q.map((p) => Offset(p.dx * size.width, p.dy * size.height)).toList(growable: false);
+    final colour = ready ? const Color(0xFF34C77B) : const Color(0xFFF5A524);
+    final path = Path()..addPolygon(pts, true);
+    canvas.drawPath(path, Paint()..color = colour.withValues(alpha: 0.16));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = colour
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeJoin = StrokeJoin.round,
+    );
+    final bracket = Paint()
+      ..color = colour
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < 4; i++) {
+      final c = pts[i];
+      for (final other in [pts[(i + 1) % 4], pts[(i + 3) % 4]]) {
+        final d = other - c;
+        final len = d.distance;
+        if (len == 0) continue;
+        canvas.drawLine(c, c + d / len * math.min(28.0, len / 3), bracket);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PageEdgePainter old) => old.quad != quad || old.ready != ready;
 }
