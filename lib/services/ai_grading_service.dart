@@ -258,7 +258,12 @@ class QuestionAnnotation {
     return QuestionAnnotation(
       questionLabel: (j['questionLabel'] ?? '').toString(),
       earnedMark: (j['earnedMark'] ?? '').toString(),
-      outOfMark: (j['outOfMark'] ?? '').toString(),
+      // Always "/n": results saved before the server normalised this show
+      // a bare "1", which rendered as "11" beside the earned mark.
+      outOfMark: (() {
+        final o = (j['outOfMark'] ?? '').toString().trim();
+        return RegExp(r'^\d+(\.\d+)?$').hasMatch(o) ? '/$o' : o;
+      })(),
       correct: j['correct'] == true,
       feedback: (j['feedback'] ?? '').toString(),
       methodNote: (j['methodNote'] ?? '').toString(),

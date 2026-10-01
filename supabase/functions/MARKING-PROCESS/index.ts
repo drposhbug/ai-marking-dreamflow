@@ -164,7 +164,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 22;
+const CACHE_VERSION = 23;
 
 // A keyless graded mark works out every correct answer anyway — store that
 // as a real answer key so the REST of the class marks against it on the
@@ -878,7 +878,8 @@ function normalize(obj: any, provider: string, maxScoreDefault: number, formatOv
       earnedMark: String(a?.outOfMark ?? "").trim() === "" && String(a?.earnedMark ?? "").trim().startsWith("-")
         ? ""
         : String(a?.earnedMark ?? ""),
-      outOfMark: String(a?.outOfMark ?? ""),
+      // Always "/n": a bare "1" from the model rendered as "11" on the page.
+      outOfMark: /^\d+(\.\d+)?$/.test(String(a?.outOfMark ?? "").trim()) ? `/${String(a.outOfMark).trim()}` : String(a?.outOfMark ?? ""),
       correct: a?.correct === true,
       feedback: tinyLabel(String(a?.feedback ?? ""), stats),
       methodNote: capWords(fixEscapes(String(a?.methodNote ?? "")), 4),
@@ -1632,9 +1633,9 @@ async function callDeepSeek(userText: string, usage?: { inputTokens: number; out
 // only step with eyes on the page — or the "?"/teacher-marks-it-by-hand rule
 // for drawings (STATIC_SYSTEM rule 3) can never fire on this route.
 const PARSE_PROMPT =
-  `You are a precise transcription engine for photographed school work. Transcribe every question label and EXACTLY what the student wrote for it — do NOT grade, do NOT correct errors, keep the student's wording and numbers verbatim. Record where each answer sits on its page. When a question's answer is primarily a hand-drawn diagram, graph, sketch, or geometric construction rather than written text/numbers (a free-body diagram, a ray diagram, a plotted graph, a labeled sketch), set isDrawing true instead of trying to transcribe or describe the drawing. Simple diagram READING — copying numbers the student read off a printed graph — is normal transcription, not a drawing.`;
+  `You are a precise transcription engine for photographed school work. Transcribe every question label and EXACTLY what the student wrote for it — do NOT grade, do NOT correct errors, keep the student's wording and numbers verbatim. Record where each answer sits on its page: positionTop and positionLeft are the student's FINAL ANSWER (the last line they wrote for that question), never the printed question text above it. Also list each line of their working in workLines, top to bottom, with that line's own position, so a later step can point at the exact line that went wrong. When a question's answer is primarily a hand-drawn diagram, graph, sketch, or geometric construction rather than written text/numbers (a free-body diagram, a ray diagram, a plotted graph, a labeled sketch), set isDrawing true instead of trying to transcribe or describe the drawing. Simple diagram READING — copying numbers the student read off a printed graph — is normal transcription, not a drawing.`;
 const PARSE_SHAPE = `\n\nReturn ONLY a single JSON object:
-{"studentNameOnPaper": string or null, "detectedSubject": string, "questions": [{"label": string, "pageIndex": integer (0-based), "studentWork": string, "isDrawing": boolean, "positionTop": number (0-1 fraction of page height), "positionLeft": number (0-1 fraction of page width)}]}`;
+{"studentNameOnPaper": string or null, "detectedSubject": string, "questions": [{"label": string, "pageIndex": integer (0-based), "studentWork": string, "isDrawing": boolean, "positionTop": number (0-1 fraction of page height), "positionLeft": number (0-1 fraction of page width), "workLines": [{"text": string, "positionTop": number, "positionLeft": number}]}]}`;
 
 async function callGemini(imagesBase64: string[], mediaType: string, prompt: string, jsonInstruction: string) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
@@ -3241,7 +3242,7 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
       );
       const dsUsage = { inputTokens: 0, outputTokens: 0 };
       const transcript =
-        `\n\nA vision pass has already transcribed the pages. Treat this transcript as exactly what the student wrote (do not invent or omit answers), and reuse its pageIndex, positionTop, and positionLeft values for your annotations. A question with "isDrawing": true means the student's answer is a hand-drawn diagram/graph/sketch the vision pass could not transcribe as text — you cannot see the page either, so apply the drawings case of the QUESTIONS ONLY THE TEACHER CAN MARK rule ("?" mark, feedback "check drawing") rather than guessing its content:\n${JSON.stringify(parsed)}`;
+        `\n\nA vision pass has already transcribed the pages. Treat this transcript as exactly what the student wrote (do not invent or omit answers), and reuse its pageIndex for your annotations. Position each annotation from the transcript: for a wrong or part-wrong answer, use the positionTop and positionLeft of the workLines entry where the FIRST error appears (the line containing the wrong number, sign, or step); for a fully correct answer, use the question's own positionTop and positionLeft (its final answer). Never point at the printed question. A question with "isDrawing": true means the student's answer is a hand-drawn diagram/graph/sketch the vision pass could not transcribe as text — you cannot see the page either, so apply the drawings case of the QUESTIONS ONLY THE TEACHER CAN MARK rule ("?" mark, feedback "check drawing") rather than guessing its content:\n${JSON.stringify(parsed)}`;
       const raw = await callDeepSeek(geminiPrompt + transcript + shape, dsUsage);
       await logUsage(gradeTeacherId, "grade", dsUsage.inputTokens, dsUsage.outputTokens, DEEPSEEK_PRICE_IN, DEEPSEEK_PRICE_OUT);
       await cacheWrite(cacheKey, "deepseek", raw, imageHashes);

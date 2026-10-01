@@ -1228,6 +1228,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
   /// Papers a guest can mark without bringing their own: three fictional
   /// students, each with a couple of real mistakes for the marking to find.
   static const _samples = [
+    ('Grade 10 Math', 'Unit test, photographed on a phone', 'assets/samples/grade10-math-unit-test.jpg'),
     ('Grade 9 Math', 'Linear equations quiz', 'assets/samples/grade9-math-quiz.png'),
     ('Grade 10 History', 'The 1920s, short answer', 'assets/samples/grade10-history.png'),
     ('Grade 11 Chemistry', 'Reaction rates lab', 'assets/samples/grade11-chemistry.png'),
@@ -1275,7 +1276,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       final data = await rootBundle.load(asset);
       final bytes = data.buffer.asUint8List();
       if (!mounted) return;
-      final name = '${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}.png';
+      final name = '${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}.${asset.split('.').last}';
       // Already a flat, upright page, so it skips the camera clean-up pass.
       context.read<AppState>().setImageBytes(bytes: bytes, fileName: name);
       context.push(AppRoutes.gradingContext, extra: {'imageBytes': bytes, 'fileName': name});

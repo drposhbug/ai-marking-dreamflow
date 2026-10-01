@@ -69,6 +69,21 @@ class _ResultScreenState extends State<ResultScreen> {
     return single == null ? const [] : [single];
   }
 
+  /// Height ÷ width of the first page, once decoded. The image panel takes
+  /// this shape so the page fills its full width with no side margins.
+  double? _pageAspect;
+  Uint8List? _aspectFor;
+
+  void _measurePage() {
+    final pages = _pages;
+    if (pages.isEmpty || identical(pages.first, _aspectFor)) return;
+    _aspectFor = pages.first;
+    ui.decodeImageFromList(pages.first, (img) {
+      if (!mounted || img.width == 0) return;
+      setState(() => _pageAspect = img.height / img.width);
+    });
+  }
+
   bool _exportingToDrive = false;
   bool _explaining = false;
 
@@ -788,15 +803,21 @@ class _ResultScreenState extends State<ResultScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(AppRadius.lg),
                     child: Container(
-                      constraints: const BoxConstraints(minHeight: 260, maxHeight: 420),
                       decoration: BoxDecoration(
                         color: cs.surface,
                         border: Border.all(color: cs.outline.withValues(alpha: 0.22)),
                         borderRadius: BorderRadius.circular(AppRadius.lg),
                       ),
                       child: _pages.isNotEmpty
-                          ? SizedBox(
-                              height: 420,
+                          ? LayoutBuilder(builder: (context, box) {
+                              _measurePage();
+                              // The page's own shape at full width, so it
+                              // fills the panel edge to edge. Capped so a
+                              // very long page still leaves the marks below
+                              // in view; 1.3 is a guess until it decodes.
+                              final h = (box.maxWidth * (_pageAspect ?? 1.3)).clamp(260.0, 760.0);
+                              return SizedBox(
+                              height: h,
                               child: PageView.builder(
                                 onPageChanged: (i) => setState(() => _page = i),
                                 itemCount: _pages.length,
@@ -810,7 +831,8 @@ class _ResultScreenState extends State<ResultScreen> {
                                         onTapAnnotation: _editAnnotation,
                                       ),
                               ),
-                            )
+                            );
+                            })
                           : Center(
                               child: Icon(
                                 _tab == 0 ? Icons.image_rounded : Icons.auto_fix_high_rounded,

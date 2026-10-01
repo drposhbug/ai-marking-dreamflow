@@ -19,7 +19,10 @@ class GuestSample {
 }
 
 /// Fictional students, each paper with a couple of real mistakes in it.
+/// The first is a real photographed test (handwritten, shot on a phone);
+/// the rest are rendered pages with fictional students.
 const guestSamples = [
+  GuestSample('Tyler', 'S-1004', 'Math', 10, 'assets/samples/grade10-math-unit-test.jpg'),
   GuestSample('Jordan Patel', 'S-1001', 'Math', 9, 'assets/samples/grade9-math-quiz.png'),
   GuestSample('Maya Chen', 'S-1002', 'History', 10, 'assets/samples/grade10-history.png'),
   GuestSample('Alex Morgan', 'S-1003', 'Chemistry', 11, 'assets/samples/grade11-chemistry.png'),
