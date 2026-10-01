@@ -361,7 +361,9 @@ RevenueCat webhook URL:
 ### iOS
 
 `.github/workflows/ios-build.yml` builds an unsigned `.ipa` on GitHub's macOS
-runners, since the project is developed on Windows.
+runners, since the project is developed on Windows. It is run by hand from the
+Actions tab for now: the build has failed since late September and the cause
+is not yet diagnosed. Android and the web build are the tested targets.
 
 ---
 

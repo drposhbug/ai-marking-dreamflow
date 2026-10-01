@@ -12,15 +12,12 @@
 #     (e.g. Codemagic or Xcode on any Mac) + TestFlight.
 name: iOS build (unsigned)
 
+# Manual only for now (Actions tab → iOS build → Run workflow). The build has
+# failed at "Build iOS (no codesign)" since about 2026-09-22 and the cause is
+# not yet diagnosed; iOS is not a shipped target yet, so it should not put a
+# red cross on every push to main. Restore the push trigger once it passes.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'lib/**'
-      - 'ios/**'
-      - 'pubspec.yaml'
-      - '.github/workflows/ios-build.yml'
 
 jobs:
   build-ios:
