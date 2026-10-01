@@ -13,7 +13,6 @@ This folder is the public website. GitHub Pages serves it at
 | `privacy-policy.md` | The policy in Markdown. Source of truth — edit this first, then mirror the change into `privacy.html`. |
 | `security-and-compliance.md` | What leaves the device, subprocessors, retention, known gaps. For district review. |
 | `store-listing.md` | Google Play and App Store listing copy. |
-| `shipaton-submission.md` | Draft of the RevenueCat Shipaton 2026 Devpost submission. |
 
 Every page is a single self-contained HTML file with no external resources — no
 CDN, no web fonts, no scripts, no analytics — so the site works offline, loads
@@ -105,7 +104,7 @@ top of `index.html`.
   `security-and-compliance.md`. Both must be decided and filled in before
   submitting to Play, and the same numbers go in the Data safety form.
 - `TODO:` `index.html` says every paid plan gives 10% to charities that help
-  kids learn, with no charity named (`REMAINING.md` R9). The claim is marked
+  kids learn, with no charity named. The claim is marked
   with a `TODO:` comment in the file.
 - `TODO:` if `app.umarkless.com` is set up, add a
   `CNAME` file here containing the bare hostname and point a DNS `CNAME` record

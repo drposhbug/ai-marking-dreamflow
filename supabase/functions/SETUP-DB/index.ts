@@ -1,8 +1,28 @@
 // One-time database setup for AI Marker. Safe to run repeatedly.
+//
+// Run it with the service role key (it refuses anything else):
+//   curl -X POST https://<ref>.supabase.co/functions/v1/SETUP-DB \
+//     -H "Authorization: Bearer <service role key>"
+//
+// Every table enables row level security with no policies: the app reaches
+// data only through edge functions using the service role. Any new function
+// must revoke execute from public, anon and authenticated (see
+// apply_entitlement below), or it is callable by anyone over the REST API.
 import postgres from "npm:postgres";
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+
+  // Only the owner may run this. The anon key ships inside the APK and
+  // passes the gateway's verify_jwt, so "it presented a valid JWT" is not a
+  // check -- and this function runs DDL and rewrites profiles as the
+  // database owner. The service role key never leaves the server.
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const auth = (req.headers.get("authorization") ?? "").trim();
+  if (!serviceKey || auth.replace(/^Bearer\s+/i, "") !== serviceKey) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   try {
     const url = Deno.env.get("SUPABASE_DB_URL");
     if (!url) return Response.json({ error: "SUPABASE_DB_URL not available" }, { status: 500 });
@@ -111,6 +131,7 @@ Deno.serve(async (req) => {
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       )`;
+    await sql`alter table public.presets enable row level security`;
     await sql`alter table public.presets add column if not exists class_id text`;
     await sql`alter table public.presets add column if not exists grading_mode text`;
     await sql`alter table public.presets add column if not exists criteria jsonb`;
@@ -224,6 +245,15 @@ Deno.serve(async (req) => {
         returning p.plan, p.plan_source, p.plan_revenuecat, p.plan_stripe;
       end
       $fn$`;
+    // Postgres lets everyone execute a new function, and Supabase exposes
+    // public functions over the REST API -- so without these two lines anyone
+    // holding the anon key could POST /rest/v1/rpc/apply_entitlement and set
+    // any account's plan. Only the webhooks (service role) may call it.
+    //
+    // ANY new function added to this file must do the same: revoke execute
+    // from public, anon and authenticated, and grant only what needs it.
+    await sql`revoke execute on function public.apply_entitlement(text, text, text) from public, anon, authenticated`;
+    await sql`grant execute on function public.apply_entitlement(text, text, text) to service_role`;
     // Recompute the derived columns for everyone the backfill just touched,
     // so plan_source is populated before the app starts reading it.
     await sql`update public.profiles

@@ -17,6 +17,8 @@ const statements = [...source.matchAll(/await sql`([\s\S]*?)`/g)].map((m) => m[1
 if (statements.length < 20) throw new Error(`only found ${statements.length} statements — extraction broke`);
 
 const db = new PGlite();
+// Supabase's API roles, so SETUP-DB's grants and revokes run as they do live.
+await db.exec(`create role anon; create role authenticated; create role service_role;`);
 let failures = 0;
 const ok = (name, pass, detail = '') => {
   if (!pass) failures += 1;
@@ -57,6 +59,17 @@ const row = async (teacher) =>
   ok('pro outranks pro_annual', (await r('pro')) > (await r('pro_annual')));
   ok('pro_annual outranks starter', (await r('pro_annual')) > (await r('starter')));
   ok('trial and nonsense rank zero', (await r('trial')) === 0 && (await r('nope')) === 0 && (await r(null)) === 0);
+}
+
+// ---- only the webhooks may change a plan ----------------------------------
+{
+  // apply_entitlement is security definer: callable by anon, it would let
+  // anyone holding the public key set any account's plan over the REST API.
+  const can = async (role) =>
+    (await q(`select has_function_privilege($1, 'public.apply_entitlement(text,text,text)', 'execute') as ok`, [role]))[0].ok;
+  ok('anon cannot call apply_entitlement', (await can('anon')) === false);
+  ok('authenticated cannot call apply_entitlement', (await can('authenticated')) === false);
+  ok('service_role can call apply_entitlement', (await can('service_role')) === true);
 }
 
 // ---- THE BUG THIS EXISTS TO FIX ------------------------------------------

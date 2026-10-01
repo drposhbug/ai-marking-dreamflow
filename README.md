@@ -25,6 +25,12 @@ This is an active hackathon project, submitted to the **RevenueCat Shipaton
 live at [umarkless.com](https://umarkless.com). It is not yet released on any
 app store; see [Status](#status) for what is and is not wired up.
 
+## Demo
+
+- **Demo video:** _TODO — demo video link goes here_ <!-- DEMO VIDEO PLACEHOLDER: replace with the YouTube/Loom URL -->
+- **Try it:** [umarkless.com](https://umarkless.com) runs the web build.
+  Continue as a guest to mark the built-in sample papers, with no sign-up.
+
 ---
 
 ## The four ways to mark
@@ -185,6 +191,17 @@ Subscriptions run through RevenueCat (`purchases_flutter` /
 `lib/services/billing_service.dart`, `lib/screens/plans/plans_screen.dart`,
 `supabase/functions/REVENUECAT-WEBHOOK/index.ts`.
 
+### How RevenueCat is used
+
+| What | Where |
+| --- | --- |
+| SDK setup: `Purchases.configure`, the customer-info listener, and `Purchases.logIn(teacherId)` so a plan follows the account | [`billing_service.dart`](lib/services/billing_service.dart#L249) (configure), [`#L327`](lib/services/billing_service.dart#L327) (logIn) |
+| Plans screen: loads the current Offering and renders store prices; purchase, restore | [`plans_screen.dart`](lib/screens/plans/plans_screen.dart), [`BillingService` offerings and purchase](lib/services/billing_service.dart#L272) |
+| Customer Center: cancel, restore, refund requests | [`presentCustomerCenter`](lib/services/billing_service.dart#L453), opened from the [Plans screen](lib/screens/plans/plans_screen.dart#L328) |
+| Entitlement check: the single `markless Pro` entitlement drives `isPro` in the app | [`entitlementId` and `_onCustomerInfo`](lib/services/billing_service.dart#L351) |
+| Webhook: the only path that grants or revokes a plan, via `apply_entitlement` | [`REVENUECAT-WEBHOOK`](supabase/functions/REVENUECAT-WEBHOOK/index.ts) |
+| Test purchases are ignored: events from the `SANDBOX` environment or the `TEST_STORE` are acknowledged without changing a plan, unless `REVENUECAT_ACCEPT_SANDBOX=true` | [`REVENUECAT-WEBHOOK/index.ts#L91`](supabase/functions/REVENUECAT-WEBHOOK/index.ts#L91) |
+
 ### Offerings drive pricing, so prices change without an app update
 
 The app hard-codes no prices. `BillingService.loadOfferings()` pulls the current
@@ -299,23 +316,129 @@ guaranteed loss on every annual subscriber.
 
 ## Build and run
 
-Requires the Flutter SDK (Dart `^3.6.0`).
+### Prerequisites
+
+- **Flutter 3.44.x stable** (tested on 3.44.4; Dart 3.12 or later). Older
+  Flutter versions fail at `flutter pub get`.
+- Android Studio for Android, Xcode for iOS, or Chrome for the web build.
+- Node.js, for the Supabase CLI (`npx supabase`) and the SQL tests.
+- A Supabase project.
+- Keys: Anthropic and Google Gemini (required). RevenueCat for store billing.
+  Stripe, OneSignal and DeepInfra are optional.
+
+Without any keys the app still builds and runs in local-only mode, but nothing
+is marked.
+
+### 1. Backend (Supabase)
 
 ```bash
-flutter pub get
+# Link the CLI to your project
+npx supabase login
+npx supabase link --project-ref <ref>
 
-flutter run \
-  --dart-define=SUPABASE_ANON_KEY=eyJ... \
-  --dart-define=REVENUECAT_ANDROID_KEY=goog_...
+# Server secrets: fill in a copy of the template, then upload it
+cp supabase/functions/.env.example supabase/functions/.env
+npx supabase secrets set --env-file supabase/functions/.env --project-ref <ref>
+
+# Deploy the functions. The two webhooks skip JWT checks because each provider
+# sends its own credentials instead of a Supabase JWT.
+npx supabase functions deploy MARKING-PROCESS    --project-ref <ref>
+npx supabase functions deploy SETUP-DB           --project-ref <ref>
+npx supabase functions deploy STRIPE-CHECKOUT    --project-ref <ref>
+npx supabase functions deploy OVERNIGHT-SWEEPER  --project-ref <ref>
+npx supabase functions deploy REVENUECAT-WEBHOOK --project-ref <ref> --no-verify-jwt
+npx supabase functions deploy STRIPE-WEBHOOK     --project-ref <ref> --no-verify-jwt
+
+# Create the schema. Safe to run again after any update. SETUP-DB only accepts
+# the service role key (Dashboard → Project Settings → API keys).
+curl -X POST https://<ref>.supabase.co/functions/v1/SETUP-DB \
+  -H "Authorization: Bearer <service role key>"
 ```
 
-**No keys are committed to this repository, by design.** They are supplied at
-build time with `--dart-define` and default to empty:
+There is no `supabase/migrations` folder: `SETUP-DB` is the schema. Every table
+has row level security on and no policies, so the anon key cannot read or
+write any table directly. The app reaches its data only through the edge
+functions.
+
+**Schedule the overnight job (optional).** `OVERNIGHT-SWEEPER` collects
+overnight batches and sends the "your class set is marked" push. It runs on a
+schedule, and **pg_cron and pg_net must be enabled first** (they are off on a
+new project). In the SQL editor:
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- Keep the service role key in Vault, not in plain text inside the job.
+select vault.create_secret('<service role key>', 'sweeper_service_key');
+
+select cron.schedule('overnight-sweeper', '*/15 * * * *', $$
+  select net.http_post(
+    url     := 'https://<ref>.supabase.co/functions/v1/OVERNIGHT-SWEEPER',
+    headers := jsonb_build_object(
+      'Content-Type',  'application/json',
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets
+                                      where name = 'sweeper_service_key')),
+    body    := '{}'::jsonb,
+    timeout_milliseconds := 120000);
+$$);
+```
+
+Stop it with `select cron.unschedule('overnight-sweeper');`.
+
+### 2. Sign-in providers
+
+In the Supabase dashboard under **Authentication → Providers**, enable
+**Email**, and optionally **Google**, **Azure** (shown as Microsoft) and
+**Apple**, each with its own OAuth client from that provider. Google sign-in
+also asks for the `drive.file` scope, which is used for exporting marks to
+Google Docs.
+
+Under **Authentication → URL Configuration**, add these redirect URLs:
+
+- `com.markless.app://login-callback`, for the Android and iOS apps
+- your web origin, e.g. `http://localhost:<port>/` for `flutter run -d chrome`,
+  or the deployed site's URL. The web build redirects back to the page it was
+  opened from.
+
+### 3. RevenueCat
+
+1. Create a project with a Google Play app (and an App Store app for iOS),
+   and copy the public SDK keys (`goog_…`, `appl_…`) into `.env`.
+2. Create one entitlement, **`markless Pro`**, exactly as written.
+3. Create the store products and attach them to `markless Pro`. Put them in the
+   **current Offering**. The app matches tiers by product id, so each id should
+   contain `starter`, `pro`, `pro_annual` or `school`.
+4. Add a webhook pointing at
+   `https://<ref>.supabase.co/functions/v1/REVENUECAT-WEBHOOK`, with the
+   Authorization header set to the same value as `REVENUECAT_WEBHOOK_SECRET`.
+
+Sandbox and Test Store purchases are ignored by the webhook unless
+`REVENUECAT_ACCEPT_SANDBOX=true` is set, so testing never grants a real plan.
+
+### 4. Run the app
+
+```bash
+cp .env.example .env      # fill in
+flutter pub get
+flutter run --dart-define-from-file=.env
+```
+
+**`SUPABASE_URL` must be set when you use your own Supabase project.** When it
+is missing, the app falls back to the original UMarkless project, so a fresh
+clone would quietly talk to someone else's backend.
+
+**No secret keys are committed to this repository.** The only key included
+is the Supabase **anon** key, inside the compiled web build under `docs/app/`.
+That is by design: the anon key ships in every copy of the app, and row level
+security plus the edge functions' own checks decide what it can reach. Every
+other value is supplied at build time with `--dart-define` and defaults to
+empty:
 
 | Define | Used by | Behaviour when absent |
 | --- | --- | --- |
 | `SUPABASE_ANON_KEY` | `lib/main.dart` | App runs local-only; nothing is marked |
-| `SUPABASE_URL` | `lib/main.dart` | Falls back to the project's own URL |
+| `SUPABASE_URL` | `lib/main.dart` | Falls back to the original UMarkless project. Set it for your own |
 | `REVENUECAT_ANDROID_KEY` (`goog_…`) | `lib/services/billing_service.dart` | Billing stays disabled — no `configure` call, no store contact, and the Plans screen says so in plain English |
 | `REVENUECAT_IOS_KEY` (`appl_…`) | `lib/services/billing_service.dart` | As above, on iOS |
 | `ONESIGNAL_APP_ID` | `lib/services/push_service.dart` | Push stays disabled; the app falls back to in-app messages |
@@ -327,14 +450,13 @@ device, not because they are secret. The same is true of the OneSignal app id.
 The web build is produced with `tool/build_vercel.ps1` (Flutter web app plus the
 Next.js site in `site/`); see `docs/vercel-hosting.md`.
 
-### Backend
+### Server-side secrets
 
-Edge functions are deployed with the Supabase CLI. `REVENUECAT-WEBHOOK` and
-`STRIPE-WEBHOOK` must be deployed with `--no-verify-jwt`, since each provider
-sends its own credentials rather than a Supabase JWT. Run `SETUP-DB` once after
-deploying to create the tables; it is safe to run repeatedly.
-
-Server-side secrets (set with `npx supabase secrets set`, never in the repo):
+Set with `npx supabase secrets set` (see `supabase/functions/.env.example`),
+never committed. **Stripe web checkout and OneSignal push are optional and not
+configured by default:** without their secrets, `STRIPE-CHECKOUT` answers
+`not_configured` and the web Plans screen reports checkout as unavailable, and
+overnight results show up in the app instead of as a push.
 
 | Secret | Purpose |
 | --- | --- |
@@ -347,16 +469,13 @@ Server-side secrets (set with `npx supabase secrets set`, never in the repo):
 | `MOONSHOT_API_KEY`, `KIMI_ALLOW_MOONSHOT` | Optional. Kimi via Moonshot's own API, only when explicitly allowed |
 | `REVENUECAT_WEBHOOK_SECRET` | Must match the Authorization header configured in the RevenueCat dashboard webhook |
 | `REVENUECAT_ACCEPT_SANDBOX` | Optional. `true` lets sandbox and Test Store purchases change a plan; by default they are ignored, since test purchases are free |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Web checkout and its signed webhook |
-| `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_PRO_ANNUAL`, `STRIPE_PRICE_SCHOOL` | Stripe price ids for each tier |
-| `STRIPE_RETURN_ORIGIN` | Where Checkout sends the teacher back, e.g. `https://umarkless.com` |
-| `ONESIGNAL_APP_ID`, `ONESIGNAL_REST_API_KEY` | "Your class set is marked" push from `OVERNIGHT-SWEEPER` |
-| `FOUNDER_EMAILS`, `FOUNDER_TEACHER_IDS` | Accounts that get the internal `preview` plan for testing |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional, not configured by default. Web checkout and its signed webhook. Setup: `docs/stripe-web-billing.md` |
+| `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_PRO_ANNUAL`, `STRIPE_PRICE_SCHOOL` | Optional. Stripe price ids for each tier |
+| `STRIPE_RETURN_ORIGIN` | Optional. Where Checkout sends the teacher back, e.g. `https://umarkless.com` |
+| `ONESIGNAL_APP_ID`, `ONESIGNAL_REST_API_KEY` | Optional, not configured by default. "Your class set is marked" push from `OVERNIGHT-SWEEPER` |
+| `FOUNDER_EMAILS`, `FOUNDER_TEACHER_IDS` | Optional. Comma-separated accounts that get the internal `preview` plan for testing. Empty means nobody |
 | `ADMIN_STATS_KEY` | Guards the `admin_stats` action |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL` | Provided by the platform |
-
-RevenueCat webhook URL:
-`https://<project-ref>.supabase.co/functions/v1/REVENUECAT-WEBHOOK`
 
 ### iOS
 
@@ -369,7 +488,7 @@ is not yet diagnosed. Android and the web build are the tested targets.
 
 ## Status
 
-Honest state as of 2026-09-30. The working checklist is `REMAINING.md`.
+Honest state as of 2026-09-30.
 
 **Working:** the four marking routes, the marking pipeline with keys, learned
 keys and overnight batching, on-device OCR anchoring and name redaction, plan
@@ -383,23 +502,21 @@ umarkless.com.
 - RevenueCat products are not created in the dashboard, so no Offering exists
   and store billing is inert in every current build. The code paths are
   written and the webhook is deployed; the purchase flow has not been
-  exercised end to end (`REMAINING.md` R2.1–R2.6).
+  exercised end to end.
 - Stripe web checkout is complete in code but waits on live Stripe keys and
-  price ids (R22.1).
+  price ids.
 - No app store release. Play Console listing, declarations and signed release
-  build are outstanding (R4).
-- Push notifications are wired in the app (R7), but the server half that sends
+  build are outstanding.
+- Push notifications are wired in the app, but the server half that sends
   "your class set is marked", `OVERNIGHT-SWEEPER`, is not deployed yet, so
   overnight marking still needs the app reopened to see that it finished.
 - The 10% give-back is built into the margin rule and shown in the app and on
-  the site, but no charity is named yet and there is no public receipt (R9).
+  the site, but no charity is named yet and there is no public receipt.
 
 ---
 
 ## Documentation
 
-- [`docs/BUILD-LOG.md`](docs/BUILD-LOG.md) — how it was built: a guided tour of
-  the commit history, phase by phase
 - `docs/privacy-policy.md` — privacy policy (rendered for hosting as
   `docs/index.html`)
 - `docs/security-and-compliance.md` — what leaves the device, subprocessors,
@@ -407,9 +524,36 @@ umarkless.com.
 - `docs/store-listing.md` — store listing copy
 - `docs/stripe-web-billing.md` — web checkout setup
 - `docs/vercel-hosting.md` — how umarkless.com is built and served
-- `docs/shipaton-submission.md` — hackathon submission draft
-- `REMAINING.md` — the working checklist
+
+## Project history
+
+I started the project in [Dreamflow](https://dreamflow.app), a Flutter app
+builder, working on my dad's account. That is why the first few commits
+(June 26 – July 1, 2026) carry his company's name and email: Dreamflow pushed
+them from his account. They hold the first version of the app, the first
+live-scan screen and the first edge-function test, which I built.
+
+Everything after that was built in my own GitHub account, with
+[Claude Code](https://claude.com/claude-code) as a coding assistant.
 
 ## License
 
 GNU Affero General Public License v3.0 (AGPL-3.0) — see [LICENSE](LICENSE). Anyone who runs a modified version as a service must publish their source too.
+
+```
+UMarkless
+Copyright (C) 2026 Tyler Lee
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+```

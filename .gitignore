@@ -70,3 +70,25 @@ tool/sql/node_modules/
 # Local preview build of the app (served on :3000). Rebuilt by
 # tool/build_web.ps1 -BasePath / -OutDir .local-web; never shipped from git.
 .local-web/
+
+# Environment files hold real keys. Only the .example templates are committed.
+.env
+.env.*
+!.env.example
+supabase/.env
+supabase/functions/.env
+
+# Local tool state: the impeccable design-lint plugin, Dreamflow's project
+# link, and Blender's auto-backups.
+.impeccable/
+.dreamflow
+assets/icons/dreamflow_icon.jpg
+*.blend1
+
+# Internal working notes, kept locally and not published.
+REMAINING.md
+docs/BUILD-LOG.md
+docs/build-in-public.md
+docs/founder-access.md
+docs/overnight-sweeper.md
+docs/shipaton-submission.md

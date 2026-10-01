@@ -29,8 +29,8 @@
 // The cleanup SQL is printed at the end. The script cannot delete the rows
 // itself: delete_account (correctly) demands a signed-in JWT for the account.
 //
-// The anon key comes from markless-keys/supa_anon.txt or SUPABASE_ANON_KEY,
-// and is never printed.
+// The anon key comes from SUPABASE_ANON_KEY, or from the file named by
+// SUPABASE_ANON_KEY_FILE, and is never printed.
 //
 // A session upserts stable ids, so soak loops do not grow the database;
 // spike/ramp rows are bounded (~8KB per submission) and all match the
@@ -40,7 +40,7 @@
 import { readFileSync, appendFileSync } from "node:fs";
 
 const FN_URL = "https://zxikjizraeqejbsncqpg.supabase.co/functions/v1/MARKING-PROCESS";
-const KEY_FILE = "C:/Users/tyler/OneDrive/markless-keys/supa_anon.txt";
+const KEY_FILE = process.env.SUPABASE_ANON_KEY_FILE ?? "";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MARKING_HARD_CAP = 200;
 
@@ -65,8 +65,8 @@ if (MARKING_CALLS > MARKING_HARD_CAP) {
   process.exit(1);
 }
 let anonKey = process.env.SUPABASE_ANON_KEY ?? "";
-if (!anonKey) { try { anonKey = readFileSync(KEY_FILE, "utf8").trim(); } catch { /* */ } }
-if (!anonKey) { console.error(`No anon key: set SUPABASE_ANON_KEY or ${KEY_FILE}`); process.exit(1); }
+if (!anonKey && KEY_FILE) { try { anonKey = readFileSync(KEY_FILE, "utf8").trim(); } catch { /* */ } }
+if (!anonKey) { console.error("No anon key: set SUPABASE_ANON_KEY or SUPABASE_ANON_KEY_FILE"); process.exit(1); }
 
 // --jwt: a real user's access token. Sent as the bearer, and its sub becomes
 // the teacherId for every simulated session (the R14 guard accepts nothing

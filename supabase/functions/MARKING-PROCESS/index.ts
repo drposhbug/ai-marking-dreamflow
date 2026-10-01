@@ -1116,7 +1116,7 @@ const PLAN_CAPS: Record<string, { monthlyUsd: number; plans: number; label: stri
 ///
 ///   npx supabase secrets set FOUNDER_EMAILS=a@b.com,c@d.com
 ///   npx supabase secrets set FOUNDER_TEACHER_IDS=<uuid>
-const FOUNDER_EMAILS = (Deno.env.get("FOUNDER_EMAILS") ?? "oscar.cs.lee@gmail.com")
+const FOUNDER_EMAILS = (Deno.env.get("FOUNDER_EMAILS") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 const FOUNDER_TEACHER_IDS = (Deno.env.get("FOUNDER_TEACHER_IDS") ?? "")
   .split(",").map((s) => s.trim()).filter(Boolean);
