@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:marking_prokect_v2/app/app_routes.dart';
 import 'package:marking_prokect_v2/app/app_state.dart';
+import 'package:marking_prokect_v2/models/grading_preset.dart';
 import 'package:marking_prokect_v2/models/teacher_class.dart';
 import 'package:marking_prokect_v2/screens/grading/live_scan_screen.dart';
 import 'package:marking_prokect_v2/screens/grading/web_image_picker.dart';
@@ -26,7 +27,6 @@ import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/drop_target_overlay.dart';
-import 'package:marking_prokect_v2/widgets/free_tier_banner_ad.dart';
 import 'package:marking_prokect_v2/widgets/pill.dart';
 import 'package:marking_prokect_v2/widgets/responsive.dart';
 import 'package:marking_prokect_v2/widgets/teacher_topbar.dart';
@@ -916,8 +916,8 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     ];
     return (
       start: running,
-      rest: [const SizedBox(height: 14), ...student, const FreeTierAdSlot()],
-      stacked: [...running, ...student, const FreeTierAdSlot()],
+      rest: [const SizedBox(height: 14), ...student],
+      stacked: [...running, ...student],
     );
   }
 
@@ -1261,7 +1261,7 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
                   title: Text(subject),
                   subtitle: Text(title),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => _markSample(asset, title),
+                  onTap: () => _markSample(asset, '$subject $title'),
                 ),
             ],
           ),
@@ -1278,7 +1278,14 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
       if (!mounted) return;
       final name = '${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}.${asset.split('.').last}';
       // Already a flat, upright page, so it skips the camera clean-up pass.
-      context.read<AppState>().setImageBytes(bytes: bytes, fileName: name);
+      // Marked as the test it is, at its own grade: left at the default
+      // (Grade 6) a keyless paper takes the cheap homework route, which
+      // missed the sign error in the Grade 10 paper's Q5.
+      final app = context.read<AppState>();
+      app.setImageBytes(bytes: bytes, fileName: name);
+      app.setMode(GradingMode.testQuiz);
+      final grade = int.tryParse(RegExp(r'Grade (\d+)').firstMatch(title)?.group(1) ?? '');
+      if (grade != null) app.setGradeLevel(grade);
       context.push(AppRoutes.gradingContext, extra: {'imageBytes': bytes, 'fileName': name});
     } catch (e) {
       debugPrint('Sample paper failed to load: $e');
