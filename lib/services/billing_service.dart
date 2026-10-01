@@ -182,6 +182,7 @@ class BillingService extends ChangeNotifier {
   static const entitlementId = 'markless Pro';
 
   bool _available = false;
+  String? _pendingTeacherId;
   bool get available => _available;
 
   bool _isPro = false;
@@ -248,6 +249,8 @@ class BillingService extends ChangeNotifier {
       await Purchases.configure(PurchasesConfiguration(_apiKey));
       Purchases.addCustomerInfoUpdateListener(_onCustomerInfo);
       _available = true;
+      final pending = _pendingTeacherId;
+      if (pending != null) await logIn(pending);
       _onCustomerInfo(await Purchases.getCustomerInfo());
       await loadOfferings();
     } catch (e) {
@@ -311,7 +314,15 @@ class BillingService extends ChangeNotifier {
   /// Ties purchases to the teacher's account id so Pro follows them across
   /// devices and reinstalls (RevenueCat aliases the anonymous id).
   Future<void> logIn(String teacherId) async {
-    if (!_available) return;
+    // A teacher who opens the app already signed in reaches this before
+    // init() has finished configuring the SDK. Skipping it then left every
+    // purchase on an anonymous id the webhook ignores, so remember the
+    // teacher and log in as soon as init() is done.
+    if (!_available) {
+      _pendingTeacherId = teacherId;
+      return;
+    }
+    _pendingTeacherId = null;
     try {
       final res = await Purchases.logIn(teacherId);
       _onCustomerInfo(res.customerInfo);
@@ -328,6 +339,7 @@ class BillingService extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    _pendingTeacherId = null;
     if (!_available) return;
     _entitlement = null;
     _giving = const GivingSummary();

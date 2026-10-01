@@ -5,7 +5,6 @@ import 'package:marking_prokect_v2/services/ai_grading_service.dart';
 import 'package:marking_prokect_v2/services/auth_service.dart';
 import 'package:marking_prokect_v2/services/billing_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
-import 'package:marking_prokect_v2/widgets/free_tier_banner_ad.dart';
 import 'package:marking_prokect_v2/widgets/responsive.dart';
 import 'package:provider/provider.dart';
 
@@ -376,10 +375,9 @@ class _SidebarUpgradePromoState extends State<_SidebarUpgradePromo> {
             : ('Enjoying the free trial?', 'Pro marks about 450 papers a month.');
 
     if (widget.compact) {
-      // Free trial only: our own upgrade line, and under it a small
-      // non-personalised banner ad (see FreeTierBannerAd for what it can
-      // and cannot see). Upgrading removes both.
-      return Column(mainAxisSize: MainAxisSize.min, children: [_compactLine(context, headline), const FreeTierBannerAd()]);
+      // Free trial only. The ad itself lives in the page (FreeTierAdSlot on
+      // the home screen), not pinned here over every screen.
+      return _compactLine(context, headline);
     }
 
     return Padding(

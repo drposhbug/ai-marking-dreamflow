@@ -1,7 +1,58 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:marking_prokect_v2/services/ai_grading_service.dart';
+import 'package:marking_prokect_v2/services/auth_service.dart';
+import 'package:marking_prokect_v2/services/billing_service.dart';
+import 'package:marking_prokect_v2/theme.dart';
+import 'package:provider/provider.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+
+/// Where the ad lives: at the foot of the home screen's scrolling content,
+/// in the white space under the last card, so it scrolls away with the page
+/// instead of sitting on top of every screen. Free-trial teachers only;
+/// renders nothing for anyone else, on the web, or before usage loads.
+class FreeTierAdSlot extends StatefulWidget {
+  const FreeTierAdSlot({super.key});
+
+  @override
+  State<FreeTierAdSlot> createState() => _FreeTierAdSlotState();
+}
+
+class _FreeTierAdSlotState extends State<FreeTierAdSlot> {
+  bool _trial = false;
+  String? _loadedFor;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final id = Provider.of<AuthService>(context).currentUser?.id;
+    if (id == null || id == _loadedFor || FreeTierBannerAd.adUnitId.isEmpty) return;
+    _loadedFor = id;
+    AiGradingService().getUsage(teacherId: id).then((u) {
+      if (mounted) setState(() => _trial = u.planLabel == 'Free Trial');
+    }).catchError((Object e) {
+      debugPrint('FreeTierAdSlot usage load failed: $e');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_trial || context.watch<BillingService>().isPro) return const SizedBox.shrink();
+    final muted = AiMarkerColors.neutral.withValues(alpha: 0.8);
+    return Padding(
+      padding: const EdgeInsets.only(top: 22, bottom: 8),
+      child: Column(
+        children: [
+          Text('Sponsored · paid plans have no ads',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: muted, letterSpacing: 0.4)),
+          const SizedBox(height: 8),
+          const FreeTierBannerAd(),
+        ],
+      ),
+    );
+  }
+}
 
 /// A small AdMob banner for free-trial teachers on a phone. Paying teachers
 /// never see it; the caller decides who qualifies.
@@ -130,12 +181,11 @@ class _FreeTierBannerAdState extends State<FreeTierBannerAd> {
   Widget build(BuildContext context) {
     final ad = _ad;
     if (ad == null || !_loaded) return const SizedBox.shrink();
-    return Container(
-      color: Theme.of(context).cardColor,
-      alignment: Alignment.center,
-      width: double.infinity,
-      height: ad.size.height.toDouble(),
-      child: SizedBox(width: ad.size.width.toDouble(), child: AdWidget(ad: ad)),
+    return Center(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: SizedBox(width: ad.size.width.toDouble(), height: ad.size.height.toDouble(), child: AdWidget(ad: ad)),
+      ),
     );
   }
 }

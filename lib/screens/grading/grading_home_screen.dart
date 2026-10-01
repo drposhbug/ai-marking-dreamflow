@@ -25,6 +25,7 @@ import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:marking_prokect_v2/widgets/drop_target_overlay.dart';
+import 'package:marking_prokect_v2/widgets/free_tier_banner_ad.dart';
 import 'package:marking_prokect_v2/widgets/pill.dart';
 import 'package:marking_prokect_v2/widgets/responsive.dart';
 import 'package:marking_prokect_v2/widgets/teacher_topbar.dart';
@@ -914,8 +915,8 @@ class _GradingHomeScreenState extends State<GradingHomeScreen> {
     ];
     return (
       start: running,
-      rest: [const SizedBox(height: 14), ...student],
-      stacked: [...running, ...student],
+      rest: [const SizedBox(height: 14), ...student, const FreeTierAdSlot()],
+      stacked: [...running, ...student, const FreeTierAdSlot()],
     );
   }
 
