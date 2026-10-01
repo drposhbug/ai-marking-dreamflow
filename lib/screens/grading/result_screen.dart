@@ -47,7 +47,9 @@ class ResultScreen extends StatefulWidget {
 }
 
 class _ResultScreenState extends State<ResultScreen> {
-  int _tab = 0;
+  // Opens on Annotated: the marks drawn on the page are the point; the bare
+  // original is one tap away.
+  int _tab = 1;
   int _page = 0;
 
   // Teacher can toggle between levels and percentage after grading.
