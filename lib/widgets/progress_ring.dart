@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:marking_prokect_v2/theme.dart';
 
 class ProgressRing extends StatelessWidget {
   final double value; // 0..1
@@ -8,18 +9,26 @@ class ProgressRing extends StatelessWidget {
   final double stroke;
   final String label;
 
-  const ProgressRing({super.key, required this.value, required this.size, required this.stroke, required this.label});
+  /// White ring and label for a dark card (the dashboard's board-green
+  /// header). On a light card that white all but vanished, so pass false
+  /// there for a green ring and dark label.
+  final bool onDark;
+
+  const ProgressRing({super.key, required this.value, required this.size, required this.stroke, required this.label, this.onDark = true});
 
   @override
   Widget build(BuildContext context) {
+    final ring = onDark ? Colors.white.withValues(alpha: 0.92) : AiMarkerColors.secondary;
+    final track = onDark ? Colors.white.withValues(alpha: 0.20) : AiMarkerColors.secondary.withValues(alpha: 0.16);
+    final text = onDark ? Colors.white : AiMarkerColors.primary;
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          CustomPaint(size: Size.square(size), painter: _RingPainter(value: value, color: Colors.white.withValues(alpha: 0.92), bg: Colors.white.withValues(alpha: 0.20), stroke: stroke)),
-          Text(label, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
+          CustomPaint(size: Size.square(size), painter: _RingPainter(value: value, color: ring, bg: track, stroke: stroke)),
+          Text(label, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: text, fontWeight: FontWeight.w900)),
         ],
       ),
     );

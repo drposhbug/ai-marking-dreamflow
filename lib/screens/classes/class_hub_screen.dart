@@ -152,7 +152,7 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
                     children: [
                       Row(
                         children: [
-                          ProgressRing(value: avg, size: 84, stroke: 10, label: scored.isEmpty ? '—' : '${(avg * 100).round()}%'),
+                          ProgressRing(value: avg, size: 84, stroke: 10, onDark: false, label: scored.isEmpty ? '—' : '${(avg * 100).round()}%'),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Column(
@@ -191,16 +191,18 @@ class _ClassHubScreenState extends State<ClassHubScreen> {
               // the question a teacher has right after marking one — not
               // "how did each of them do", but "what did we get wrong".
               if (latestSet != null) ...[
+                // Solid board green: the next thing to do after marking, so
+                // it reads as the action on the screen, not a tinted note.
                 Card(
-                  color: cs.primary.withValues(alpha: 0.07),
+                  color: cs.primary,
                   child: ListTile(
-                    leading: Icon(Icons.insights_rounded, color: cs.primary),
-                    title: Text('What the class got wrong', style: Theme.of(context).textTheme.titleSmall),
+                    leading: const Icon(Icons.insights_rounded, color: Colors.white),
+                    title: Text('What the class got wrong', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white)),
                     subtitle: Text(
                       '${latestSet.subject} · ${latestSet.papers.length} paper${latestSet.papers.length == 1 ? '' : 's'} — ranked worst first, with a reteach idea for each.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.35),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.85), height: 1.35),
                     ),
-                    trailing: Icon(Icons.chevron_right_rounded, color: AiMarkerColors.neutral),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white),
                     onTap: () => context.push('${AppRoutes.classAnalysis}?classId=${widget.classId}'),
                   ),
                 ),

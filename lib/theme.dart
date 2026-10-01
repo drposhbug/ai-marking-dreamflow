@@ -113,7 +113,9 @@ class AiMarkerColors {
   static const tertiary = Color(0xFF4C4636);
 
   static const error = Color(0xFFDC2626);
-  static const neutral = Color(0xFF7C7460);
+  // Darkened from 0xFF7C7460, which sat near the 4.5:1 floor on the desk and
+  // made small labels hard to read; this clears it comfortably.
+  static const neutral = Color(0xFF5E5746);
   /// Amber: something needs a look but nothing is broken — a stack whose
   /// page count does not add up, a result flagged for teacher review.
   static const warning = Color(0xFFD97706);
@@ -123,8 +125,8 @@ class AiMarkerColors {
   static const bg = Color(0xFFF6F1E3);
 
   /// A sheet on the desk. Warm white, not clinical white.
-  static const card = Color(0xFFFFFDF7);
-  static const outline = Color(0x1A211E15); // 10%
+  static const card = Color(0xFFFFFFFC);
+  static const outline = Color(0x29211E15); // 16%
 
   // Dark mode: the same desk at night. Warm blacks rather than the navy
   // that came with the blue scheme — a cool dark under a red pen mark makes
@@ -263,7 +265,9 @@ ThemeData get lightTheme => ThemeData(
     onError: Colors.white,
     surface: AiMarkerColors.card,
     onSurface: Color(0xFF211E15),
-    surfaceContainerHighest: AiMarkerColors.bg,
+    // Inset tiles on a card (stat boxes, segmented controls): a step
+    // deeper than the desk so they separate from the white sheet.
+    surfaceContainerHighest: Color(0xFFEFE5CC),
     onSurfaceVariant: AiMarkerColors.neutral,
     outline: Color(0x33211E15),
   ),
@@ -286,8 +290,8 @@ ThemeData get lightTheme => ThemeData(
   // small and the shadow is warm: a cool shadow on cream looks like dirt.
   cardTheme: CardThemeData(
     color: AiMarkerColors.card,
-    elevation: 3,
-    shadowColor: const Color(0x14211E15),
+    elevation: 4,
+    shadowColor: const Color(0x2E211E15),
     // Material 3 tints a raised surface toward the primary colour. Here that
     // would wash every card green with height.
     surfaceTintColor: Colors.transparent,
@@ -433,7 +437,7 @@ class DeskBackground extends StatelessWidget {
           stops: const [0.0, 0.55, 1.0],
           colors: dark
               ? const [Color(0xFF221E17), Color(0xFF17140F), Color(0xFF100E09)]
-              : const [Color(0xFFFFFDF5), Color(0xFFF7F1DF), Color(0xFFEDE5CE)],
+              : const [Color(0xFFF7F0DC), Color(0xFFEDE3C6), Color(0xFFE2D5B2)],
         ),
       ),
       child: child,
