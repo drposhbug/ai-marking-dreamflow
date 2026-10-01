@@ -194,6 +194,18 @@ async function maybeStoreLearnedKey(teacherId: string, raw: any): Promise<{ id: 
         correctOption: Math.round(clamp(q?.correctOption, 0, 26, 0)),
       })),
     };
+    // A cache hit stores the key too (below), so a re-mark of the same paper
+    // must not add a second copy: reuse a key this teacher already has with
+    // the same name and the same answers.
+    const { data: existing } = await serviceDb()
+      .from("answer_keys")
+      .select("id, key_json")
+      .eq("teacher_id", teacherId)
+      .eq("name", name)
+      .limit(5);
+    // deno-lint-ignore no-explicit-any
+    const same = (existing ?? []).find((k: any) => JSON.stringify(k?.key_json?.questions) === JSON.stringify(keyJson.questions));
+    if (same) return { id: String(same.id), name };
     const { data, error } = await serviceDb()
       .from("answer_keys")
       .insert({ teacher_id: teacherId, name, subject: subject || null, total_marks: totalMarks || null, key_json: keyJson })
@@ -3137,7 +3149,13 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
         pageIndex: map[a.pageIndex] ?? a.pageIndex,
       }));
     }
-    return json({ ...normalized, cached: true });
+    // The cache is shared across teachers (it is keyed on the pages, not the
+    // account), so a teacher whose keyless paper hits it would otherwise
+    // never get the learned key a fresh mark gives. Storing it costs no AI.
+    const learnedKey = (!answerKeyId && normalized.markingStyle === "graded")
+      ? await maybeStoreLearnedKey(gradeTeacherId, hit.raw)
+      : null;
+    return json({ ...normalized, cached: true, ...(learnedKey ? { learnedKey } : {}) });
   }
 
   // Fresh marking costs money — check the teacher's budget first. Cache
