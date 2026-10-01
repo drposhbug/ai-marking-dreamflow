@@ -1356,6 +1356,11 @@ async function budgetGate(teacherId: string, pacing: boolean): Promise<Response 
     const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
     const block = (scope: string, message: string): Response =>
       json({ error: "usage_limit", scope, plan, message }, 429);
+    // Pacing spreads a paid month so one test day cannot use it all. The
+    // trial is a one-off allowance, not a month, and a new guest's sample
+    // papers alone used more than the 25% daily share, so anyone trying
+    // the app (judges included) was refused their first own paper.
+    if (plan === "trial") pacing = false;
     if (month >= monthlyCap) {
       return block("monthly", `You've used 100% of this month's marking credits (${caps.label} plan). They reset on the 1st — upgrade for more, or invite colleagues: every paid referral adds bonus credits monthly.`);
     }
