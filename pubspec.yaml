@@ -39,8 +39,6 @@ dependencies:
   # Push, so a teacher who queued a class set at bedtime hears that it's
   # marked instead of having to reopen the app to find out.
   onesignal_flutter: ^5.3.0
-  google_mobile_ads: ^9.1.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

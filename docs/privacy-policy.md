@@ -41,8 +41,7 @@ other apps or websites.
 ## What we do not collect
 
 No location. No contacts. No analytics SDK following you around. Students never
-have accounts and are never contacted. We never read your device's advertising
-ID ourselves (see ads, below).
+have accounts and are never contacted. No ads, and no device advertising ID.
 
 ## Who else sees it
 
@@ -55,13 +54,6 @@ ID ourselves (see ads, below).
   We never see your card details.
 - **Google Drive** — only if you switch on Drive export, and only inside the
   "UMarkless" folder the app creates. The app cannot see the rest of your Drive.
-- **Google AdMob, free trial on the phone app only** — shows one small banner.
-  Ads are requested *non-personalised*, so they are not chosen from a profile of
-  you, and they are limited to a G rating. The app sends AdMob nothing of its
-  own: no student names, pages, marks or anything you type. Google's SDK does
-  receive basic device information and may use the device's advertising ID to
-  limit how often an ad repeats and to prevent fraud. Any paid plan removes the
-  ad. Ad impressions are also counted in RevenueCat, with no personal data.
 
 We do not sell your data, and we do not share it with anyone else.
 

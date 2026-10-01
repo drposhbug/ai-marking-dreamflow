@@ -375,8 +375,6 @@ class _SidebarUpgradePromoState extends State<_SidebarUpgradePromo> {
             : ('Enjoying the free trial?', 'Pro marks about 450 papers a month.');
 
     if (widget.compact) {
-      // Free trial only. The ad itself lives in the page (FreeTierAdSlot on
-      // the home screen), not pinned here over every screen.
       return _compactLine(context, headline);
     }
 
