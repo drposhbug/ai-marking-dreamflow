@@ -25,9 +25,16 @@ This is an active hackathon project, submitted to the **RevenueCat Shipaton
 live at [umarkless.com](https://umarkless.com). It is not yet released on any
 app store; see [Status](#status) for what is and is not wired up.
 
+## For judges
+
+1. **Watch the 2-minute demo video:** https://www.youtube.com/watch?v=uCEYYs5QZyY
+2. **Try it in your browser:** https://umarkless.com/app → tap **"Try it as a guest"** to mark real sample papers, no sign-up needed.
+3. **See how RevenueCat is used:** [How RevenueCat is used](#how-revenuecat-is-used).
+4. **Run it yourself:** [Build and run](#build-and-run).
+
 ## Demo
 
-- **Demo video:** _TODO — demo video link goes here_ <!-- DEMO VIDEO PLACEHOLDER: replace with the YouTube/Loom URL -->
+- **Demo video:** https://www.youtube.com/watch?v=uCEYYs5QZyY
 - **Try it:** [umarkless.com](https://umarkless.com) runs the web build.
   Continue as a guest to mark the built-in sample papers, with no sign-up.
 
@@ -505,8 +512,9 @@ umarkless.com.
 
 **Not done yet:**
 
-- Subscriptions are configured in RevenueCat and tested in sandbox; the Google
-  Play release is pending store approval. The Plans screen reads its tiers
+- Subscriptions are configured in RevenueCat and tested in sandbox; the
+  Android app is in the process of being submitted to Google Play. The Plans
+  screen reads its tiers
   and prices from the current RevenueCat Offering, and debug builds buy
   through RevenueCat's Test Store (a `test_` SDK key). The webhook ignores
   Test Store and sandbox purchases unless `REVENUECAT_ACCEPT_SANDBOX=true`, so
