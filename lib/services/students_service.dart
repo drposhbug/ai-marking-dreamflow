@@ -11,6 +11,8 @@ class StudentsService extends ChangeNotifier {
 
   List<Student> _students = const [];
   List<Student> get students => _students;
+  /// Students another account left on this device: saved back, never shown.
+  List<Student> _otherAccounts = const [];
 
   String _teacherId = '';
   // False until the stored list has been read — see ClassesService.
@@ -34,6 +36,7 @@ class StudentsService extends ChangeNotifier {
 
   Future<void> init({required String teacherId, required List<String> classIds}) async {
     _teacherId = teacherId;
+    _otherAccounts = const [];
     try {
       final raw = await _store.getString(_kKey);
       _students = (raw == null || raw.isEmpty) ? const [] : Student.decodeList(raw);
@@ -44,18 +47,11 @@ class StudentsService extends ChangeNotifier {
       _students = _students.where((s) => !_legacySeedCodes.contains(s.studentId)).toList();
       var changed = _students.length != before;
 
-      // Same adoption as classes/submissions: students created under another
-      // sign-in on this device follow the current teacher.
-      var adopted = 0;
-      _students = _students.map((s) {
-        if (s.teacherId == teacherId) return s;
-        adopted++;
-        return s.copyWith(teacherId: teacherId, updatedAt: DateTime.now());
-      }).toList();
-      if (adopted > 0) {
-        changed = true;
-        debugPrint('StudentsService: adopted $adopted student(s) from other sign-ins on this device');
-      }
+      // Only the signed-in teacher's students are loaded. Another account's
+      // students stay on disk untouched and are never shown or synced here
+      // (they used to be adopted by whoever signed in next).
+      _otherAccounts = _students.where((s) => s.teacherId != teacherId).toList();
+      _students = _students.where((s) => s.teacherId == teacherId).toList();
       if (changed) await _persist();
     } catch (e) {
       debugPrint('StudentsService.init failed: $e');
@@ -179,7 +175,7 @@ class StudentsService extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    await _store.setString(_kKey, Student.encodeList(_students));
+    await _store.setString(_kKey, Student.encodeList([..._students, ..._otherAccounts]));
     CloudCollection.push(teacherId: _teacherId, kind: CloudCollection.kStudents, items: _students.map((s) => s.toJson()).toList(growable: false));
   }
 }

@@ -16,37 +16,30 @@ class SubmissionsService extends ChangeNotifier {
 
   List<Submission> _submissions = const [];
   List<Submission> get submissions => _submissions;
+  /// Results other accounts left on this device: saved back as they were,
+  /// never shown, never synced to the signed-in teacher's cloud.
+  List<Submission> _otherAccounts = const [];
   Set<String> _pendingCloudDeletes = {};
 
   SubmissionsService({LocalStore? store}) : _store = store ?? const LocalStore();
 
   Future<void> init({required String teacherId, required List<String> studentIds, required List<String> classIds, required List<String> presetIds}) async {
     try {
+      _otherAccounts = const [];
       final raw = await _store.getString(_kKey);
       if (raw == null || raw.isEmpty) {
         _submissions = const [];
       } else {
         try {
-          _submissions = Submission.decodeList(raw);
+          final all = Submission.decodeList(raw);
+          // Only the signed-in teacher's results are loaded. Results another
+          // account left on this device are kept on disk, untouched, and
+          // never shown or synced here: a shared school phone (or a guest
+          // trying the app) must not inherit someone else's student work.
+          // They used to be adopted by whoever signed in next.
+          _submissions = all.where((s) => s.teacherId == teacherId).toList(growable: false);
+          _otherAccounts = all.where((s) => s.teacherId != teacherId).toList(growable: false);
           debugPrint('SubmissionsService: loaded ${_submissions.length} result(s) from disk');
-          // Marks made on this device under another sign-in (dev mode, a
-          // test account) belong to the teacher holding the phone — adopt
-          // them so they show in the dashboard/classes instead of being
-          // silently filtered out.
-          final adopted = <Submission>[];
-          _submissions = _submissions.map((s) {
-            if (s.teacherId == teacherId) return s;
-            final a = s.copyWith(teacherId: teacherId, updatedAt: DateTime.now());
-            adopted.add(a);
-            return a;
-          }).toList(growable: false);
-          if (adopted.isNotEmpty) {
-            await _persist();
-            debugPrint('SubmissionsService: adopted ${adopted.length} result(s) from other sign-ins on this device');
-            for (final s in adopted) {
-              _pushCloud(s);
-            }
-          }
         } catch (e) {
           // NEVER lose data: park the unreadable raw for recovery instead
           // of overwriting it with an empty list later.
@@ -206,9 +199,10 @@ class SubmissionsService extends ChangeNotifier {
   /// again. Saving one mark used to re-serialise the entire year's work.
   String _encodeAll() {
     final out = StringBuffer('[');
-    for (var i = 0; i < _submissions.length; i++) {
+    final everyone = [..._submissions, ..._otherAccounts];
+    for (var i = 0; i < everyone.length; i++) {
       if (i > 0) out.write(',');
-      final s = _submissions[i];
+      final s = everyone[i];
       out.write(_encoded[s] ??= jsonEncode(s.toJson()));
     }
     out.write(']');

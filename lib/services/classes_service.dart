@@ -10,6 +10,8 @@ class ClassesService extends ChangeNotifier {
 
   List<TeacherClass> _classes = const [];
   List<TeacherClass> get classes => _classes;
+  /// Classes another account left on this device: saved back, never shown.
+  List<TeacherClass> _otherAccounts = const [];
 
   String _teacherId = '';
   // False until the stored list has been read. Persisting before that would
@@ -32,6 +34,7 @@ class ClassesService extends ChangeNotifier {
 
   Future<void> init({required String teacherId}) async {
     _teacherId = teacherId;
+    _otherAccounts = const [];
     try {
       final raw = await _store.getString(_kKey);
       _classes = (raw == null || raw.isEmpty) ? const [] : TeacherClass.decodeList(raw);
@@ -42,19 +45,11 @@ class ClassesService extends ChangeNotifier {
       _classes = _classes.where((c) => !_isLegacySeed(c)).toList();
       var changed = _classes.length != before;
 
-      // Classes made on this device under another sign-in (dev/test account)
-      // belong to the teacher holding the phone — adopt them so they show in
-      // the dashboard and Classes instead of being silently filtered out.
-      var adopted = 0;
-      _classes = _classes.map((c) {
-        if (c.teacherId == teacherId) return c;
-        adopted++;
-        return c.copyWith(teacherId: teacherId, updatedAt: DateTime.now());
-      }).toList();
-      if (adopted > 0) {
-        changed = true;
-        debugPrint('ClassesService: adopted $adopted class(es) from other sign-ins on this device');
-      }
+      // Only the signed-in teacher's classes are loaded. Another account's
+      // classes stay on disk untouched and are never shown or synced here
+      // (they used to be adopted by whoever signed in next).
+      _otherAccounts = _classes.where((c) => c.teacherId != teacherId).toList();
+      _classes = _classes.where((c) => c.teacherId == teacherId).toList();
       if (changed) await _persist();
     } catch (e) {
       debugPrint('ClassesService.init failed: $e');
@@ -141,7 +136,7 @@ class ClassesService extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    await _store.setString(_kKey, TeacherClass.encodeList(_classes));
+    await _store.setString(_kKey, TeacherClass.encodeList([..._classes, ..._otherAccounts]));
     CloudCollection.push(teacherId: _teacherId, kind: CloudCollection.kClasses, items: _classes.map((c) => c.toJson()).toList(growable: false));
   }
 }
