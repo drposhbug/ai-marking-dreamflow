@@ -165,18 +165,24 @@ class GradebookExport {
     return (wrong, choices..sort());
   }
 
-  static String _ordinal(int n) {
-    final teen = n % 100 >= 11 && n % 100 <= 13;
-    final suffix = teen ? 'th' : const {1: 'st', 2: 'nd', 3: 'rd'}[n % 10] ?? 'th';
-    return '$n${suffix.toUpperCase()}';
+  /// The 10-point band a percent falls in ("90–100", "80–89", … "Below 50"):
+  /// a ready-made filter dropdown once the sheet is open.
+  static String band(int percent) {
+    if (percent >= 90) return '90–100';
+    if (percent < 50) return 'Below 50';
+    final low = percent ~/ 10 * 10;
+    return '$low–${low + 9}';
   }
 
-  /// A ranked results sheet for a multiple-choice test: Rank (tied scores
-  /// share a rank: 1, 1, 3), Student, Score, Percent, the questions each got
-  /// wrong, and notes — the paper's own flags, students who chose the same
-  /// wrong answers (3 or more of them), and, given a [cutoff] like "top 50",
-  /// a tie that straddles it.
-  static String rankedCsv(List<MarkRow> rows, {int? cutoff}) {
+  /// A results sheet for a multiple-choice test, best first: Student, Score,
+  /// Percent and Percentile as plain numbers (so a spreadsheet filter like
+  /// "greater than 85" works), the 10-point Band, the questions each got
+  /// wrong, and notes — the paper's own flags, and students who chose the
+  /// same wrong answers on 3 or more questions.
+  ///
+  /// Percentile is the share of the class scoring below, counting ties as
+  /// half: the top of a class of 50 is about 99, a middle score 50.
+  static String resultsCsv(List<MarkRow> rows) {
     final sorted = [...rows]..sort((a, b) {
         final byScore = b.score.compareTo(a.score);
         return byScore != 0 ? byScore : a.studentName.toLowerCase().compareTo(b.studentName.toLowerCase());
@@ -187,24 +193,21 @@ class GradebookExport {
       if (r.wrongChoices.length >= 3) (sameAnswers[r.wrongChoices.join(',')] ??= []).add(r.studentName);
     }
 
-    final b = StringBuffer('Rank,Student,Score,Percent,Questions wrong,Notes\n');
-    for (var i = 0; i < sorted.length; i++) {
-      final r = sorted[i];
-      final rank = sorted.indexWhere((o) => o.score == r.score) + 1;
-      final tied = sorted.where((o) => o.score == r.score).length;
-      final notes = <String>[
-        ...r.flags,
-        if (r.wrongChoices.length >= 3)
-          for (final name in [sameAnswers[r.wrongChoices.join(',')]!.where((n) => n != r.studentName).join(', ')])
-            if (name.isNotEmpty) 'Same wrong answers as $name',
-        if (cutoff != null && tied > 1 && rank <= cutoff && rank + tied - 1 > cutoff)
-          'TIED FOR ${_ordinal(cutoff)} – tiebreak needed',
-      ];
+    final b = StringBuffer('Student,Score,Percent,Percentile,Band,Questions wrong,Notes\n');
+    for (final r in sorted) {
+      final below = sorted.where((o) => o.score < r.score).length;
+      final equal = sorted.where((o) => o.score == r.score).length;
+      final percentile = ((below + equal / 2) / sorted.length * 100).round();
+      final copied = r.wrongChoices.length >= 3
+          ? sameAnswers[r.wrongChoices.join(',')]!.where((n) => n != r.studentName).join(', ')
+          : '';
+      final notes = [...r.flags, if (copied.isNotEmpty) 'Same wrong answers as $copied'];
       b.writeln([
-        '$rank',
         csvField(r.studentName),
         _num(r.score),
-        '${r.percent}%',
+        '${r.percent}',
+        '$percentile',
+        band(r.percent),
         csvField(r.wrong.isEmpty ? '—' : r.wrong.join(', ')),
         csvField(notes.join('; ')),
       ].join(','));

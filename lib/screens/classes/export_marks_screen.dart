@@ -35,9 +35,6 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
   bool _asPercent = false;
   bool _busy = false;
 
-  /// "Top N" for the ranked sheet, e.g. 50 places on a team; null = none.
-  int? _cutoff;
-
   List<MarkRow> get _rows {
     final id = _classId;
     if (id == null) return const [];
@@ -71,15 +68,15 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
     }
   }
 
-  /// Ranked results for a multiple-choice test: who placed where, which
-  /// questions each got wrong, and what to look at (same wrong answers,
-  /// unreadable sheets, a tie on the cutoff).
-  Future<void> _exportRanked() async {
+  /// Results for a multiple-choice test, best first: percent, percentile,
+  /// band, which questions each got wrong, and what to look at (same wrong
+  /// answers, unreadable sheets).
+  Future<void> _exportResults() async {
     final rows = _rows;
     if (rows.isEmpty) return;
     setState(() => _busy = true);
     try {
-      await _shareCsv(GradebookExport.rankedCsv(rows, cutoff: _cutoff), 'markless-ranked-${rows.length}-students.csv');
+      await _shareCsv(GradebookExport.resultsCsv(rows), 'markless-results-${rows.length}-students.csv');
     } catch (e) {
       if (mounted) _snack('Couldn\'t build the file: $e');
     } finally {
@@ -302,26 +299,16 @@ class _ExportMarksScreenState extends State<ExportMarksScreen> {
                 ),
                 const SizedBox(height: 18),
                 OutlinedButton.icon(
-                  onPressed: rows.isEmpty ? null : _exportRanked,
+                  onPressed: rows.isEmpty ? null : _exportResults,
                   icon: const Icon(Icons.leaderboard_rounded),
-                  label: const Text('Ranked results (multiple choice)'),
+                  label: const Text('Results by percentage (multiple choice)'),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Rank, score, percent and the questions each student got wrong, with blanks and double marks '
-                  'called out. Notes flag hard-to-read sheets and students with the same wrong answers.',
+                  'Best first: percent, percentile, a 90–100 / 80–89… band to filter by, and the questions each '
+                  'student got wrong, with blanks and double marks called out. Notes flag hard-to-read sheets and '
+                  'students with the same wrong answers. In Excel, Ctrl+Shift+L turns on the filters.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AiMarkerColors.neutral, height: 1.4),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Places available (optional)',
-                    hintText: 'e.g. 50: ties across 50th get flagged',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onChanged: (v) => setState(() => _cutoff = int.tryParse(v.trim())),
                 ),
                 const SizedBox(height: 18),
                 OutlinedButton.icon(

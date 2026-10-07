@@ -14,19 +14,26 @@ MarkRow row(String name, double score, {List<WrongAnswer> wrong = const [], List
       flags: flags,
     );
 
-/// A ranked results sheet for a multiple-choice contest, the way a teacher
-/// would make one by hand.
+/// A results sheet for a multiple-choice test that sorts and filters by
+/// percentage, the way a teacher would make one by hand.
 void main() {
-  test('ties share a rank and the next rank skips', () {
-    final lines = GradebookExport.rankedCsv([row('Ryan Y', 50), row('Alan Xiao', 50), row('Raymond Lu', 49)]).trim().split('\n');
-    expect(lines[0], 'Rank,Student,Score,Percent,Questions wrong,Notes');
-    expect(lines[1], '1,Alan Xiao,50,100%,—,');
-    expect(lines[2], '1,Ryan Y,50,100%,—,');
-    expect(lines[3], startsWith('3,Raymond Lu,49,98%'));
+  test('best first, with percent and percentile as plain numbers and a band', () {
+    final lines = GradebookExport.resultsCsv([row('Raymond Lu', 49), row('Ryan Y', 50), row('Alan Xiao', 50), row('Owen', 40)])
+        .trim()
+        .split('\n');
+    expect(lines[0], 'Student,Score,Percent,Percentile,Band,Questions wrong,Notes');
+    expect(lines[1], 'Alan Xiao,50,100,75,90–100,—,'); // 2 below, 2 tied: (2 + 1) / 4
+    expect(lines[2], 'Ryan Y,50,100,75,90–100,—,');
+    expect(lines[3], 'Raymond Lu,49,98,38,90–100,—,');
+    expect(lines[4], 'Owen,40,80,13,80–89,—,');
+  });
+
+  test('bands are 10 points wide, with everything under 50 together', () {
+    expect([100, 90, 89, 72, 50, 49, 0].map(GradebookExport.band), ['90–100', '90–100', '80–89', '70–79', '50–59', 'Below 50', 'Below 50']);
   });
 
   test('blanks and double marks are called out, flags become notes', () {
-    final csv = GradebookExport.rankedCsv([
+    final csv = GradebookExport.resultsCsv([
       row('Liam Parsotam', 47,
           wrong: const [WrongAnswer('1'), WrongAnswer('32', 'blank'), WrongAnswer('41')], flags: const ['Student # hard to read']),
     ]);
@@ -35,7 +42,7 @@ void main() {
 
   test('the same wrong answers on 3+ questions are flagged both ways', () {
     const choices = ['1:2', '12:4', '38:1', '47:3', '7:2'];
-    final csv = GradebookExport.rankedCsv([
+    final csv = GradebookExport.resultsCsv([
       row('Sophie Zarobyan', 45, choices: choices),
       row('Clinton Kwong', 45, choices: choices),
       row('Arian Kasen Chi', 45, choices: const ['1:3', '4:1', '32:2']),
@@ -43,18 +50,6 @@ void main() {
     expect(csv, contains('Same wrong answers as Sophie Zarobyan'));
     expect(csv, contains('Same wrong answers as Clinton Kwong'));
     expect(RegExp('Same wrong').allMatches(csv).length, 2);
-  });
-
-  test('a tie across the cutoff needs a tiebreak; one inside it does not', () {
-    final rows = [
-      for (var i = 0; i < 49; i++) row('Student $i', 50.0 - i / 100),
-      row('Benjamin', 40),
-      row('Owen', 40),
-      row('Neil Lekhi', 40),
-    ];
-    final csv = GradebookExport.rankedCsv(rows, cutoff: 50);
-    expect(RegExp('TIED FOR 50TH – tiebreak needed').allMatches(csv).length, 3);
-    expect(GradebookExport.rankedCsv(rows, cutoff: 60), isNot(contains('TIED')));
   });
 
   test('wrong answers come from the saved marking result', () {
