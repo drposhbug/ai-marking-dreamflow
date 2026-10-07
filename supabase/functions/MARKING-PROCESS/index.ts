@@ -171,7 +171,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 24;
+const CACHE_VERSION = 25;
 
 // A keyless graded mark works out every correct answer anyway — store that
 // as a real answer key so the REST of the class marks against it on the
