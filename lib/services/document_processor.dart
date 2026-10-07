@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
+import 'package:marking_prokect_v2/services/browser_downscale.dart';
 
 /// A processed capture plus the verdict on whether it actually shows a page.
 class ProcessedPage {
@@ -28,6 +29,12 @@ class DocumentProcessor {
   /// never blocks a legitimate scan.
   static Future<ProcessedPage> processPageDetailed(Uint8List jpegBytes) async {
     try {
+      if (kIsWeb) {
+        // One frame for a spinner or progress count to paint: compute() runs
+        // inline on the web, so nothing redraws until this returns.
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+        jpegBytes = await browserDownscale(jpegBytes) ?? jpegBytes;
+      }
       final (bytes, isDoc) = await compute(processPageSync, jpegBytes);
       return ProcessedPage(bytes, isDoc);
     } catch (e) {

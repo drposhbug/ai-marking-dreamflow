@@ -161,9 +161,17 @@ class AppState extends ChangeNotifier {
   String _schoolKey(String teacherId) => 'ai_marker.school.v1.$teacherId';
   String _markingFeedbackKey(String teacherId) => 'ai_marker.marking_feedback.v1.$teacherId';
   String _anonymizeKey(String teacherId) => 'ai_marker.anonymize_uploads.v1.$teacherId';
+  String _gradeLevelKey(String teacherId) => 'ai_marker.grade_level.v1.$teacherId';
+
+  String _teacherId = '';
+
+  /// The grade the teacher last picked on the slider, remembered across
+  /// sessions. A selected class's own grade still wins for its papers.
+  int? _savedGradeLevel;
 
   Future<void> initForUser({required String teacherId}) async {
     try {
+      _teacherId = teacherId;
       await initTheme();
 
       final rawMode = await _store.getString(_defaultModeKey(teacherId));
@@ -189,7 +197,9 @@ class AppState extends ChangeNotifier {
       final rawAnon = await _store.getString(_anonymizeKey(teacherId));
       if (rawAnon != null && rawAnon.isNotEmpty) _anonymizeUploads = rawAnon == '1';
 
-      _draft = _draft.copyWith(mode: _defaultMode, harshness: _defaultHarshness);
+      _savedGradeLevel = int.tryParse((await _store.getString(_gradeLevelKey(teacherId)) ?? '').trim())?.clamp(1, 13);
+
+      _draft = _draft.copyWith(mode: _defaultMode, harshness: _defaultHarshness, gradeLevel: _savedGradeLevel);
       notifyListeners();
     } catch (e) {
       debugPrint('AppState.initForUser failed: $e');
@@ -315,7 +325,9 @@ class AppState extends ChangeNotifier {
       mode: _draft.mode,
       criteria: _draft.criteria,
       harshness: _draft.harshness,
-      gradeLevel: _draft.gradeLevel,
+      // A class keeps its own grade for the next paper; otherwise go back to
+      // the teacher's own pick (a sample paper's grade is for that paper only).
+      gradeLevel: (_draft.classId ?? '').isNotEmpty ? _draft.gradeLevel : (_savedGradeLevel ?? _draft.gradeLevel),
       notes: _draft.notes,
       oneTimeOverride: _draft.oneTimeOverride,
       autoDetectScheme: _draft.autoDetectScheme,
@@ -350,6 +362,14 @@ class AppState extends ChangeNotifier {
   void setGradeLevel(int gradeLevel) {
     _draft = _draft.copyWith(gradeLevel: gradeLevel.clamp(1, 13));
     notifyListeners();
+  }
+
+  /// The teacher moved the slider themselves: use it now and remember it.
+  Future<void> rememberGradeLevel(int gradeLevel) async {
+    final v = gradeLevel.clamp(1, 13);
+    _savedGradeLevel = v;
+    setGradeLevel(v);
+    if (_teacherId.isNotEmpty) await _store.setString(_gradeLevelKey(_teacherId), '$v');
   }
 
   Future<void> setRegion({required String teacherId, required String regionId}) async {

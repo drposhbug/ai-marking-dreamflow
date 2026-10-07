@@ -47,10 +47,18 @@ class _LoginScreenState extends State<LoginScreen> {
   StreamSubscription<AuthState>? _authSub;
   bool _adopting = false;
 
+  /// Still signed in from last time: show a spinner while that sign-in is
+  /// picked up, instead of flashing the form at someone already signed in.
+  bool _resuming = false;
+
   @override
   void initState() {
     super.initState();
     final auth = context.read<AuthService>();
+    _resuming = auth.hasSavedSession;
+    auth.lastEmail().then((e) {
+      if (mounted && _email.text.isEmpty && e.isNotEmpty) _email.text = e;
+    });
     auth.enabledOAuthProviders().then((p) {
       if (mounted) setState(() => _providers = p);
     });
@@ -99,6 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _adoptSessionIfAny() async {
     if (_adopting || _loading || !mounted) return;
     _adopting = true;
+    var routed = false;
     try {
       final auth = context.read<AuthService>();
       if (!await auth.adoptSupabaseSession()) return;
@@ -106,10 +115,13 @@ class _LoginScreenState extends State<LoginScreen> {
       final restoredDone = await _restoreProfile(auth);
       if (!mounted) return;
       await _routeAfterSignIn(auth, restoredDone: restoredDone);
+      routed = true;
     } catch (e) {
       debugPrint('Session adopt failed: $e');
     } finally {
       _adopting = false;
+      // Picking up the old sign-in failed: show the form after all.
+      if (!routed && _resuming && mounted) setState(() => _resuming = false);
     }
   }
 
@@ -379,6 +391,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_resuming) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     return LayoutBuilder(
       builder: (context, constraints) {
         // Two shapes, from the app's own breakpoints: a phone gets one
@@ -628,6 +641,8 @@ class _LoginScreenState extends State<LoginScreen> {
               controller: _email,
               keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.username, AutofillHints.email],
+              textInputAction: TextInputAction.next,
+              onSubmitted: (_) => FocusScope.of(context).nextFocus(),
               // Fields are ruled onto the paper rather than floated on it:
               // a white box on a warm sheet loses its own edges.
               decoration: InputDecoration(hintText: 'teacher@school.edu', labelText: 'Email', fillColor: tones.shade, contentPadding: field),

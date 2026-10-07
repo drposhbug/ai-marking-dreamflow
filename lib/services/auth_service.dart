@@ -99,6 +99,15 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// A saved sign-in from a previous run is waiting to be picked up.
+  bool get hasSavedSession => _supabase?.auth.currentSession != null;
+
+  static const _kLastEmailKey = 'ai_marker.last_email';
+
+  /// The address of the last real account signed in on this device, kept
+  /// after sign-out so the login form can be pre-filled. '' if none.
+  Future<String> lastEmail() async => (await _store.getString(_kLastEmailKey)) ?? '';
+
   /// Stable per-email account id — used only by the local fallback (no
   /// Supabase configured) and by developer mode.
   static String stableIdFor(String email) {
@@ -406,6 +415,7 @@ class AuthService extends ChangeNotifier {
       updatedAt: now,
     );
     await _store.setString(_kCurrentUserKey, jsonEncode(_currentUser!.toJson()));
+    if (email.isNotEmpty && email != guestEmail) await _store.setString(_kLastEmailKey, email);
     notifyListeners();
     await _trySyncProfileFromSupabase();
   }

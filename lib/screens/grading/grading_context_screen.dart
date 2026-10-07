@@ -782,6 +782,7 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
                         setState(() => _gradeLevel = v);
                         context.read<AppState>().setGradeLevel(v.round());
                       },
+                      onChangeEnd: (v) => context.read<AppState>().rememberGradeLevel(v.round()),
                     ),
                     Text('Marking at Grade ${_gradeLevel.round()} expectations', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w800)),
                   ],
