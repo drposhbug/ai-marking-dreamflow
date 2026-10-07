@@ -23,6 +23,15 @@ const B = 'https://zxikjizraeqejbsncqpg.supabase.co';
 const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
 const expected = JSON.parse(fs.readFileSync(path.join(EVAL, 'expected.json'), 'utf8'));
+// A page added later only needs its own NN.json: its official % for the
+// visible parts, whether it has a drawing, and whether it's short answers.
+for (const f of fs.readdirSync(path.join(EVAL, 'pages'))) {
+  const n = f.match(/^(\d+)\.json$/)?.[1];
+  if (!n || expected[n]) continue;
+  const meta = JSON.parse(fs.readFileSync(path.join(EVAL, 'pages', f), 'utf8'));
+  if (typeof meta.official_pct_visible !== 'number') continue;
+  expected[n] = { pct: meta.official_pct_visible, drawing: meta.has_drawing === true, shortAnswer: meta.short_answer_parts === true };
+}
 const only = opt('pages')?.split(',');
 const pages = Object.keys(expected).filter((k) => !k.startsWith('_') && (!only || only.includes(k))).sort();
 
