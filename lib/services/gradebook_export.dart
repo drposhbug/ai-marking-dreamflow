@@ -2,6 +2,18 @@ import 'package:marking_prokect_v2/models/student.dart';
 import 'package:marking_prokect_v2/models/submission.dart';
 import 'package:marking_prokect_v2/services/page_fingerprint.dart' show sameStudentName;
 
+/// One question a student got wrong: its number, and "blank" or "double"
+/// when nothing, or more than one option, was filled in.
+class WrongAnswer {
+  final String question;
+  final String note;
+
+  const WrongAnswer(this.question, [this.note = '']);
+
+  @override
+  String toString() => note.isEmpty ? question : '$question ($note)';
+}
+
 /// One student's mark, ready to leave the app.
 class MarkRow {
   final String studentName;
@@ -11,6 +23,16 @@ class MarkRow {
   final DateTime markedAt;
   final String feedback;
 
+  /// Questions marked wrong, in question order.
+  final List<WrongAnswer> wrong;
+
+  /// The paper's own flags ("Student # hard to read", "Light marks").
+  final List<String> flags;
+
+  /// Each answered-but-wrong question with the option chosen, e.g. "12:3".
+  /// Two papers with the same long list chose the same wrong bubbles.
+  final List<String> wrongChoices;
+
   const MarkRow({
     required this.studentName,
     required this.studentCode,
@@ -18,6 +40,9 @@ class MarkRow {
     required this.maxScore,
     required this.markedAt,
     required this.feedback,
+    this.wrong = const [],
+    this.flags = const [],
+    this.wrongChoices = const [],
   });
 
   int get percent => maxScore <= 0 ? 0 : ((score / maxScore) * 100).round();
@@ -94,6 +119,7 @@ class GradebookExport {
     for (final st in students.where((s) => s.classId == classId)) {
       final sub = byStudent[st.id];
       if (sub == null) continue;
+      final (wrong, choices) = wrongAnswers(sub.resultJson);
       rows.add(MarkRow(
         studentName: st.name,
         studentCode: st.studentId,
@@ -101,10 +127,89 @@ class GradebookExport {
         maxScore: sub.maxScore,
         markedAt: sub.createdAt,
         feedback: sub.feedback,
+        wrong: wrong,
+        flags: sub.triageFlags,
+        wrongChoices: choices,
       ));
     }
     rows.sort((a, b) => a.studentName.toLowerCase().compareTo(b.studentName.toLowerCase()));
     return rows;
+  }
+
+  static final _double = RegExp(r'more than one|multiple (answers|options|marks|bubbles)|two (answers|options|bubbles)|double', caseSensitive: false);
+  static final _blank = RegExp(r'no answer|left blank|\bblank\b|not answered|unanswered|nothing (was )?(marked|filled|selected)', caseSensitive: false);
+
+  /// The questions a marked paper got wrong, from its saved annotations, and
+  /// the options chosen on the wrong ones (see [MarkRow.wrongChoices]).
+  /// Blank and double marks are told by the marker's note: a Form import has
+  /// no `chosenOption` at all, so 0 there means nothing about the paper.
+  static (List<WrongAnswer>, List<String>) wrongAnswers(Map<String, dynamic>? result) {
+    final notes = (result?['annotations'] as List?) ?? const [];
+    final wrong = <WrongAnswer>[];
+    final choices = <String>[];
+    for (final n in notes.whereType<Map>()) {
+      if (n['correct'] == true) continue;
+      final q = (n['questionLabel'] ?? '').toString().replaceFirst(RegExp(r'^\s*Q(uestion)?\s*', caseSensitive: false), '').trim();
+      if (q.isEmpty) continue;
+      final chosen = (n['chosenOption'] as num?)?.toInt() ?? 0;
+      final note = (n['feedback'] ?? '').toString();
+      if (chosen > 0) {
+        wrong.add(WrongAnswer(q));
+        choices.add('$q:$chosen');
+      } else {
+        wrong.add(WrongAnswer(q, _double.hasMatch(note) ? 'double' : _blank.hasMatch(note) ? 'blank' : ''));
+      }
+    }
+    int order(String q) => int.tryParse(RegExp(r'\d+').firstMatch(q)?.group(0) ?? '') ?? 1 << 30;
+    wrong.sort((a, b) => order(a.question).compareTo(order(b.question)));
+    return (wrong, choices..sort());
+  }
+
+  static String _ordinal(int n) {
+    final teen = n % 100 >= 11 && n % 100 <= 13;
+    final suffix = teen ? 'th' : const {1: 'st', 2: 'nd', 3: 'rd'}[n % 10] ?? 'th';
+    return '$n${suffix.toUpperCase()}';
+  }
+
+  /// A ranked results sheet for a multiple-choice test: Rank (tied scores
+  /// share a rank: 1, 1, 3), Student, Score, Percent, the questions each got
+  /// wrong, and notes — the paper's own flags, students who chose the same
+  /// wrong answers (3 or more of them), and, given a [cutoff] like "top 50",
+  /// a tie that straddles it.
+  static String rankedCsv(List<MarkRow> rows, {int? cutoff}) {
+    final sorted = [...rows]..sort((a, b) {
+        final byScore = b.score.compareTo(a.score);
+        return byScore != 0 ? byScore : a.studentName.toLowerCase().compareTo(b.studentName.toLowerCase());
+      });
+
+    final sameAnswers = <String, List<String>>{};
+    for (final r in sorted) {
+      if (r.wrongChoices.length >= 3) (sameAnswers[r.wrongChoices.join(',')] ??= []).add(r.studentName);
+    }
+
+    final b = StringBuffer('Rank,Student,Score,Percent,Questions wrong,Notes\n');
+    for (var i = 0; i < sorted.length; i++) {
+      final r = sorted[i];
+      final rank = sorted.indexWhere((o) => o.score == r.score) + 1;
+      final tied = sorted.where((o) => o.score == r.score).length;
+      final notes = <String>[
+        ...r.flags,
+        if (r.wrongChoices.length >= 3)
+          for (final name in [sameAnswers[r.wrongChoices.join(',')]!.where((n) => n != r.studentName).join(', ')])
+            if (name.isNotEmpty) 'Same wrong answers as $name',
+        if (cutoff != null && tied > 1 && rank <= cutoff && rank + tied - 1 > cutoff)
+          'TIED FOR ${_ordinal(cutoff)} – tiebreak needed',
+      ];
+      b.writeln([
+        '$rank',
+        csvField(r.studentName),
+        _num(r.score),
+        '${r.percent}%',
+        csvField(r.wrong.isEmpty ? '—' : r.wrong.join(', ')),
+        csvField(notes.join('; ')),
+      ].join(','));
+    }
+    return b.toString();
   }
 }
 
