@@ -10,6 +10,7 @@ import 'package:marking_prokect_v2/services/batch_marking.dart';
 import 'package:marking_prokect_v2/services/grading_queue_service.dart';
 import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
+import 'package:marking_prokect_v2/widgets/flagged_check.dart';
 import 'package:marking_prokect_v2/theme.dart';
 import 'package:provider/provider.dart';
 
@@ -126,6 +127,8 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
   /// Half price, and the teacher isn't waiting for it. They've just seen the
   /// pilot, so the set isn't going out unchecked.
   Future<void> _overnight() async {
+    if (!await confirmFlagged(context, _job?.result?.annotations ?? const [])) return;
+    if (!mounted) return;
     final queue = context.read<GradingQueueService>();
     final n = queue.heldJobs.length;
     if (n == 0) return;
@@ -164,7 +167,9 @@ class _PilotReviewScreenState extends State<PilotReviewScreen> {
   }
 
 
-  void _approve() {
+  Future<void> _approve() async {
+    if (!await confirmFlagged(context, _job?.result?.annotations ?? const [])) return;
+    if (!mounted) return;
     context.read<GradingQueueService>().releaseHeld(
           students: context.read<StudentsService>(),
           submissions: context.read<SubmissionsService>(),

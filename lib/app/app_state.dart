@@ -364,6 +364,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// "Skip for this batch" on the flagged-drawings check: stops asking for
+  /// the rest of this class's papers. In memory only, so a new session (or
+  /// another class) asks again.
+  String? _skipFlaggedFor;
+  bool get skipFlaggedCheck => _skipFlaggedFor != null && _skipFlaggedFor == (_draft.classId ?? '');
+  void skipFlaggedCheckForBatch() => _skipFlaggedFor = _draft.classId ?? '';
+
   /// The teacher moved the slider themselves: use it now and remember it.
   Future<void> rememberGradeLevel(int gradeLevel) async {
     final v = gradeLevel.clamp(1, 13);

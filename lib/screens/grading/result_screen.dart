@@ -22,6 +22,7 @@ import 'package:marking_prokect_v2/services/students_service.dart';
 import 'package:marking_prokect_v2/services/submissions_service.dart';
 import 'package:marking_prokect_v2/services/word_locator.dart';
 import 'package:marking_prokect_v2/theme.dart';
+import 'package:marking_prokect_v2/widgets/flagged_check.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -980,13 +981,14 @@ class _ResultScreenState extends State<ResultScreen> {
                               ListTile(
                                 dense: true,
                                 onTap: () => _editAnnotation(a),
-                                // "?" = the AI couldn't mark it (drawing, no
-                                // key) — a yellow flag, never a red "wrong".
+                                // A flag (amber, never a red "wrong"): "?" =
+                                // the AI couldn't mark it; a drawing = marked
+                                // as a best guess for the teacher to confirm.
                                 leading: Icon(
-                                  _isTeacherOnly(a)
+                                  _isFlagged(a)
                                       ? Icons.flag_rounded
                                       : (a.correct ? Icons.check_circle_rounded : Icons.cancel_rounded),
-                                  color: _isTeacherOnly(a)
+                                  color: _isFlagged(a)
                                       ? _kFlagAmber
                                       : (a.correct ? AiMarkerColors.secondary : AiMarkerColors.error),
                                   size: 20,
@@ -994,6 +996,9 @@ class _ResultScreenState extends State<ResultScreen> {
                                 title: Text(a.questionLabel.isEmpty ? 'Question' : a.questionLabel, style: Theme.of(context).textTheme.bodyMedium),
                                 subtitle: _isTeacherOnly(a)
                                     ? Text('Yours to mark — ${a.feedback.isEmpty ? "the AI can't check this" : a.feedback}',
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: _kFlagAmber, fontWeight: FontWeight.w700))
+                                    : a.teacherCheck
+                                    ? Text("AI's best guess on a drawing — check it${a.feedback.isEmpty ? '' : ': ${a.feedback}'}",
                                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: _kFlagAmber, fontWeight: FontWeight.w700))
                                     : (a.correct && a.methodNote.trim().isNotEmpty
                                         ? Text('Right answer, ${a.methodNote.trim()} — awarded; adjust if you require the taught method',
@@ -1006,7 +1011,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                       '${a.earnedMark}${a.outOfMark}',
                                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                             fontWeight: FontWeight.w900,
-                                            color: _isTeacherOnly(a) ? _kFlagAmber : null,
+                                            color: _isFlagged(a) ? _kFlagAmber : null,
                                           ),
                                     ),
                                     const SizedBox(width: 6),
@@ -1089,7 +1094,10 @@ class _ResultScreenState extends State<ResultScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: FilledButton(
-                          onPressed: () => context.go('/dashboard'),
+                          onPressed: () async {
+                            if (result != null && !await confirmFlagged(context, result.annotations)) return;
+                            if (context.mounted) context.go('/dashboard');
+                          },
                           style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white),
                           child: const Text('Save to Dashboard'),
                         ),
@@ -1308,10 +1316,12 @@ String _bubbleLabel(String s) {
   return words.take(4).join(' ');
 }
 
-// "?" marks are questions the AI refused to judge (drawings, listening tests
-// with no key) — flagged for the teacher in amber, never shown as "wrong".
+// "?" marks are questions the AI refused to judge (listening tests with no
+// key); drawings are marked as a best guess with teacherCheck set. Both are
+// flagged for the teacher in amber, never shown as "wrong".
 const _kFlagAmber = Color(0xFFB45309);
 bool _isTeacherOnly(QuestionAnnotation a) => a.earnedMark.trim() == '?';
+bool _isFlagged(QuestionAnnotation a) => _isTeacherOnly(a) || a.teacherCheck;
 
 /// Writing errors carry no marks of their own — the deduction happens once in
 /// the section score — so they render as highlighter strokes, not mark chips.
@@ -1442,9 +1452,13 @@ class _AnnotatedImageState extends State<_AnnotatedImage> {
         prevBottom = top + blockH;
       }
 
-      Color tone(QuestionAnnotation a) => a.correct
-          ? AiMarkerColors.primary
-          : (_isTeacherOnly(a) ? _kFlagAmber : AiMarkerColors.error);
+      // A flagged drawing stays amber even when the AI thinks it's right:
+      // the teacher still has to confirm it.
+      Color tone(QuestionAnnotation a) => a.teacherCheck
+          ? _kFlagAmber
+          : a.correct
+              ? AiMarkerColors.primary
+              : (_isTeacherOnly(a) ? _kFlagAmber : AiMarkerColors.error);
 
       return Stack(
         fit: StackFit.passthrough,
@@ -1487,12 +1501,13 @@ class _AnnotatedImageState extends State<_AnnotatedImage> {
             );
           }),
           // Marks-bearing questions keep the box on the wrong answer itself.
-          // Teacher-only "?" questions get amber (check it), not red (wrong).
-          // A teacher-only question is nearly always a drawing (a diagram, a
-          // graph), so its box is drawing-sized and centred on it rather
-          // than a word-sized box beside it.
-          ...scored.where((a) => !a.correct).map((a) {
-            final drawing = _isTeacherOnly(a);
+          // Flagged questions get amber (check it), not red (wrong). A flagged
+          // question is nearly always a drawing (a diagram, a graph), so its
+          // box is drawing-sized and centred on it rather than a word-sized
+          // box beside it — and a drawing is boxed even when the AI thinks
+          // it is right, because the teacher still confirms it.
+          ...scored.where((a) => !a.correct || a.teacherCheck).map((a) {
+            final drawing = _isFlagged(a);
             final bw = drawing ? pageW * 0.46 : 92.0;
             final bh = drawing ? pageW * 0.40 : 34.0;
             return Positioned(
@@ -1544,7 +1559,7 @@ class _AnnotatedImageState extends State<_AnnotatedImage> {
                             style: TextStyle(
                               fontSize: 10,
                               height: 1.2,
-                              color: a.correct
+                              color: a.teacherCheck ? _kFlagAmber : a.correct
                                   ? AiMarkerColors.primary
                                   : (_isTeacherOnly(a) ? _kFlagAmber : const Color(0xFF8B1A1A)),
                               fontWeight: FontWeight.w600,
@@ -1569,7 +1584,7 @@ class _AnnotationMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _isTeacherOnly(annotation)
+    final color = _isFlagged(annotation)
         ? _kFlagAmber
         : (annotation.correct ? const Color(0xFF2E7D32) : const Color(0xFFC62828));
     return Container(
@@ -1582,7 +1597,7 @@ class _AnnotationMark extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_isTeacherOnly(annotation))
+          if (_isFlagged(annotation))
             const Padding(
               padding: EdgeInsets.only(right: 3),
               child: Icon(Icons.flag_rounded, size: 12, color: Colors.white),

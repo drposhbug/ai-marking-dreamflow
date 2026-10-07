@@ -237,6 +237,10 @@ class QuestionAnnotation {
   /// the option text, and it lets a key be stored as a list of digits.
   final int chosenOption;
 
+  /// A drawing the AI marked as a best guess: the mark counts, and it is
+  /// flagged for the teacher to confirm. Editing the mark clears it.
+  final bool teacherCheck;
+
   final int pageIndex;       // which scanned page this mark belongs to (0-based)
   final double positionTop;  // 0.0–1.0 fraction of image height
   final double positionLeft; // 0.0–1.0 fraction of image width
@@ -251,6 +255,7 @@ class QuestionAnnotation {
     required this.positionLeft,
     this.methodNote = '',
     this.chosenOption = 0,
+    this.teacherCheck = false,
     this.pageIndex = 0,
   });
 
@@ -268,6 +273,7 @@ class QuestionAnnotation {
       feedback: (j['feedback'] ?? '').toString(),
       methodNote: (j['methodNote'] ?? '').toString(),
       chosenOption: (j['chosenOption'] as num?)?.toInt() ?? 0,
+      teacherCheck: j['teacherCheck'] == true,
       pageIndex: (j['pageIndex'] as num?)?.toInt() ?? 0,
       positionTop: (j['positionTop'] as num?)?.toDouble() ?? 0.0,
       positionLeft: (j['positionLeft'] as num?)?.toDouble() ?? 0.0,
@@ -282,6 +288,7 @@ class QuestionAnnotation {
         'feedback': feedback,
         'methodNote': methodNote,
         'chosenOption': chosenOption,
+        'teacherCheck': teacherCheck,
         'pageIndex': pageIndex,
         'positionTop': positionTop,
         'positionLeft': positionLeft,

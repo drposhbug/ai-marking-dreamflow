@@ -84,6 +84,13 @@ function requireTeacher(req: Request, teacherId: string, message = "Sign in agai
   return null;
 }
 
+/// The signed-in account behind the bearer token, or "" for the bare anon
+/// key. For actions that take no teacherId but still spend money.
+function signedInCaller(req: Request): string {
+  const claims = jwtClaims(req.headers.get("authorization"));
+  return claims?.role === "authenticated" ? String(claims?.sub ?? "") : "";
+}
+
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
@@ -173,7 +180,9 @@ const CACHE_VERSION = 24;
 async function maybeStoreLearnedKey(teacherId: string, raw: any): Promise<{ id: string; name: string } | null> {
   try {
     const qs = Array.isArray(raw?.derivedKey) ? raw.derivedKey : [];
-    if (qs.length < 2 || !teacherId) return null;
+    // One or two questions is too little to mark a class against: a
+    // wrong guess there would mis-mark every paper after it.
+    if (qs.length < 3 || !teacherId) return null;
     const subject = String(raw?.detectedSubject ?? "").trim();
     const kind = String(raw?.assignmentKind ?? "test").trim() || "test";
     const name = `Learned key — ${subject ? `${subject} ` : ""}${kind} (${new Date().toISOString().slice(0, 10)})`;
@@ -269,7 +278,7 @@ function tinyLabel(rawValue: string, stats?: CodeUse[]): string {
   if (!m) {
     if (value.trim().length > 0) stats?.push({ bank: "annotation", code: "free_text", kind: "free_text" });
     // "dont → don't" is 3 tokens but one label — keep both sides intact.
-    return value.includes("→") ? value.trim() : capWords(value.trim(), 4);
+    return value.includes("→") ? value.trim() : capWords(value.trim(), 6);
   }
   const short = ANNOTATION_SHORT[Number(m[1])];
   const detail = m[2]?.trim();
@@ -528,7 +537,7 @@ function gradeSchema(includeTranscription: boolean): any {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["questionLabel", "earnedMark", "outOfMark", "correct", "feedback", "methodNote", "pageIndex", "positionTop", "positionLeft", "chosenOption"],
+        required: ["questionLabel", "earnedMark", "outOfMark", "correct", "feedback", "methodNote", "pageIndex", "positionTop", "positionLeft", "chosenOption", "teacherCheck"],
         properties: {
           questionLabel: { type: "string" },
           earnedMark: { type: "string" },
@@ -545,6 +554,10 @@ function gradeSchema(includeTranscription: boolean): any {
           // work than transcribing the option text, and it is what lets a
           // teacher supply a key as "1:B, 2:C" instead of typing answers.
           chosenOption: { type: "integer" },
+          // A drawing (free-body diagram, graph, Lewis diagram...) the model
+          // marked as a best guess: the mark counts, and the app flags it
+          // for the teacher to confirm.
+          teacherCheck: { type: "boolean" },
         },
       },
     },
@@ -709,27 +722,29 @@ Do all of the following:
 3. Create one annotation per question or answer visible across all pages:
    - questionLabel like "Q1", earnedMark like "2", outOfMark like "/4" — when the paper prints a question's marks (e.g. "(2 marks)"), use exactly those marks
    - earnedMark may use QUARTER-STEP decimals ("0.25", "0.5", "1.75"): deduct fractions for minor slips — a missing unit, a sign error, sloppy rounding — instead of taking a whole mark.
+   - MULTI-STEP ANSWERS (proofs, derivations, systems of equations, multi-part solutions): before giving the mark, list the components the answer needs — every proof step is a statement AND a valid reason; a system needs every x AND every y value; a calculation needs method, substitution, answer and unit. earnedMark = outOfMark × (components fully correct ÷ components required), rounded to a quarter step. A wrong or missing reason makes that whole step wrong. Never round up for a generally right approach.
+   - A total printed for a WHOLE multi-part question (e.g. "3. (12 points)") is never the mark of one part. Use per-part marks only when the paper prints them; otherwise each part follows rule 5's no-printed-marks rule.
    - correct = true only if fully correct
-   - feedback: a TINY plain-words error label, 2-4 words max — "wrong formula", "addition mistake", "missing unit", "wrong number", "sign error", "sig figs", "left blank", "skipped a step". NEVER a sentence, never an explanation, never a summary of the question, never a #code here. Fully correct answers get feedback "".
+   - feedback: a SHORT plain-words error label, 2-6 words — say WHAT went wrong and, when it helps, WHERE: "wrong formula", "sign error in step 3", "missing y-values", "steps 2, 5: wrong reasons", "restates claim, no reason", "missing unit", "left blank". Name the specific missing idea or location — a bare adjective ("imprecise", "wrong reasoning", "incomplete") is too vague. NEVER a sentence, never a summary of the question, never a #code here. Fully correct answers get feedback "".
    - methodNote — METHOD CHECK when an OFFICIAL ANSWER KEY is present: if the student's final answer matches the key but their WORKING differs from the key's (a different technique, a more advanced shortcut, steps the key shows are skipped), AWARD the marks per the key and set methodNote to a tiny 2-3 word label — "different method", "advanced method", "steps skipped". Some teachers accept any valid method, others require the taught one — the note lets the teacher decide. methodNote is "" in every other case (no key, wrong answer, matching method). NEVER deduct for method alone unless the key explicitly requires that method.
    - check every numeric final answer for UNITS: if a required unit is missing or wrong, deduct part marks with label "missing unit"
-   - QUESTIONS ONLY THE TEACHER CAN MARK: when you cannot reliably judge an answer from the pages alone, do NOT guess a mark. Set earnedMark "?", outOfMark from the printed marks, correct = false, and a tiny label saying why. EXCLUDE that question's printed marks from rawScore, maxScore, and its KTCA category totals — the teacher marks it by hand. This applies to:
-     * drawings — free-body diagrams, ray diagrams, graphs the student drew, sketches, geometric constructions → feedback "check drawing", positioned at the CENTRE of the drawing itself (so the teacher's box frames the diagram), never beside it. Simple diagram READING (taking numbers off a printed graph) is normal marking, not this rule.
-     * answers that can only be checked against material NOT in the images and there is NO OFFICIAL ANSWER KEY — listening/écoute or dictation tests (answers depend on audio you cannot hear), questions about a reading passage or source not photographed, oral components → feedback "needs answer key". With an answer key present these mark normally against the key.
-     * If EVERY question is teacher-only (e.g. a listening test with no key), still return all annotations with "?" and say why in a one-sentence summary ("Listening test with no answer key — answers can't be checked without the audio.").
-   - ESSAY ERROR MARKS: essays, stories, and long written responses have no numbered questions — instead create one annotation per error INSTANCE found in the writing: questionLabel = the section it belongs to ("Grammar", "Spelling", "Flow", "Content"), earnedMark = "" and outOfMark = "" (error marks NEVER carry their own deduction — the marks come off ONCE in that section's criteriaBreakdown score, rule 4), correct = false, feedback = the student's EXACT words as written, then a PLAIN ASCII ARROW "->" (never a unicode arrow or an escape sequence), then the fix — "dont -> don't", "familys -> families", "cost to much -> costs too much", "that has -> that have". ALWAYS lead with the student's own words (copied character for character, 1-4 words) so the app can find them on the page; for errors that aren't a word swap, still lead with the words at the spot: "Kids can still -> start a new paragraph". Position ON the error word. CATALOGUE EVERYTHING: every missing apostrophe (contractions AND possessives), every homophone (close/clothes, to/too, there/their), every subject-verb agreement slip, every misspelling, every missing word — a sample is NOT marking. When the SAME error repeats ("familys" four times, an identical phrase reused), still mark every occurrence on the page but treat it as ONE recurring pattern when deducting.
+   - DRAWINGS — free-body/force diagrams, ray diagrams, circuit diagrams, graphs or sketches the student drew, geometric constructions, Lewis/electron-dot diagrams, structural formulas, labelled science diagrams, maps: MARK THEM as best you can from the image. earnedMark is your honest best judgement against what the question needs (every required force/label/arrow and its direction, axes and scale, shape, key points, the stated domain), outOfMark as for any question — AND set teacherCheck = true so the app flags it for the teacher to confirm. feedback names what you judged: "missing normal force", "graph past domain", "looks correct — check". Position at the CENTRE of the drawing itself (so the teacher's box frames the diagram), never beside it. These marks COUNT in rawScore and maxScore. If a written part sits beside the drawing, mark it separately as its own annotation. Simple diagram READING (taking numbers off a printed graph) is normal marking. teacherCheck is false on every non-drawing annotation.
+   - QUESTIONS ONLY THE TEACHER CAN MARK: an answer that can only be checked against material NOT in the images while there is NO OFFICIAL ANSWER KEY — listening/écoute or dictation tests (answers depend on audio you cannot hear), questions about a reading passage or source that was not photographed, oral components. Do NOT guess: set earnedMark "?", outOfMark from the printed marks, correct = false, teacherCheck = false, feedback "needs answer key", and EXCLUDE that question's marks from rawScore, maxScore and its KTCA category totals. With an answer key present these mark normally against the key. If EVERY question is like this, still return all annotations with "?" and say why in a one-sentence summary ("Listening test with no answer key — answers can't be checked without the audio.").
+   - NEVER CLAIM WHAT YOU CANNOT CHECK: never mark a quotation as misquoted, a date or fact as outside a range, or a detail as wrong when checking it needs the question text, passage or source and that is not visible in the images. When the question itself is not visible, begin the summary with "Question not visible — marked on the answer alone." and mark only what the answer itself shows.
+   - SHORT ANSWERS ARE NOT ESSAYS: written answers to lettered or numbered parts ((a)/(b)/(c), "Q3a") — and any written answer when Grading mode is testQuiz and the page shows parts — get ONE annotation per part, marked on CONTENT only: does it do what the part asks (identify, describe, explain, support with SPECIFIC evidence)? A vague answer ("many battles", "both groups") without the specific detail the part asks for does not earn the mark. Never mark or deduct spelling, grammar or style in short answers unless the question is about language. A word that exposes a content gap is a content error, never a grammar fix — and before suggesting any rewrite, check it keeps the student's meaning.
+   - ESSAY ERROR MARKS: ONLY for a single extended response to one prompt — an essay, story, or multi-paragraph written response with no lettered parts. These have no numbered questions — instead create one annotation per error INSTANCE found in the writing: questionLabel = the section it belongs to ("Grammar", "Spelling", "Flow", "Content"), earnedMark = "" and outOfMark = "" (error marks NEVER carry their own deduction — the marks come off ONCE in that section's criteriaBreakdown score, rule 4), correct = false, feedback = the student's EXACT words as written, then a PLAIN ASCII ARROW "->" (never a unicode arrow or an escape sequence), then the fix — "dont -> don't", "familys -> families", "cost to much -> costs too much", "that has -> that have". ALWAYS lead with the student's own words (copied character for character, 1-4 words) so the app can find them on the page; for errors that aren't a word swap, still lead with the words at the spot: "Kids can still -> start a new paragraph". Position ON the error word. CATALOGUE EVERYTHING: every missing apostrophe (contractions AND possessives), every homophone (close/clothes, to/too, there/their), every subject-verb agreement slip, every misspelling, every missing word — a sample is NOT marking. When the SAME error repeats ("familys" four times, an identical phrase reused), still mark every occurrence on the page but treat it as ONE recurring pattern when deducting.
    - TEXT POSITIONING (LINE METHOD): positions are fractions of the WHOLE PAGE IMAGE, margins and headers included. For errors in written text: find the vertical band the body text occupies (typically starting ~0.15-0.25 down the page, under the title/header, and ending near the last written line); positionTop = that band's start + (the error's line number − 0.5) ÷ (number of body lines) × the band's height. positionLeft = the text block's left edge (typically ~0.12) + how far along the line the word sits × the block's width (typically ~0.76 wide). A position in a page margin, in the header, or below the last line of writing is ALWAYS wrong — every error sits on a line of the student's text.
    - pageIndex: which page the answer is on, 0-based (Page 1 = 0, Page 2 = 1, ...)
    - positionTop and positionLeft: land ON the specific wrong number, expression, or step itself — never the question header, never a subtotal, never the general question area. When the answer is fully correct, point at the final answer. Fractions of the image height/width between 0.0 and 1.0 (0.0 = top/left edge).
 4. criteriaBreakdown must normally be EMPTY — marking is right-or-wrong per question, nothing else. Include entries ONLY in exactly three cases:
    - KTCA sections: the paper's own sections are labeled with the Ontario categories (rule 6) — those category entries COUNT toward the mark.
    - Printed rubric: the pages (or the ANSWER KEY) include a rubric — mark each rubric criterion with a level 1-4 exactly as the rubric defines, choose gradingFormat "levels", overall level from the rubric average.
-   - ESSAYS/STORIES/WRITTEN RESPONSES with no printed rubric: break the total into exactly these marks-bearing sections — "Content & Ideas" (~30% of maxScore), "Evidence & Development" (~20%), "Organization & Flow" (~20%), "Grammar" (~15%), "Spelling & Mechanics" (~15%). Section scores sum to rawScore, section maxScores sum to maxScore, and EVERY section score is a clean half or quarter step (3, 2.5, 2.25 — never 2.7 or 3.3). Deduct ONCE per section based on how many errors that section has overall — a light band for 1-2 errors, a bigger band for 3-6, a heavy band for 7+ — instead of subtracting a fraction per individual error; the page can show 20 highlighted errors while Grammar simply reads 2.5/3. State the count in the feedback ("11 grammar errors — mostly missing apostrophes"). Score each section from ITS OWN evidence only: sloppy mechanics must never drag down Content/Evidence, and a strong argument must never hide weak conventions — a competent argument buried under surface errors scores high on Content and low on Mechanics. CREDIT real skills where shown: acknowledging then rebutting a counterargument, varied transitions, a concrete developed example. Deduct recurring error patterns ONCE, not per instance. Each section's feedback cites concrete evidence and names recurring patterns ("recurring: familys → families ×4", "reasons asserted, never illustrated — no example or number anywhere", "counterargument acknowledged and rebutted — credited") — never a generic comment.
+   - ESSAYS/STORIES/EXTENDED WRITTEN RESPONSES (one prompt, no lettered parts) with no printed rubric: break the total into exactly these marks-bearing sections — "Content & Ideas" (~30% of maxScore), "Evidence & Development" (~20%), "Organization & Flow" (~20%), "Grammar" (~15%), "Spelling & Mechanics" (~15%). Section scores sum to rawScore, section maxScores sum to maxScore, and EVERY section score is a clean half or quarter step (3, 2.5, 2.25 — never 2.7 or 3.3). Deduct ONCE per section based on how many errors that section has overall — a light band for 1-2 errors, a bigger band for 3-6, a heavy band for 7+ — instead of subtracting a fraction per individual error; the page can show 20 highlighted errors while Grammar simply reads 2.5/3. State the count in the feedback ("11 grammar errors — mostly missing apostrophes"). Score each section from ITS OWN evidence only: sloppy mechanics must never drag down Content/Evidence, and a strong argument must never hide weak conventions — a competent argument buried under surface errors scores high on Content and low on Mechanics. CREDIT real skills where shown: acknowledging then rebutting a counterargument, varied transitions, a concrete developed example. Deduct recurring error patterns ONCE, not per instance. Each section's feedback cites concrete evidence and names recurring patterns ("recurring: familys → families ×4", "reasons asserted, never illustrated — no example or number anywhere", "counterargument acknowledged and rebutted — credited") — never a generic comment.
    NEVER invent criteria ("Attempted all questions", "Effort", "Neatness", "Organization", "Working shown", ...). "Communication" is a criterion ONLY when a rubric or a KTCA section defines it — otherwise communication slips (missing units, missing sig figs, wrong rounding or decimal places) are PART-MARK DEDUCTIONS (quarter-steps, rule 3) on the question where they occur, never a separate criterion or comment section.
 5. Compute maxScore and rawScore for the whole submission:
    - When markingStyle is "completion", rawScore and maxScore count completed vs assigned questions (see rule 2) — the rules below apply to "graded" work.
-   - If the paper prints marks per question (e.g. "(2 marks)", "/4"), maxScore = the TOTAL of the printed marks of the questions VISIBLE in the images, and rawScore = the marks the student earned on those questions. Questions marked "?" as teacher-only (rule 3) are excluded from BOTH totals.
-   - Only if the paper shows no marks at all, use the fallback total marks from CONTEXT.
+   - If the paper prints marks per question (e.g. "(2 marks)", "/4"), maxScore = the TOTAL of the printed marks of the questions VISIBLE in the images, and rawScore = the marks the student earned on those questions. Questions marked "?" as teacher-only (rule 3) are excluded from BOTH totals; drawings marked with teacherCheck are included.
+   - If the paper prints NO marks: give each visible question or part its own realistic outOfMark — 1 per required result for short items, 2 for explain/justify parts, up to 4-6 for multi-step solutions or proofs; when the paper is clearly a recognised exam, use its scale (AP short answer = 1 per part; NY Regents constructed response = its printed credits) — and maxScore = the sum of those. NEVER give a single question the fallback total from CONTEXT. Use the fallback total only for one holistic piece with no questions (e.g. an essay with no rubric).
    - Grade ONLY what is visible. NEVER deduct for questions, sections, or pages that are not in the images — treat the visible pages as the entire submission. If everything visible is fully correct, the score must be full marks.
    - percentage must equal rawScore / maxScore * 100 (rounded is fine).
 6. Ontario/Canadian KTCA marking: many Canadian tests divide their sections into the Ontario achievement categories — Knowledge/Understanding (short field name "Knowledge"), Thinking/Inquiry (short field name "Thinking"), Communication, Application (e.g. "Part A – Knowledge Questions (10 marks)", "Part D – Application Questions (10 marks)"). If the visible sections are labeled with these categories:
@@ -743,7 +758,7 @@ Do all of the following:
 7. Choose gradingFormat: "levels" for work at Grades 1-8 (see GRADE-LEVEL EXPECTATIONS below) and for essays, lab reports, and rubric-style work; "percentage" for Grades 9-13 tests, quizzes, and homework.
 8. For graded tests/quizzes: summary is AT MOST 1 short sentence, and strengths and improvements are EMPTY arrays — the per-question marks ARE the feedback. For all other work: summary at most 2 short sentences addressed to the teacher (no per-question details, no KTCA scores — those are appended automatically), with 2-4 strengths and 2-4 improvements as feedback codes.
 
-9. LEARN THE KEY: when marking GRADED work with NO official answer key present, also fill derivedKey — one entry per question with its label, its printed marks, and the correct answer you worked out while marking (final answer with required units and common acceptable alternates, COMPACT — no working, no explanation). Skip teacher-only "?" questions. When an OFFICIAL ANSWER KEY is present, or markingStyle is "completion", derivedKey MUST be [].
+9. LEARN THE KEY: when marking GRADED work with NO official answer key present, also fill derivedKey — one entry per question with its label, its printed marks, and the correct answer you worked out while marking (final answer with required units and common acceptable alternates, COMPACT — no working, no explanation). Skip teacher-only "?" questions and drawings (teacherCheck true). When an OFFICIAL ANSWER KEY is present, or markingStyle is "completion", derivedKey MUST be [].
 10. MULTIPLE CHOICE IS A POSITION, NOT A SENTENCE. When a question offers printed options (A/B/C/D, 1/2/3/4, or bullets) and the student has circled, ticked, shaded or lettered ONE of them, set chosenOption to WHICH option they picked counting from the top: 1 = first option, 2 = second, 3 = third, 4 = fourth. Do NOT transcribe the option's text into feedback — the position is the answer. Set chosenOption to 0 for any question that is not multiple choice, and 0 when the student marked nothing or marked more than one option (feedback then says which, e.g. "two options marked"). When learning a key on this kind of question, put the CORRECT option's position in derivedKey.correctOption and leave answer as the shortest possible label (e.g. "B"); that way the rest of the class is marked by comparing two numbers instead of re-reading the page.
 
 GRADE-LEVEL EXPECTATIONS — mark at the grade level given in CONTEXT when present; otherwise mark at the grade level you detected from the work itself. For work at Grades 1-8, report on the elementary Level scale by choosing gradingFormat "levels": Level 3 = meeting grade expectations, Level 4 = exceeding them, Level 4+ = outstanding. Percentages still back the levels, so compute rawScore/maxScore/percentage as usual.
@@ -773,7 +788,7 @@ function buildContext(p: {
     "CONTEXT:",
     `- Pages in this submission: ${p.pageCount}`,
     `- Grading mode: ${p.mode}`,
-    `- Fallback total marks: ${p.maxScore} (use ONLY if the paper does not show its own marks — see rule 5)`,
+    `- Fallback total marks: ${p.maxScore} (ONLY for one holistic piece with no questions and no printed marks — never a single question's marks; see rule 5)`,
     `- Strictness: ${p.harshness}/10 (${strictnessWord(p.harshness)})`,
     `- Criteria to grade on: ${p.criteria.length ? p.criteria.join(", ") : "overall quality"}`,
     `- Student grade level: ${p.studentGrade ?? "unknown — detect it from the work if possible"}`,
@@ -849,7 +864,7 @@ function normalize(obj: any, provider: string, maxScoreDefault: number, formatOv
     summary = summary ? `${summary.replace(/\s+$/, "")} ${line}.` : `${line}.`;
   }
 
-  return {
+  const out = {
     provider,
     detectedSubject: String(obj?.detectedSubject ?? ""),
     detectedGrade,
@@ -886,12 +901,25 @@ function normalize(obj: any, provider: string, maxScoreDefault: number, formatOv
       // Which printed option was marked, 1-based. 0 = not multiple choice,
       // nothing marked, or more than one marked.
       chosenOption: Math.round(clamp(a?.chosenOption, 0, 26, 0)),
+      // A drawing marked as a best guess: counted, and flagged for the
+      // teacher to confirm.
+      teacherCheck: a?.teacherCheck === true,
       pageIndex: Math.round(clamp(a?.pageIndex, 0, 999, 0)),
       positionTop: clamp(a?.positionTop, 0, 1, 0.1),
       positionLeft: clamp(a?.positionLeft, 0, 1, 0.1),
     })),
     rawText: String(obj?.rawText ?? ""),
   };
+  return nothingMarked(out) ? { ...out, percentageDisplay: "Teacher to mark", level: null, levelDisplay: "Teacher to mark" } : out;
+}
+
+/// Every question was left to the teacher ("?"), so there is no score: a
+/// "0% — Below Level 1" there read as a fail on a page nobody marked.
+// deno-lint-ignore no-explicit-any
+export function nothingMarked(result: any): boolean {
+  const notes = Array.isArray(result?.annotations) ? result.annotations : [];
+  // deno-lint-ignore no-explicit-any
+  return notes.length > 0 && notes.every((a: any) => String(a?.earnedMark ?? "").trim() === "?");
 }
 
 // ---------- Response cache (zero-token repeat grades) ----------
@@ -1341,8 +1369,89 @@ async function spendBuckets(teacherId: string): Promise<{ day: number; week: num
   return { day, week, month };
 }
 
-/// Null when within the plan's caps; otherwise the 429 response to return.
-async function budgetGate(teacherId: string, pacing: boolean): Promise<Response | null> {
+// ---------- Whole-service circuit breaker ----------
+//
+// The per-account caps above stop any ONE account overspending. They cannot
+// stop many accounts at once: guest accounts are free to create, so a script
+// making hundreds of them would each get a full trial allowance. This
+// breaker caps the whole service's AI spend per UTC day, and pauses guests
+// at a much lower total so a guest flood can never lock out paying teachers.
+//
+// Both caps are secrets, so they change without a deploy:
+//   npx supabase secrets set AI_DAILY_CAP_USD=20 AI_GUEST_DAILY_CAP_USD=3
+// Busiest real day before this existed: $1.55 (2026-09-26).
+//
+// This cannot protect a LEAKED API key used outside the app — only the
+// provider's own console limit can. Set one there too.
+const AI_DAILY_CAP_USD = Number(Deno.env.get("AI_DAILY_CAP_USD")) || 20;
+const AI_GUEST_DAILY_CAP_USD = Number(Deno.env.get("AI_GUEST_DAILY_CAP_USD")) || 3;
+
+// Short in-isolate cache: the sum runs in front of every paid action, and
+// thirty seconds of staleness is a few cents at the cap.
+let spendTodayCache: { day: string; usd: number; at: number } | null = null;
+
+async function spendToday(): Promise<number> {
+  const day = periodStarts().day;
+  const now = Date.now();
+  if (spendTodayCache && spendTodayCache.day === day && now - spendTodayCache.at < 30_000) {
+    return spendTodayCache.usd;
+  }
+  // PostgREST returns at most 1000 rows per request, so page through them;
+  // a truncated sum would let spend run past the cap unseen.
+  const PAGE = 1000;
+  let usd = 0;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await serviceDb()
+      .from("usage_log")
+      .select("cost_usd")
+      .gte("created_at", day)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    // deno-lint-ignore no-explicit-any
+    for (const r of (data ?? []) as any[]) {
+      const c = Number(r.cost_usd ?? 0);
+      if (Number.isFinite(c)) usd += c;
+    }
+    if ((data ?? []).length < PAGE || usd >= AI_DAILY_CAP_USD) break;
+  }
+  spendTodayCache = { day, usd, at: now };
+  return usd;
+}
+
+/// Guest ("Try it as a guest") sessions are Supabase anonymous sign-ins.
+function isGuestCaller(req: Request): boolean {
+  return jwtClaims(req.headers.get("authorization"))?.is_anonymous === true;
+}
+
+/// Null while the service is under today's caps; otherwise the 429 to return.
+/// Fails open like budgetGate: a metering error never blocks marking.
+async function globalGate(req: Request): Promise<Response | null> {
+  try {
+    const usd = await spendToday();
+    const guest = isGuestCaller(req);
+    if (usd < AI_DAILY_CAP_USD && !(guest && usd >= AI_GUEST_DAILY_CAP_USD)) return null;
+    console.error(
+      `spend breaker tripped: $${usd.toFixed(2)} today (cap $${AI_DAILY_CAP_USD}, guest cap $${AI_GUEST_DAILY_CAP_USD}), guest=${guest}`,
+    );
+    return json({
+      error: "usage_limit",
+      scope: guest ? "guest_daily" : "global_daily",
+      message: guest
+        ? "The guest demo has reached today's limit. Create a free account to keep marking, or try again tomorrow."
+        : "Marking is paused for the rest of today while we look into unusual activity. Please try again tomorrow.",
+    }, 429);
+  } catch (e) {
+    console.error("global spend check failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/// Null when within the service's and the plan's caps; otherwise the 429
+/// response to return.
+async function budgetGate(teacherId: string, pacing: boolean, req: Request): Promise<Response | null> {
+  const global = await globalGate(req);
+  if (global) return global;
   if (!teacherId) return null;
   try {
     // One wave of queries, not two: the plan lookup does not depend on the
@@ -1470,7 +1579,7 @@ function gradeShape(includeTranscription: boolean): string {
   "strengths": string[],
   "improvements": string[],
   "criteriaBreakdown": [{"name": string, "score": number, "maxScore": number, "level": integer or null, "feedback": string}],
-  "annotations": [{"questionLabel": string, "earnedMark": string, "outOfMark": string, "correct": boolean, "feedback": string, "methodNote": string, "pageIndex": integer, "positionTop": number, "positionLeft": number, "chosenOption": integer}],
+  "annotations": [{"questionLabel": string, "earnedMark": string, "outOfMark": string, "correct": boolean, "feedback": string, "methodNote": string, "pageIndex": integer, "positionTop": number, "positionLeft": number, "chosenOption": integer, "teacherCheck": boolean}],
   "derivedKey": [{"label": string, "marks": number, "answer": string, "correctOption": integer}]${includeTranscription ? `,
   "rawText": string` : ""}
 }`;
@@ -1654,11 +1763,14 @@ async function callGemini(imagesBase64: string[], mediaType: string, prompt: str
   });
   parts.push({ text: prompt + jsonInstruction });
 
+  // The key goes in a header, never the URL: a network failure's error
+  // message includes the URL, and several actions hand error text back to
+  // the caller.
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [{ role: "user", parts }],
         generationConfig: {
@@ -2035,7 +2147,7 @@ Deno.serve(async (req) => {
     if (imagesBase64.length < 2) return json({ error: "at least two pages are needed" }, 400);
     if (imagesBase64.length > 40) return json({ error: "Too many pages to piece together at once — fix the order by hand." }, 400);
 
-    const gate = await budgetGate(teacherId, true);
+    const gate = await budgetGate(teacherId, true, req);
     if (gate) return gate;
 
     const GROUP_SCHEMA = {
@@ -2137,7 +2249,7 @@ Deno.serve(async (req) => {
     if (items.length === 0) return json({ error: "items are required" }, 400);
     if (items.length > 250) return json({ error: "Too many papers in one batch — split the set." }, 400);
 
-    const gate = await budgetGate(teacherId, true);
+    const gate = await budgetGate(teacherId, true, req);
     if (gate) return gate;
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -2429,7 +2541,7 @@ Deno.serve(async (req) => {
     if (totalAnswers === 0) return json({ error: "no answers to mark" }, 400);
     if (totalAnswers > 600) return json({ error: "Too many answers in one import — split the class set." }, 400);
 
-    const gate = await budgetGate(teacherId, true);
+    const gate = await budgetGate(teacherId, true, req);
     if (gate) return gate;
 
     const harshness = Math.min(10, Math.max(1, Number(payload?.harshness ?? 5) || 5));
@@ -2574,7 +2686,7 @@ ${rows.map((r) => `[${r.i}] ${r.text}`).join("\n")}`;
     // teaching load sent at once, and either way it belongs in batches.
     if (students.length > 60) return json({ error: "Too many students in one call — do a class at a time." }, 400);
 
-    const gate = await budgetGate(teacherId, true);
+    const gate = await budgetGate(teacherId, true, req);
     if (gate) return gate;
 
     const tone = ["warm", "balanced", "formal"].includes(String(payload?.tone))
@@ -2849,7 +2961,10 @@ Return one comment for EVERY student above, echoing back the same "i" you were g
     }
 
     // Fresh plans have their own monthly count per plan tier (cache hits
-    // above are free and unlimited).
+    // above are free and unlimited), and stop with everything else when the
+    // whole-service daily cap trips.
+    const planGlobal = await globalGate(req);
+    if (planGlobal) return planGlobal;
     if (planTeacherId) {
       try {
         const tier = await planFor(planTeacherId);
@@ -2920,10 +3035,19 @@ FORMATTING (strict — the app renders plain text, so markdown reads as clutter)
   if (action === "suggest_schools") {
     const query = String(payload?.query ?? "").trim().slice(0, 80);
     if (query.length < 3) return json({ schools: [] });
+    // A Claude call, so it needs a signed-in caller, sits behind the spend
+    // caps and is metered. Before this, the public anon key alone could run
+    // it in a loop. The app only asks during onboarding, after sign-in, and
+    // treats an empty list as "no suggestions".
+    const caller = signedInCaller(req);
+    if (!caller) return json({ schools: [] });
+    if (await budgetGate(caller, false, req)) return json({ schools: [] });
     const prompt = `A teacher is typing their school's name into a form. The text so far: "${query}".
 List up to 5 plausible FULL names of real North American K-12 schools that start with or contain that text (e.g. "Riverdale High School", "Riverside Secondary School"). Prefer common/well-known school names; return fewer (or none) rather than inventing improbable ones. Names only.`;
     try {
-      const raw = await callClaude([], "image/jpeg", { userText: prompt, schema: SCHOOL_SUGGEST_SCHEMA });
+      const usage = { inputTokens: 0, outputTokens: 0 };
+      const raw = await callClaude([], "image/jpeg", { userText: prompt, schema: SCHOOL_SUGGEST_SCHEMA, usage });
+      await logUsage(caller, "suggest_schools", usage.inputTokens, usage.outputTokens);
       const schools = (Array.isArray(raw?.schools) ? raw.schools : [])
         // deno-lint-ignore no-explicit-any
         .map((s: any) => String(s ?? "").trim())
@@ -2942,10 +3066,17 @@ List up to 5 plausible FULL names of real North American K-12 schools that start
   if (action === "infer_region") {
     const school = String(payload?.school ?? "").trim().slice(0, 120);
     if (!school) return json({ error: "school is required" }, 400);
+    // Same as suggest_schools: signed in, capped and metered.
+    const caller = signedInCaller(req);
+    if (!caller) return json({ error: "Sign in to continue." }, 403);
+    const gate = await budgetGate(caller, false, req);
+    if (gate) return gate;
     const prompt = `A teacher teaches at a school named "${school}" somewhere in North America. From the school's name (including any city, district, or board words in it), decide which province or state it is most likely in. Return ONE candidate when reasonably confident; return up to 3 candidates when schools with this name plausibly exist in multiple regions. Each candidate needs regionId (a curriculum region code) and place (a short human label like "Toronto, Ontario" or "Miami, Florida").
 Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).join("; ")}; other=unknown or outside North America.`;
     try {
-      const raw = await callClaude([], "image/jpeg", { userText: prompt, schema: REGION_INFER_SCHEMA });
+      const usage = { inputTokens: 0, outputTokens: 0 };
+      const raw = await callClaude([], "image/jpeg", { userText: prompt, schema: REGION_INFER_SCHEMA, usage });
+      await logUsage(caller, "infer_region", usage.inputTokens, usage.outputTokens);
       const candidates = (Array.isArray(raw?.candidates) ? raw.candidates : [])
         // deno-lint-ignore no-explicit-any
         .map((c: any) => ({ regionId: String(c?.regionId ?? ""), place: String(c?.place ?? "") }))
@@ -2980,20 +3111,31 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
     const guard = requireTeacher(req, teacherId);
     if (guard) return guard;
+    // A billed vision call: capped and metered like a grade. Before this it
+    // was neither, so any signed-in account (guests included) could repeat
+    // it without limit.
+    const gate = await budgetGate(teacherId, true, req);
+    if (gate) return gate;
     // deno-lint-ignore no-explicit-any
     let raw: any = null;
     const errs: string[] = [];
+    const usage = { inputTokens: 0, outputTokens: 0 };
     try {
-      raw = await callClaude(imagesBase64, mediaType, { userText: KEY_PROMPT, schema: KEY_SCHEMA });
+      raw = await callClaude(imagesBase64, mediaType, { userText: KEY_PROMPT, schema: KEY_SCHEMA, usage });
     } catch (e) {
       errs.push(`claude: ${e instanceof Error ? e.message : e}`);
       try {
         raw = await callGemini(imagesBase64, mediaType, KEY_PROMPT, KEY_SHAPE);
+        // Gemini reports no usage here; meter a conservative estimate,
+        // as the plan action does.
+        usage.inputTokens = 1500 * imagesBase64.length;
+        usage.outputTokens = 1500;
       } catch (e2) {
         errs.push(`gemini: ${e2 instanceof Error ? e2.message : e2}`);
         return json({ error: "Answer key extraction failed", details: errs }, 502);
       }
     }
+    await logUsage(teacherId, "extract_key", usage.inputTokens, usage.outputTokens);
     const keyName = String(raw?.name ?? "Answer key");
     const questions = Array.isArray(raw?.questions) ? raw.questions : [];
     const { data, error } = await serviceDb()
@@ -3024,7 +3166,7 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
     const guard = requireTeacher(req, teacherId);
     if (guard) return guard;
-    const gate = await budgetGate(teacherId, true);
+    const gate = await budgetGate(teacherId, true, req);
     if (gate) return gate;
     const resultJson = JSON.stringify(payload?.result ?? {}).slice(0, 20000);
     const prompt =
@@ -3056,20 +3198,27 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     if (!teacherId) return json({ error: "teacherId is required" }, 400);
     const guard = requireTeacher(req, teacherId);
     if (guard) return guard;
+    // Capped and metered, like extract_key.
+    const gate = await budgetGate(teacherId, true, req);
+    if (gate) return gate;
     // deno-lint-ignore no-explicit-any
     let raw: any = null;
     const errs: string[] = [];
+    const usage = { inputTokens: 0, outputTokens: 0 };
     try {
-      raw = await callClaude(imagesBase64, mediaType, { userText: ROSTER_PROMPT, schema: ROSTER_SCHEMA });
+      raw = await callClaude(imagesBase64, mediaType, { userText: ROSTER_PROMPT, schema: ROSTER_SCHEMA, usage });
     } catch (e) {
       errs.push(`claude: ${e instanceof Error ? e.message : e}`);
       try {
         raw = await callGemini(imagesBase64, mediaType, ROSTER_PROMPT, ROSTER_SHAPE);
+        usage.inputTokens = 1500 * imagesBase64.length;
+        usage.outputTokens = 1000;
       } catch (e2) {
         errs.push(`gemini: ${e2 instanceof Error ? e2.message : e2}`);
         return json({ error: "Roster extraction failed", details: errs }, 502);
       }
     }
+    await logUsage(teacherId, "extract_roster", usage.inputTokens, usage.outputTokens);
     // deno-lint-ignore no-explicit-any
     const students = (Array.isArray(raw?.students) ? raw.students : [])
       // deno-lint-ignore no-explicit-any
@@ -3166,7 +3315,7 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
 
   // Fresh marking costs money — check the teacher's budget first. Cache
   // hits above are free and never gated.
-  const gateHit = await budgetGate(gradeTeacherId, true);
+  const gateHit = await budgetGate(gradeTeacherId, true, req);
   if (gateHit) return gateHit;
 
   // Pull the stored answer key when one was chosen — the key was analyzed
@@ -3245,9 +3394,16 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
         GEMINI_PARSE_PRICE_IN,
         GEMINI_PARSE_PRICE_OUT,
       );
+      // A drawing needs a marker that can see it: the text-only route could
+      // only leave it as "?", so take the page to the vision path, which
+      // marks it as a best guess and flags it for the teacher.
+      // deno-lint-ignore no-explicit-any
+      if ((parsed?.questions ?? []).some((q: any) => q?.isDrawing === true)) {
+        throw new Error("page has a drawing: marking it on the vision path");
+      }
       const dsUsage = { inputTokens: 0, outputTokens: 0 };
       const transcript =
-        `\n\nA vision pass has already transcribed the pages. Treat this transcript as exactly what the student wrote (do not invent or omit answers), and reuse its pageIndex for your annotations. Position each annotation from the transcript: for a wrong or part-wrong answer, use the positionTop and positionLeft of the workLines entry where the FIRST error appears (the line containing the wrong number, sign, or step); for a fully correct answer, use the question's own positionTop and positionLeft (its final answer). Never point at the printed question. A question with "isDrawing": true means the student's answer is a hand-drawn diagram/graph/sketch the vision pass could not transcribe as text — you cannot see the page either, so apply the drawings case of the QUESTIONS ONLY THE TEACHER CAN MARK rule ("?" mark, feedback "check drawing", positioned at the transcript's centre of the drawing) rather than guessing its content:\n${JSON.stringify(parsed)}`;
+        `\n\nA vision pass has already transcribed the pages. Treat this transcript as exactly what the student wrote (do not invent or omit answers), and reuse its pageIndex for your annotations. Position each annotation from the transcript: for a wrong or part-wrong answer, use the positionTop and positionLeft of the workLines entry where the FIRST error appears (the line containing the wrong number, sign, or step); for a fully correct answer, use the question's own positionTop and positionLeft (its final answer). Never point at the printed question. A question with "isDrawing": true means the student's answer is a hand-drawn diagram/graph/sketch the vision pass could not transcribe as text — you cannot see the page either, so do not guess its content: set earnedMark "?", teacherCheck false, feedback "check drawing", positioned at the transcript's centre of the drawing, and leave it out of both totals:\n${JSON.stringify(parsed)}`;
       const raw = await callDeepSeek(geminiPrompt + transcript + shape, dsUsage);
       await logUsage(gradeTeacherId, "grade", dsUsage.inputTokens, dsUsage.outputTokens, DEEPSEEK_PRICE_IN, DEEPSEEK_PRICE_OUT);
       await cacheWrite(cacheKey, "deepseek", raw, imageHashes);
