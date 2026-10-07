@@ -51,11 +51,16 @@ class _LoginScreenState extends State<LoginScreen> {
   /// picked up, instead of flashing the form at someone already signed in.
   bool _resuming = false;
 
+  bool _remember = true;
+
   @override
   void initState() {
     super.initState();
     final auth = context.read<AuthService>();
     _resuming = auth.hasSavedSession;
+    auth.rememberMe().then((on) {
+      if (mounted) setState(() => _remember = on);
+    });
     auth.lastEmail().then((e) {
       if (mounted && _email.text.isEmpty && e.isNotEmpty) _email.text = e;
     });
@@ -110,6 +115,11 @@ class _LoginScreenState extends State<LoginScreen> {
     var routed = false;
     try {
       final auth = context.read<AuthService>();
+      // "Remember me" was off: a sign-in left over from last time ends here.
+      if (_resuming && await auth.shouldForgetSavedSession()) {
+        await auth.signOut();
+        return;
+      }
       if (!await auth.adoptSupabaseSession()) return;
       if (!mounted) return;
       final restoredDone = await _restoreProfile(auth);
@@ -667,7 +677,18 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ),
-      SizedBox(height: _at(14, 34, grow)),
+      CheckboxListTile(
+        value: _remember,
+        onChanged: (v) {
+          setState(() => _remember = v ?? true);
+          context.read<AuthService>().setRememberMe(_remember);
+        },
+        title: const Text('Remember me'),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+      ),
+      SizedBox(height: _at(4, 14, grow)),
       FilledButton(
         onPressed: _loading ? null : _signIn,
         style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: Colors.white, padding: button),

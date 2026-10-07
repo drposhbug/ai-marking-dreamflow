@@ -108,6 +108,24 @@ class AuthService extends ChangeNotifier {
   /// after sign-out so the login form can be pre-filled. '' if none.
   Future<String> lastEmail() async => (await _store.getString(_kLastEmailKey)) ?? '';
 
+  static const _kRememberKey = 'ai_marker.remember_me';
+
+  /// "Remember me" on the sign-in form. On unless the teacher unticked it.
+  Future<bool> rememberMe() async => (await _store.getString(_kRememberKey)) != '0';
+
+  Future<void> setRememberMe(bool on) async {
+    await _store.setString(_kRememberKey, on ? '1' : '0');
+    if (!on) await _store.setString(_kLastEmailKey, '');
+  }
+
+  /// A saved sign-in the teacher asked not to keep. One from the last few
+  /// minutes is kept: that is a Google sign-in landing back on the page.
+  Future<bool> shouldForgetSavedSession() async {
+    if (await rememberMe()) return false;
+    final at = DateTime.tryParse(_supabase?.auth.currentUser?.lastSignInAt ?? '');
+    return at == null || DateTime.now().toUtc().difference(at.toUtc()) > const Duration(minutes: 5);
+  }
+
   /// Stable per-email account id — used only by the local fallback (no
   /// Supabase configured) and by developer mode.
   static String stableIdFor(String email) {
@@ -415,7 +433,7 @@ class AuthService extends ChangeNotifier {
       updatedAt: now,
     );
     await _store.setString(_kCurrentUserKey, jsonEncode(_currentUser!.toJson()));
-    if (email.isNotEmpty && email != guestEmail) await _store.setString(_kLastEmailKey, email);
+    if (email.isNotEmpty && email != guestEmail && await rememberMe()) await _store.setString(_kLastEmailKey, email);
     notifyListeners();
     await _trySyncProfileFromSupabase();
   }
