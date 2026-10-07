@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Guest-mode smoke test of the live web app (drives the installed Chrome).",
+  "dependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}
