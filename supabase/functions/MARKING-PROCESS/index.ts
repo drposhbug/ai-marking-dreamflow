@@ -171,7 +171,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 28;
+const CACHE_VERSION = 29;
 
 // A keyless graded mark works out every correct answer anyway — store that
 // as a real answer key so the REST of the class marks against it on the
@@ -1914,7 +1914,7 @@ function buildMarkingPrompt(p: {
     // out, and maybeStoreLearnedKey turns them into the key the rest of
     // the class is marked against. One wrong answer here is thirty wrong
     // marks, and it runs once per class set, so it gets the most thinking.
-    effort: p.answerKey ? "low" : "medium",
+    effort: p.answerKey ? "low" : "high",
   };
 }
 
