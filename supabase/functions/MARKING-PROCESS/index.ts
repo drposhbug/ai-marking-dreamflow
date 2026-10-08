@@ -171,7 +171,7 @@ const IMPROVEMENT_BANK: Record<number, string> = {
 // Bump this whenever STATIC_SYSTEM, a sentence bank, or the output schema
 // changes — it is part of the grade_cache key, so bumping it stops stale
 // cached grades (written under the old prompt/banks) from being served.
-const CACHE_VERSION = 27;
+const CACHE_VERSION = 28;
 
 // A keyless graded mark works out every correct answer anyway — store that
 // as a real answer key so the REST of the class marks against it on the
@@ -1154,6 +1154,18 @@ const PLAN_CAPS: Record<string, { monthlyUsd: number; plans: number; label: stri
   preview: { monthlyUsd: 10.0, plans: 30, label: "Preview" },
 };
 
+// Bought on the web (Stripe, ~3-8% in fees, budgeted at 10%) instead of an
+// app store (15%): the 5 points saved go to the teacher as more marking, at
+// the same 50% profit — monthlyUsd = price × 0.29.
+const WEB_MONTHLY_USD: Record<string, number> = {
+  starter: 2.0, // $6.99 × 0.29 = $2.03
+  pro: 4.3, // $14.99 × 0.29 = $4.35
+  pro_annual: 2.85, // $10.00 × 0.29 = $2.90
+  school: 7.2, // $24.99 × 0.29 = $7.25
+};
+const capUsd = (plan: string, source: string | null): number =>
+  (source === "stripe" && WEB_MONTHLY_USD[plan]) || PLAN_CAPS[plan].monthlyUsd;
+
 /// Accounts that get preview-level room without paying: the developer's own,
 /// for testing the product end to end and for demos.
 ///
@@ -1484,13 +1496,14 @@ async function budgetGate(teacherId: string, pacing: boolean, req: Request): Pro
   try {
     // One wave of queries, not two: the plan lookup does not depend on the
     // spend sums, and this gate sits in front of every paid action.
-    const [plan, { day, week, month }, paidRefs] = await Promise.all([
+    const [plan, { day, week, month }, paidRefs, source] = await Promise.all([
       planFor(teacherId),
       spendBuckets(teacherId),
       paidReferralCount(teacherId),
+      planSourceFor(teacherId),
     ]);
     const caps = PLAN_CAPS[plan];
-    const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
+    const monthlyCap = capUsd(plan, source) + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
     const block = (scope: string, message: string): Response =>
       json({ error: "usage_limit", scope, plan, message }, 429);
     // Pacing spreads a paid month so one test day cannot use it all. The
@@ -1531,7 +1544,7 @@ async function usagePayload(teacherId: string) {
     planSourceFor(teacherId),
   ]);
   const caps = PLAN_CAPS[plan];
-  const monthlyCap = caps.monthlyUsd + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
+  const monthlyCap = capUsd(plan, source) + Math.min(paidRefs * REFERRAL_BONUS_USD, MAX_REFERRAL_BONUS_USD);
   return {
     plan,
     planLabel: caps.label,
@@ -1779,7 +1792,7 @@ const PARSE_PROMPT =
 const PARSE_SHAPE = `\n\nReturn ONLY a single JSON object:
 {"studentNameOnPaper": string or null, "detectedSubject": string, "questions": [{"label": string, "pageIndex": integer (0-based), "studentWork": string, "isDrawing": boolean, "positionTop": number (0-1 fraction of page height), "positionLeft": number (0-1 fraction of page width), "workLines": [{"text": string, "positionTop": number, "positionLeft": number}]}]}`;
 
-async function callGemini(imagesBase64: string[], mediaType: string, prompt: string, jsonInstruction: string) {
+async function callGemini(imagesBase64: string[], mediaType: string, prompt: string, jsonInstruction: string, think = true) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY secret");
 
@@ -1805,6 +1818,8 @@ async function callGemini(imagesBase64: string[], mediaType: string, prompt: str
           responseMimeType: "application/json",
           temperature: 0.2,
           maxOutputTokens: 16384,
+          // Reading a page needs no reasoning, and thinking bills as output.
+          ...(think ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
         },
       }),
     },
@@ -1899,7 +1914,7 @@ function buildMarkingPrompt(p: {
     // out, and maybeStoreLearnedKey turns them into the key the rest of
     // the class is marked against. One wrong answer here is thirty wrong
     // marks, and it runs once per class set, so it gets the most thinking.
-    effort: p.answerKey ? "low" : "high",
+    effort: p.answerKey ? "low" : "medium",
   };
 }
 
@@ -3246,7 +3261,7 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     } catch (e) {
       errs.push(`claude: ${e instanceof Error ? e.message : e}`);
       try {
-        raw = await callGemini(imagesBase64, mediaType, ROSTER_PROMPT, ROSTER_SHAPE);
+        raw = await callGemini(imagesBase64, mediaType, ROSTER_PROMPT, ROSTER_SHAPE, false);
         usage.inputTokens = 1500 * imagesBase64.length;
         usage.outputTokens = 1000;
       } catch (e2) {
@@ -3421,7 +3436,7 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     (keyedObjective || elementaryKeyless);
   if (objectiveRoute) {
     try {
-      const parsed = await callGemini(imagesBase64, mediaType, PARSE_PROMPT, PARSE_SHAPE);
+      const parsed = await callGemini(imagesBase64, mediaType, PARSE_PROMPT, PARSE_SHAPE, false);
       await logUsage(
         gradeTeacherId,
         "parse",
