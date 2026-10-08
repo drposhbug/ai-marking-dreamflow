@@ -620,6 +620,15 @@ const KEY_PROMPT = `These images are a teacher's ANSWER KEY for a test (in page 
 - questions: one entry per question with its label (e.g. "Q3b"), its marks, and the correct answer — include accepted working, units, and alternate acceptable answers in the answer text.
 Transcribe every question visible. Do not invent questions that are not shown.`;
 
+// "No key? Generate one": the images are the BLANK test and the strongest
+// model solves it once; every paper is then marked against that key.
+const SOLVE_PROMPT = `These images are a BLANK test (in page order), with no answers filled in. Act as the teacher writing its ANSWER KEY. Solve every question carefully, checking each answer before you write it:
+- name: a short title for this test (e.g. "Solubility Unit Test") — infer from headers.
+- subject: the school subject.
+- totalMarks: total marks of the whole test (sum of the printed marks; if none are printed, 1 per required result, 1 per distinct point for explain parts).
+- questions: one entry per question or lettered part with its label (e.g. "Q3b"), its marks, and the answer: the final answer with units, the key steps a marker would credit, and acceptable alternates. For drawings, list each feature that earns a mark. For open written answers, list the creditable points and what a full-mark answer must include.
+Only questions visible on the pages. Do not invent questions.`;
+
 const KEY_SHAPE = `\n\nReturn ONLY a single JSON object with exactly these fields:
 {"name": string, "subject": string, "totalMarks": number, "questions": [{"label": string, "marks": number, "answer": string}]}`;
 
@@ -1029,6 +1038,7 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
   // reasoning and the model is comparing, not deducing. Keyless and essay
   // marking, where judgement IS the work, stays at "medium".
   effort?: "low" | "medium" | "high";
+  model?: string;
 }) {
   // Sonnet 5.5 rejects `thinking: {type: "disabled"}`, forced tool_choice
   // and non-default temperature; none are used here or in the batch path.
@@ -1045,7 +1055,7 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
 
   const anthropic = new Anthropic({ apiKey });
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model: o.model ?? CLAUDE_MODEL,
     max_tokens: 16000,
     thinking: { type: "adaptive" },
     // "medium" keeps grading well inside the edge-function time limit;
@@ -1089,6 +1099,11 @@ async function callClaude(imagesBase64: string[], mediaType: string, o: {
 const CLAUDE_MODEL = "claude-sonnet-5-5";
 const PRICE_IN_PER_M = 3; // USD per 1M input tokens
 const PRICE_OUT_PER_M = 15; // USD per 1M output tokens
+// Generated answer keys only. ponytail: assumed Opus list price — check the
+// Anthropic pricing page and update if it differs.
+const KEY_SOLVE_MODEL = "claude-opus-5-5";
+const OPUS_PRICE_IN_PER_M = 5;
+const OPUS_PRICE_OUT_PER_M = 25;
 
 // ---------- Plans & marking-credit caps ----------
 // Credits are COST-WEIGHTED (real billed spend), not mark counts: a 2-page
@@ -3125,12 +3140,18 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
     let raw: any = null;
     const errs: string[] = [];
     const usage = { inputTokens: 0, outputTokens: 0 };
+    const solve = payload?.solve === true;
+    const prompt = solve ? SOLVE_PROMPT : KEY_PROMPT;
+    let opus = solve;
     try {
-      raw = await callClaude(imagesBase64, mediaType, { userText: KEY_PROMPT, schema: KEY_SCHEMA, usage });
+      raw = await callClaude(imagesBase64, mediaType, solve
+        ? { userText: prompt, schema: KEY_SCHEMA, usage, model: KEY_SOLVE_MODEL, effort: "medium" }
+        : { userText: prompt, schema: KEY_SCHEMA, usage });
     } catch (e) {
       errs.push(`claude: ${e instanceof Error ? e.message : e}`);
+      opus = false;
       try {
-        raw = await callGemini(imagesBase64, mediaType, KEY_PROMPT, KEY_SHAPE);
+        raw = await callGemini(imagesBase64, mediaType, prompt, KEY_SHAPE);
         // Gemini reports no usage here; meter a conservative estimate,
         // as the plan action does.
         usage.inputTokens = 1500 * imagesBase64.length;
@@ -3140,7 +3161,9 @@ Region codes: ${Object.entries(CURRICULA).map(([id, c]) => `${id}=${c.label}`).j
         return json({ error: "Answer key extraction failed", details: errs }, 502);
       }
     }
-    await logUsage(teacherId, "extract_key", usage.inputTokens, usage.outputTokens);
+    await (opus
+      ? logUsage(teacherId, "generate_key", usage.inputTokens, usage.outputTokens, OPUS_PRICE_IN_PER_M, OPUS_PRICE_OUT_PER_M)
+      : logUsage(teacherId, solve ? "generate_key" : "extract_key", usage.inputTokens, usage.outputTokens));
     const keyName = String(raw?.name ?? "Answer key");
     const questions = Array.isArray(raw?.questions) ? raw.questions : [];
     const { data, error } = await serviceDb()

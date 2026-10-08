@@ -158,6 +158,12 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
               subtitle: const Text('Pick a photo or PDF of the key from Drive or Files'),
               onTap: () => Navigator.pop(ctx, 'drive'),
             ),
+            ListTile(
+              leading: const Icon(Icons.auto_awesome_rounded),
+              title: const Text('No key? Generate one'),
+              subtitle: const Text('Scan the blank test — our strongest AI solves it for more accurate marking. Uses more credits than marking a paper — but only once per test.'),
+              onTap: () => Navigator.pop(ctx, 'solve'),
+            ),
             if (_answerKeyId != null)
               ListTile(
                 leading: const Icon(Icons.link_off_rounded),
@@ -205,6 +211,12 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
       context.read<AppState>().setAnswerKey();
     } else if (choice == 'scan') {
       await _scanAnswerKey(auth.id);
+    } else if (choice == 'solve') {
+      final pages = await Navigator.of(context).push<List<ScannedPage>>(
+        MaterialPageRoute(builder: (_) => const LiveScanScreen()),
+      );
+      if (pages == null || pages.isEmpty || !mounted) return;
+      await _extractKeyFromPages(auth.id, pages, solve: true);
     } else if (choice == 'drive') {
       await _importKeyFromDrive(auth.id);
     } else if (choice is _DeleteKey) {
@@ -303,14 +315,17 @@ class _GradingContextScreenState extends State<GradingContextScreen> {
     await _extractKeyFromPages(teacherId, pages);
   }
 
-  Future<void> _extractKeyFromPages(String teacherId, List<ScannedPage> pages) async {
+  Future<void> _extractKeyFromPages(String teacherId, List<ScannedPage> pages, {bool solve = false}) async {
     try {
       final key = await runWithBlockingProgress(
         context,
-        message: 'Reading the answer key…\nThis happens only once.',
+        message: solve
+            ? 'Solving the test to make a key…\nThis can take a minute and happens only once.'
+            : 'Reading the answer key…\nThis happens only once.',
         task: () => AiGradingService().extractAnswerKey(
           teacherId: teacherId,
           pages: pages.map((p) => p.bytes).toList(growable: false),
+          solve: solve,
         ),
       );
       if (!mounted) return;

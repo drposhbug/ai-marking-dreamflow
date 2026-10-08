@@ -1441,11 +1441,14 @@ class AiGradingService {
 
   /// Scans of a teacher's answer key → structured key stored in the cloud.
   /// Costs AI tokens once; every later grade reuses the stored key text.
-  Future<AnswerKeySummary> extractAnswerKey({required String teacherId, required List<Uint8List> pages}) async {
+  /// With [solve], the pages are a BLANK test and the strongest model works
+  /// out the answers (billed at its higher rate).
+  Future<AnswerKeySummary> extractAnswerKey({required String teacherId, required List<Uint8List> pages, bool solve = false}) async {
     final res = await _invokeFn(
       'MARKING-PROCESS',
       body: {
         'action': 'extract_key',
+        if (solve) 'solve': true,
         'teacherId': teacherId,
         'imagesBase64': pages.map(base64Encode).toList(growable: false),
         'mediaType': 'image/jpeg',
