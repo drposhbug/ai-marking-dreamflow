@@ -1406,6 +1406,13 @@ async function spendBuckets(teacherId: string): Promise<{ day: number; week: num
 const AI_DAILY_CAP_USD = Number(Deno.env.get("AI_DAILY_CAP_USD")) || 20;
 const AI_GUEST_DAILY_CAP_USD = Number(Deno.env.get("AI_GUEST_DAILY_CAP_USD")) || 3;
 
+/// A one-day guest cap that switches itself off at UTC midnight:
+///   npx supabase secrets set AI_GUEST_CAP_ONE_DAY=2026-10-08=6
+function guestCapToday(): number {
+  const [day, usd] = (Deno.env.get("AI_GUEST_CAP_ONE_DAY") ?? "").split(/=(?=[^=]*$)/);
+  return day === periodStarts().day.slice(0, 10) && Number(usd) > 0 ? Number(usd) : AI_GUEST_DAILY_CAP_USD;
+}
+
 // Short in-isolate cache: the sum runs in front of every paid action, and
 // thirty seconds of staleness is a few cents at the cap.
 let spendTodayCache: { day: string; usd: number; at: number } | null = null;
@@ -1450,9 +1457,10 @@ async function globalGate(req: Request): Promise<Response | null> {
   try {
     const usd = await spendToday();
     const guest = isGuestCaller(req);
-    if (usd < AI_DAILY_CAP_USD && !(guest && usd >= AI_GUEST_DAILY_CAP_USD)) return null;
+    const guestCap = guestCapToday();
+    if (usd < AI_DAILY_CAP_USD && !(guest && usd >= guestCap)) return null;
     console.error(
-      `spend breaker tripped: $${usd.toFixed(2)} today (cap $${AI_DAILY_CAP_USD}, guest cap $${AI_GUEST_DAILY_CAP_USD}), guest=${guest}`,
+      `spend breaker tripped: $${usd.toFixed(2)} today (cap $${AI_DAILY_CAP_USD}, guest cap $${guestCap}), guest=${guest}`,
     );
     return json({
       error: "usage_limit",
